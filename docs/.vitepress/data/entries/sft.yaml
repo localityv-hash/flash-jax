@@ -183,7 +183,7 @@
   facets: [data, theory]
   tier: rec
   evidence: [ablation, open-source, community]
-  evidence_note: "数据（v1 为 817 条，v2 为 800 条）、模型与评测脚本开源；论文对题目难度、推理链质量、底座知识量做了对照。结论依赖 Qwen2.5-32B-Instruct 这类数学知识充足的底座，换成弱底座不能直接套用。"
+  evidence_note: "数据（v1 为 817 条，v2 为 800 条）、模型与评测脚本开源，仓库汇总了第三方评测与社区反馈，关注度很高；论文对题目难度、推理链质量、底座知识量做了对照。结论依赖 Qwen2.5-32B-Instruct 这类数学知识充足的底座，换成弱底座不能直接套用。"
   summary: "从大规模题库中层层筛出 817 道难题，挑选带自我验证、探索与细致推导的高质量推理链做 SFT，Qwen2.5-32B-Instruct 在 AIME 与 MATH 上大幅提升；提出“少即是多推理假说”：底座知识充足时，少量精准的认知模板即可激发复杂推理。"
   plain: "只要模型在预训练里已经学过足够的数学知识，给它几百道精挑细选的示范解题过程，它就能学会像高手那样思考。"
   takeaways:
@@ -228,7 +228,7 @@
   facets: [theory, algorithm]
   tier: rec
   evidence: [adopted, ablation, open-source, community]
-  evidence_note: "Hugging Face TRL 直接实现了论文附录中的余弦长度奖励与 n-gram 重复惩罚；实验覆盖 SFT 与 RL（PPO / REINFORCE++）多种设置，数据集与检查点开源。"
+  evidence_note: "Hugging Face TRL 直接实现了论文附录中的余弦长度奖励与 n-gram 重复惩罚，并收入其论文索引；实验覆盖 SFT 与 RL（PPO / REINFORCE++）多种设置，数据集与检查点开源，是长 CoT 机制分析中被广泛引用的一篇。"
   summary: "系统研究长 CoT 如何出现：长 CoT SFT 的上限高于短 CoT，且让后续 RL 更容易提升；RL 中 CoT 长度增长不稳定，需要余弦长度奖励与重复惩罚整形；带噪但大规模的网页可验证数据有助于 RL；纠错等能力在基座中已潜在存在。"
   plain: "先用长推理示范做 SFT 再做 RL，比直接 RL 更省事、上限也更高；RL 里思考长度容易失控，要用奖励管住它，别让模型靠啰嗦刷分。"
   takeaways:
@@ -458,7 +458,7 @@
   facets: [algorithm, theory]
   tier: rec
   evidence: [adopted, ablation, open-source, community]
-  evidence_note: "TRL（loss_type 设为 dft）、LLaMA-Factory、ms-swift 已内置该损失；实验集中在 7B 及以下的数学、代码与多模态推理。作者在仓库中说明：在答案唯一、推理近乎确定（低熵）的任务上效果较弱，社区也反馈过文学、金融等场景的失败案例。"
+  evidence_note: "TRL（loss_type 设为 dft）、LLaMA-Factory、ms-swift 已内置该损失，知乎、小红书等社区讨论热烈；实验集中在 7B 及以下的数学、代码与多模态推理。作者在仓库中说明：在答案唯一、推理近乎确定（低熵）的任务上效果较弱，社区也反馈过文学、金融等场景的失败案例。"
   summary: "证明 SFT 梯度等价于一种策略梯度，其隐式奖励是“是否等于示范”再乘以 1/π_θ：模型越没把握的样本权重越大，方差大、泛化差。DFT 把每个 token 的损失乘以自身概率（停止梯度），一行代码即在多个数学基准上显著优于 SFT。"
   plain: "普通 SFT 对模型最没把握的字用力最猛，容易死记硬背；DFT 按模型自己的把握程度给每个字的损失打折，更像 RL 那样顺着自己的分布学。"
   takeaways:

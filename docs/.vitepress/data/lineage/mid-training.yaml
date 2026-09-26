@@ -139,7 +139,7 @@ edges:
   - { from: minicpm, to: smollm3, label: 末 10% 衰减 }
   - { from: minicpm, to: octothinker, label: 稳定→衰减 }
   - { from: olmo2, to: olmo3, label: Dolmino 升级 }
-  - { from: octothinker, to: olmo3, label: Pro-Max 入配比 }
+  - { from: octothinker, to: olmo3, label: 复刻 Pro-Max 配方 }
   - { from: nemotron-cc, to: olmo3, label: 合成 QA 入配比 }
   - { from: yarn, to: olmo3, label: 扩到 64K }
   - { from: yarn, to: deepseek-v3, label: 两段 YaRN }

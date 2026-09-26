@@ -51,7 +51,7 @@ flowchart LR
   M -.->|"决定 RL 能走多远"| R
 ```
 
-输入是一个稳定期检查点（学习率仍在高位），输出是交给 SFT 与 RL 的 base 模型。各家在三件事上的安排不同：
+输入通常是一个稳定期检查点（学习率仍在高位），输出是交给 SFT 与 RL 的 base 模型。各家在三件事上的安排不同：
 
 - **顺序**：Olmo 3 先中训练再扩长上下文；SmolLM3 先扩长上下文再做推理中训练[^olmo3][^smollm3]；GLM-4.5 把仓库级代码、合成推理、长上下文与智能体数据拆成三个递进阶段[^glm45]。
 - **预算**：公开报告里从几十 B 到数 T token 不等——OLMo 2 7B 为 3×50B，Olmo 3 为 100B（另加 50B 长上下文），Qwen3 的推理阶段约 5T，GLM-4.5 的中训练合计约 1.1T[^olmo2][^olmo3][^qwen3][^glm45]。
@@ -77,7 +77,7 @@ $s$ 是当前步数，$W$ 是预热结束步，$T$ 是稳定段结束步，$S$ �
 2. 衰减段约占总 token 的 **10%** 就够，2.5% 不够；
 3. 稳定期检查点可以反复“分叉”：接着用高学习率训练，或随时衰减出一个成品。
 
-第 3 点让缩放律实验便宜了一个量级：跑一条长的恒定学习率曲线，在不同位置做冷却，就得到不同训练长度的结果；EPFL 与 Hugging Face 的系统对比也表明“恒定 + 冷却”的表现可预测地与余弦相当[^cooldown]。工业界随之采用：Kimi K2 注明引用 MiniCPM，在 15.5T token 上用 WSD（10T 恒定 + 5.5T 余弦衰减），再接 400B token 退火与 60B token 的 32K 长上下文激活[^k2]；SmolLM3 在最后 10% 步数线性降到 0[^smollm3]。DeepSeek-V3 的曲线也是“长恒定 + 末段衰减”的形状：恒定学习率到 10T，再用 4.3T 余弦衰减，最后 500B 分两段常数[^dsv3]。
+第 3 点大幅降低了缩放律实验的成本：跑一条长的恒定学习率曲线，在不同位置做冷却，就得到不同训练长度的结果；EPFL 与 Hugging Face 的系统对比也表明“恒定 + 冷却”的表现可预测地与余弦相当[^cooldown]。工业界随之采用：Kimi K2 注明引用 MiniCPM，在 15.5T token 上用 WSD（10T 恒定 + 5.5T 余弦衰减），再接 400B token 退火与 60B token 的 32K 长上下文激活[^k2]；SmolLM3 在最后 10% 步数线性降到 0[^smollm3]。DeepSeek-V3 的曲线也是“长恒定 + 末段衰减”的形状：恒定学习率到 10T，再用 4.3T 余弦衰减，最后 500B 分两段常数[^dsv3]。
 
 ::: derive 为什么一降学习率，损失就骤降？
 用最简单的模型看清机制。设一维二次损失 $\mathcal L(w)=\tfrac{h}{2}w^2$，随机梯度 $g_t=hw_t+\xi_t$，噪声 $\xi_t$ 零均值、方差 $\sigma^2$，且与 $w_t$ 独立。SGD 更新为
@@ -189,19 +189,20 @@ Allen-Zhu 与 Li 用可控的合成传记数据发现：一条知识如果在预
 
 ### Olmo 3：一份可以逐项核对的配比 {#olmo3}
 
-Olmo 3 7B 的官方脚本写明：5.93T token 预训练 → 100B token 中训练（序列长 8K，学习率线性降到 0）→ 50B token 长上下文[^olmo3]。dolma3 仓库公开了多轮中训练配比的迭代过程，下表是其中第 5 轮 7B 配置按类别汇总的比例[^olmo3mix]：
+Olmo 3 7B 的官方脚本写明：5.93T token 预训练 → 100B token 中训练（序列长 8K，学习率线性降到 0）→ 50B token 长上下文[^olmo3]。OLMo-core 里还公开了 32B 中训练的来源配比，按类别汇总如下（dolma3 仓库中 7B 迭代到第 5 轮的配置，类别占比与之相同）[^olmo3mix]：
 
 | 类别 | 占比 | 主要来源 |
 |---|---|---|
-| 高质量网页 | 22.5% | 按主题分层采样的网页 |
-| 代码 | 20% | Stack-Edu（FIM 格式）10%、SwallowCode 10% |
-| 数学 | 20% | SwallowMath、合成数学、OpenMathReasoning 改写、MegaMath-Web-Pro-Max 改写 |
-| QA 与阅读理解 | 约 19% | Reddit 改写、Nemotron-CC 合成 QA、维基改写 QA 等 |
-| 思维链 | 7.5% | R1、QwQ、Gemini、Llama-Nemotron、OpenThoughts2 等推理轨迹 |
-| 指令 | 6.1% | FLAN 5%，其余为指令数据 |
-| 高质量 PDF | 5% | 按主题分层 |
+| 高质量网页 | 22.5% | Common Crawl 高分子集，按主题分层采样 |
+| STEM 定向爬取 | 5% | AI2 自爬的科学、教育类站点 |
+| 代码 | 20% | Stack-Edu（FIM 格式）10%、CraneCode 10% |
+| 数学 | 20% | CraneMath、合成数学、OpenMathReasoning 改写、MegaMatt |
+| QA 与阅读理解 | 约 14% | Reddit 改写成问答卡片、Nemotron-CC 合成 QA、维基改写成阅读理解 |
+| 思维链与元推理 | 7.5% | R1、QwQ、Gemini、Llama-Nemotron、OpenThoughts2 等推理轨迹 |
+| 指令 | 6.1% | FLAN 5%，Tulu 3 SFT 数据约 1% |
+| 高质量 PDF | 5% | olmOCR 解析的科学文献，按主题分层 |
 
-所有来源都先用 AI2 的 n-gram <Term t="decontamination">去污染</Term>工具 decon 滤掉了 MMLU、GSM8K 等评测内容。这份配比也说明了一个趋势：到 2025 年下半年，中训练已经从“多放点数学”演化为**把后训练需要的每种格式都预先喂一点**。
+表里的 CraneCode、CraneMath、MegaMatt 是 AI2 按 SwallowCode、SwallowMath 与 OctoThinker 的 MegaMath-Web-Pro-Max 配方，改用 Qwen 系模型重新生成的版本（原版用 Llama 生成，许可更严），可以看作这些配方被工业复用的直接证据。所有来源都先用 AI2 的 n-gram <Term t="decontamination">去污染</Term>工具 decon 滤掉了 MMLU、GSM8K 等评测内容。这份配比也说明了一个趋势：到 2025 年下半年，中训练已经从“多放点数学”演化为**把后训练需要的每种格式都预先喂一点**。
 
 ## 长上下文扩展 {#long-context}
 
@@ -305,7 +306,7 @@ OctoThinker 在 Llama-3.2 上系统比较了中训练配方对后续 RL 的影�
 3. **长 CoT 是双刃剑**：推理更深，但回复变冗长、RL 训练不稳，数据格式需要仔细设计；
 4. **中训练越多，RL 越好**：扩大中训练 token 数带来一致的下游 RL 提升。
 
-据此提出 **Stable-then-Decay**：先用恒定学习率训 200B token，再分出短 CoT、长 CoT、混合三个分支，各用 20B token 衰减学习率，得到 OctoThinker 系列。RL 之后，OctoThinker-Long-3B 追平了以推理见长的 Qwen2.5-3B。团队同时开源了 70B+ token 的 MegaMath-Web-Pro-Max，后者被放进了 Olmo 3 的中训练配比[^olmo3mix]。
+据此提出 **Stable-then-Decay**：先用恒定学习率训 200B token，再分出短 CoT、长 CoT、混合三个分支，各用 20B token 衰减学习率，得到 OctoThinker 系列。RL 之后，OctoThinker-Long-3B 追平了以推理见长的 Qwen2.5-3B。团队同时开源了 70B+ token 的 MegaMath-Web-Pro-Max；AI2 按同样的提示词在 MegaMath-Web-Pro 上重新生成了一份（MegaMatt），放进 Olmo 3 的中训练配比[^olmo3mix]。
 
 ::: human
 RL 更像“挑选并强化”已有的解题习惯，而不是凭空教会新本事。中训练就是在 RL 之前把好习惯种下去；种得越好，RL 能放大的东西越多。
@@ -373,9 +374,9 @@ CMU 的 Midtraining Bridges 用从零预训练的小模型做控制实验，把�
 
 <EntryGrid :ids="['minicpm', 'llama3', 'olmo2', 'olmo3', 'smollm3', 'cooldown-scaling']" />
 
-- **MiniCPM**：WSD 的出处，更重要的是“衰减期就开始专门化”这条对照结论；小模型实验，但被大量工业报告引用或对照。
+- **MiniCPM**：WSD 的出处，更重要的是“衰减期就开始专门化”这条对照结论；实验在小模型上完成，但被 Kimi K2、GLM-4.5 等工业报告引用或作为对照。
 - **Llama 3**：把退火、检查点平均、短退火评估数据和分段扩长写成了可照做的工序，是理解工业中训练的第一份读物。
-- **OLMo 2 / Olmo 3**：迄今最透明的中训练。配置、数据清单、去污染工具全部公开，适合作为自己搭配比的起点。
+- **OLMo 2 / Olmo 3**：公开得最彻底的中训练之一。配置、数据清单、去污染工具全部公开，适合作为自己搭配比的起点。
 - **SmolLM3**：小模型的全流程手册，最有价值的是“推理中训练伤长文、用模型合并修复”这段踩坑记录。
 - **冷却与缩放律**：WSD 做缩放律实验的方法论依据，读它能明白为什么“一条长跑 + 多个冷却分支”是省钱做法。
 
@@ -383,10 +384,10 @@ CMU 的 Midtraining Bridges 用从零预训练的小模型做控制实验，把�
 
 <EntryGrid :ids="['fineweb', 'dclm', 'nemotron-cc', 'phi-4', 'swallowcode-math', 'megamath', 'physics-of-lms']" />
 
-- **FineWeb-Edu 与 DCLM**：两种质量分类器范式（大模型打分蒸馏 vs 指令风格正样本），几乎所有开放配方的网页主干都来自它们。
+- **FineWeb-Edu 与 DCLM**：两种质量分类器范式（大模型打分蒸馏 vs 指令风格正样本），SmolLM3、OLMo 2 等开放配方的网页主干都来自它们。
 - **Nemotron-CC**：长训练预算下“保量”的答案，也是“改写救回低质量数据”的大规模证据。
 - **Phi-4**：合成数据能复用多少轮、纯合成会伤什么，这两个问题最直接的公开答案。
-- **SwallowCode / SwallowMath**：“改写后保留”的代码与数学版本，被 Kimi K2 与 Olmo 3 同时采用。
+- **SwallowCode / SwallowMath**：“改写后保留”的代码与数学版本；Kimi K2 采用了它的数学改写方法，Olmo 3 按它的流程复刻出 CraneCode 与 CraneMath。
 - **MegaMath**：开放数学语料的主力，也是 OctoThinker 结论的数据基础。
 - **Physics of LMs 3.1**：为改写与“早放指令数据”提供机制解释；注意它是合成数据上的受控实验。
 
@@ -416,7 +417,7 @@ CMU 的 Midtraining Bridges 用从零预训练的小模型做控制实验，把�
 ::: takeaway
 1. **先搭评估闭环再调配方**：用“中训练 → 小规模 SFT（→ RL）”的探针比较方案，别只看 base 模型的损失或 few-shot 分数。
 2. **把衰减期当作中训练窗口**：从稳定期检查点出发，用约 10% 的 token（几十到几百 B）切到目标配比、学习率降到 0 或很低；预算允许就换几个数据顺序各跑一遍再做模型汤。
-3. **配比从 Olmo 3 起步**：网页、代码、数学各约两成，QA 约两成，指令与思维链合计一成多；每个新数据源先做“30% 新数据 + 70% 默认配比”的短退火体检再决定去留。
+3. **配比从 Olmo 3 起步**：网页（含 PDF）约三成，代码、数学各约两成，QA 一成半左右，指令与思维链合计一成多；每个新数据源先做“30% 新数据 + 70% 默认配比”的短退火体检再决定去留。
 4. **高质量数据宁改写、勿重复**：知识类语料换风格、换视角改写（每份一到两次并做保真校验）；代码与数学“改写后保留”。
 5. **长上下文分段扩**：先调 RoPE（ABF 或 YaRN），每段保留约四成短数据；验收看短文本能力是否恢复、SFT 后长文任务是否达标。
 6. **为 RL 铺路**：中训练就放入多样的推理数据与少量指令格式数据，控制长 CoT 比例；智能体方向可以先做一段智能体继续预训练。
@@ -460,7 +461,7 @@ CMU 的 Midtraining Bridges 用从零预训练的小模型做控制实验，把�
 [^minicpm4]: MiniCPM Team, “MiniCPM4: Ultra-Efficient LLMs on End Devices”，数据验证策略一节（见 [OpenBMB/MiniCPM 仓库 docs/](https://github.com/OpenBMB/MiniCPM)）。
 [^olmo2]: Team OLMo, “2 OLMo 2 Furious”, [arXiv:2501.00656](https://arxiv.org/abs/2501.00656)；stage 2 与模型汤配置见 [allenai/OLMo](https://github.com/allenai/OLMo) 的 README 与 configs/official-1124、configs/microannealing。
 [^olmo3]: Team Olmo, “Olmo 3”, [arXiv:2512.13961](https://arxiv.org/abs/2512.13961)；官方训练脚本与各阶段 token 数见 [allenai/OLMo-core](https://github.com/allenai/OLMo-core) 的 src/scripts/official/OLMo3。
-[^olmo3mix]: [allenai/dolma3](https://github.com/allenai/dolma3) 仓库 datasets/configs/midtraining/anneal-round5-olmo3_7b-anneal-decon-12T.yaml（按类别汇总为作者计算）；去污染说明见 procedures/decontamination。
+[^olmo3mix]: [allenai/OLMo-core](https://github.com/allenai/OLMo-core) 的 src/olmo_core/data/source_mixtures/OLMo3-32B-midtraining-modelnamefilter.yaml 与 src/olmo_core/data/mixes/OLMo-midtraining-mix-0625-100B.txt；[allenai/dolma3](https://github.com/allenai/dolma3) 的 datasets/configs/midtraining（各轮配置）、datasets/dolma3_dolmino_mix（CraneCode、CraneMath、MegaMatt 说明）与 procedures/decontamination。按类别汇总为本站计算。
 [^phi4]: Abdin et al., “Phi-4 Technical Report”, §3（数据配比表与中训练细节）. [arXiv:2412.08905](https://arxiv.org/abs/2412.08905)
 [^dsv3]: DeepSeek-AI, “DeepSeek-V3 Technical Report”, §4.1–4.3. [arXiv:2412.19437](https://arxiv.org/abs/2412.19437)；YaRN 参数见 [deepseek-ai/DeepSeek-V3](https://github.com/deepseek-ai/DeepSeek-V3) inference/model.py。
 [^dsv31]: DeepSeek-V3.1 模型卡. [huggingface.co/deepseek-ai/DeepSeek-V3.1](https://huggingface.co/deepseek-ai/DeepSeek-V3.1)

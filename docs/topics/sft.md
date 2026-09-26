@@ -129,7 +129,7 @@ $$
 
 两个容易忽略的细节：
 
-- **别把样本拦腰截断**。“先拼接再按长度切块”（TRL 里叫 `wrapped`）适合预训练，放在 SFT 里会切断回答、丢掉结束符。best-fit decreasing 装箱能在几乎不损失利用率的前提下大幅减少截断，TRL 的 `bfd` 系列打包策略即源于此[^fewertrunc]。
+- **别把样本拦腰截断**。“先拼接再按长度切块”（TRL 里叫 `wrapped`）是预训练的常见做法，放在 SFT 里会切断回答、丢掉结束符。best-fit decreasing 装箱能在几乎不损失利用率的前提下大幅减少截断，TRL 的 `bfd` 系列打包策略即源于此[^fewertrunc]。
 - **无补齐批处理（padding-free）要配 FlashAttention 2/3**，否则同样会出现跨样本污染，TRL 文档称之为 batch contamination[^trlsft]。
 
 ### 损失怎么平均：按 token，还是按样本 {#loss-aggregation}
@@ -198,7 +198,7 @@ Self-Instruct 从 175 条人工种子任务出发，让 GPT-3 自举生成新指
 
 LIMA 只用 1000 条精选示范（750 条来自 Stack Exchange、wikiHow 等社区的高质量问答，250 条作者手写）对 LLaMA-65B 做 SFT，不做任何 RLHF；人工评测中，43% 的情况下它与 GPT-4 持平或更好[^lima]。据此提出<Term t="superficial-alignment">浅层对齐假说</Term>：模型的知识与能力几乎都在预训练中获得，对齐只是教它与用户交互时用哪种格式与风格。消融显示，不提升多样性、只把同源数据翻倍几乎没有收益，而质量与多样性各自都有可测的正面作用；只加 30 条多轮对话示范，多轮能力就明显改善。
 
-LIMA 的结论针对的是风格与格式，并不意味着少量数据能教会新能力，前提是底座足够强。两年后 LIMO、s1 在推理上重演了同一个故事，前提也一样。
+LIMA 的结论针对的是风格与格式，并不意味着少量数据能教会新能力，前提是底座足够强。一年半后，LIMO、s1 在推理上重演了同一个故事，前提也一样。
 
 ### Tulu 3：把完整配方摊开 {#tulu3}
 
@@ -218,7 +218,7 @@ Magpie 利用了一个简单的事实：对齐过的模型在训练中见过无�
 
 - **NuminaMath（2024-07）**：从中国高中习题到国际奥赛收集约 86 万道题，经 OCR、切分、翻译，再由 GPT-4o 统一改写成 CoT 解答；另用 GPT-4 系列模型生成约 7 万条工具集成推理（TIR）轨迹。以两阶段 SFT（先 CoT 后 TIR）训练的 7B 模型拿下首届 AIMO 进步奖（私有集 50 题解出 29 题）[^numina]。此后它成了 s1、OpenR1-Math-220k 等大量工作的题库。
 - **OpenMathReasoning（2025-04）**：NVIDIA 从 AoPS 论坛用 LLM 抽题、判题型、提取答案、把证明题改写成有答案的题并去污染；用 DeepSeek-R1 与 QwQ-32B 生成 320 万条长 CoT 与 170 万条 TIR 轨迹，并训练“从多个候选里挑最优”的生成式选择器，拿下 AIMO-2 冠军（34/50）[^omr]。
-- **Nemotron-Math（2025-12）**：在 AoPS 之外加入 Math StackExchange 与 MathOverflow，用 gpt-oss-120b 的高、中、低三档推理强度（各带或不带 Python）生成 750 万条最长 128K 的轨迹；先让低档模型对每题做 16 次，通过率不低于 0.8 的易题直接丢弃。加入 StackExchange 题后，HLE-Math 这类开放题更稳，竞赛题不掉分[^nm]。
+- **Nemotron-Math（2025-12）**：在 AoPS 之外加入 Math StackExchange 与 MathOverflow，用 gpt-oss-120b 的高、中、低三档推理强度（各带或不带 Python）生成 750 万条最长 128K 的轨迹；先用低档推理模式对每题解 16 次，通过率不低于 0.8 的易题直接丢弃。加入 StackExchange 题后，HLE-Math 这类开放题更稳，竞赛题不掉分[^nm]。
 
 演进方向很清楚：题源从“扫描考卷”走向“系统挖掘论坛”，解答从“人写的短解答”走向“强模型写的长 CoT”，再走向“同一题多档强度”，让模型学会**按需决定想多久**。
 
@@ -309,7 +309,7 @@ OpenThoughts 相当于把“做一份推理训练数据”拆成六七道工序�
 
 工业团队的长 CoT SFT 很少“一把梭”，而是把数据按难度、模式、阶段拆开：
 
-- **Light-R1（奇虎 360）**：从没有长 CoT 能力的 Qwen2.5-32B-Instruct 出发，先用 7.6 万条按难度筛过的 R1 轨迹做第一阶段 SFT，再用其中最难的 3 千条做第二阶段，然后做半在线 DPO 与模型合并。每一步都有增益（AIME24 依次为 69.0、73.0、75.8、76.6），但第二阶段后 GPQA 从 64.3 降到 60.6，只训数学的遗忘清晰可见[^lightr1]。
+- **Light-R1（奇虎 360）**：从没有长 CoT 能力的 Qwen2.5-32B-Instruct 出发，先用 7.6 万条按难度筛过的 R1 轨迹做第一阶段 SFT，再用其中最难的 3 千条做第二阶段，然后做半在线 DPO 与模型合并。每一步都有增益（AIME24：一阶段 69.0 → 二阶段 73.0 → DPO 75.8 → 合并 76.6），但第二阶段后 GPQA 从 64.3 降到 60.6，只训数学的遗忘清晰可见[^lightr1]。
 - **Llama-Nemotron（NVIDIA）**：同类提示同时准备“推理开”“推理关”两种回答，用系统提示切换；最大的 Ultra 在 SFT 之后接大规模 RL，才在部分基准上超过教师 DeepSeek-R1[^nemotron]。
 - **Phi-4-reasoning（微软）**：只挑处在 Phi-4 能力边缘的“可教”提示，用 o3-mini 写示范；14B 的 SFT 模型就超过了 R1-Distill-Llama-70B，一小段结果奖励 RL 再把推理拉长、分数提高[^phi4r]。
 - **AceReason-Nemotron 1.1（NVIDIA）**：把 SFT 数据沿两个方向扩，更多题、每题更多回答，两者都有效，加题收益更大；更强的 SFT 起点在 RL 之后仍然更好，但差距被 RL 明显缩小；RL 采样温度按“温度调整后的熵约 0.3”来选[^acereason]。
@@ -360,7 +360,7 @@ $$
 \mathcal L_\text{DFT}(\theta)=-\E_{(x,y^\ast)\sim\mathcal D}\Big[\sum_{t}\sg\big(\pi_\theta(y^\ast_t\mid x,y^\ast_{<t})\big)\,\log\pi_\theta\big(y^\ast_t\mid x,y^\ast_{<t}\big)\Big].
 $$
 
-之所以放在 token 级而不是序列级，是因为序列概率是上千个 token 概率的乘积，数值上几乎为零。记 $p_t=\pi_\theta(y^\ast_t\mid x,y^\ast_{<t})$，由恒等式 $\sg(p_t)\,\nabla_\theta\log p_t=\nabla_\theta p_t$ 可见，DFT 对每个 token 的梯度就是 $\nabla_\theta p_t$：它优化的是“每个 token 猜对的概率之和”，而不是对数似然。标准 NLL 的梯度是 $\nabla_\theta p_t/p_t$，对模型最没把握的 token 放大最多。
+之所以放在 token 级而不是序列级，是因为序列概率是上千个 token 概率的乘积，数值上几乎为零。记 $p_t=\pi_\theta(y^\ast_t\mid x,y^\ast_{<t})$，由恒等式 $\sg(p_t)\,\nabla_\theta\log p_t=\nabla_\theta p_t$ 可见，DFT 在每个 token 上的更新方向就是 $\nabla_\theta p_t$：它最大化的是“每个 token 猜对的概率之和”，而不是对数似然。标准 NLL 的更新方向是 $\nabla_\theta p_t/p_t$，对模型最没把握的 token 放大最多。
 
 ::: derive SFT 梯度等于带 1/π 权重的策略梯度
 **第 1 步**：固定 $x$ 与示范 $y^\ast$。SFT 的上升方向是 $g_\text{SFT}=\nabla_\theta\log\pi_\theta(y^\ast\mid x)$。
@@ -387,7 +387,7 @@ $$\nabla_\theta\Big[\sg\big(\pi_\theta(y^\ast\mid x)\big)\log\pi_\theta(y^\ast\m
 
 **第 6 步**：落到 token 级。序列概率 $\prod_t p_t$ 对长序列几乎为零，DFT 改为对每个 token 乘 $\sg(p_t)$，得到正文中的 $\mathcal L_\text{DFT}$。这一步是启发式替代：它与第 5 步的序列级目标并不严格相等，但保留了“去掉 $1/p$ 放大器”的核心。
 
-**直觉**：NLL 在 token 上的梯度是 $\nabla_\theta p_t/p_t$，DFT 是 $\nabla_\theta p_t$。前者把力气集中在模型认为最不可能的 token 上，它们可能是真正需要学的新知识，也可能是示范里的噪声与个人习惯；后者更保守，更贴近模型自身的分布。这与作者自述的局限一致：在答案唯一、推理近乎确定的低熵任务上 DFT 偏弱。由此还可以推断（尚无专门实验）：需要向底座注入新知识的场景，也应保留 NLL。
+**直觉**：NLL 在单个 token 上的更新方向是 $\nabla_\theta p_t/p_t$，DFT 是 $\nabla_\theta p_t$。前者把力气集中在模型认为最不可能的 token 上，它们可能是真正需要学的新知识，也可能是示范里的噪声与个人习惯；后者更保守，更贴近模型自身的分布。这与作者自述的局限一致：在答案唯一、推理近乎确定的低熵任务上 DFT 偏弱。由此还可以推断（尚无专门实验）：需要向底座注入新知识的场景，也应保留 NLL。
 :::
 
 DFT 在 7B 及以下模型的数学、代码与多模态推理上显著优于 SFT，并已被 TRL（`loss_type="dft"`）、LLaMA-Factory、ms-swift 内置；但作者在仓库里也坦言它在低熵、单一答案的任务上偏弱，社区还反馈过文学、金融等场景的失败[^dft]。把 SFT 与 RL 放进同一个梯度形式的更一般框架（例如 HPT 把各类后训练算法的梯度拆成稳定掩码、参考策略分母、优势估计与似然梯度四个部件[^hpt]），见[算法谱系的统一视角](/lenses/algorithms#unified-view)。
@@ -447,7 +447,7 @@ LoRA 每步的算力约为全参的三分之二，同一基座还可以挂多个
 | DFT，1.5B 数学 | 5e-5 | 1 | 256 | 2048 | DFT |
 | LoRA SFT | 全参最优值约 10 倍，与 rank 基本无关 | — | 不宜过大 | 挂满所有线性层 | LoRA Without Regret |
 
-从表里能读出几条规律：模型越大学习率越小；数据越少 epoch 越多（千条数据常训 3–5 轮，百万级 1–2 轮）；长 CoT 蒸馏可承受的学习率明显高于通用对话 SFT，值得单独扫参。最容易被忽视的一条是：**最大长度要盖住你关心的最长轨迹**。截断后的样本既没有结束符也没有最终答案，宁可丢弃或分桶，也不要截断后照常训练。
+从表里能读出几条规律：模型越大学习率越小；数据越少 epoch 越多（千条级常训 5 轮左右，百万级多为 1–2 轮，数十万条的长 CoT 蒸馏也常训多轮）；长 CoT 蒸馏可承受的学习率明显高于通用对话 SFT，值得单独扫参。最容易被忽视的一条是：**最大长度要盖住你关心的最长轨迹**。截断后的样本既没有结束符也没有最终答案，宁可丢弃或分桶，也不要截断后照常训练。
 
 ## 可执行结论 {#takeaways}
 

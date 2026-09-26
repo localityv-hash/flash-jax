@@ -180,7 +180,7 @@
   facets: [data]
   tier: rec
   evidence: [adopted, ablation, open-source]
-  evidence_note: "数据集在 Common Crawl 上公开；AI2 在 Olmo 3 的中训练配比里放入 5% 的 Nemotron-CC 高质量合成 QA（dolma3 仓库配置可查）。论文在 1T 与 15T 两个 token 尺度上与 DCLM、Llama 3.1 做了对照。"
+  evidence_note: "数据集在 Common Crawl 上公开；AI2 在 Olmo 3 的官方中训练配比里放入约 5% 的 Nemotron-CC 高质量合成 QA（OLMo-core 配置可查）。论文在 1T 与 15T 两个 token 尺度上与 DCLM、Llama 3.1 做了对照。"
   summary: "针对 FineWeb-Edu、DCLM 丢弃约 90% 数据的问题，用分类器集成、合成改写与更少的启发式过滤得到 6.3T token（含 1.9T 合成）；1T 训练下高质量子集比 DCLM 高 5.6 MMLU。"
   plain: "不是把“差”网页一扔了之，而是请模型把它们重写一遍，再给“好”网页出几套练习题，数据量和质量兼得。"
   takeaways:
@@ -225,7 +225,7 @@
   facets: [data]
   tier: rec
   evidence: [adopted, ablation, open-source]
-  evidence_note: "OctoThinker 的中训练以其 Web-Pro 子集为核心，并证明它优于 FineMath-4+；Hugging Face 的 SmolLM3 在第二阶段引入 MegaMath（含 QA 合成、Pro 改写与文本-代码交错块）；Olmo 3 中训练使用其衍生的 MegaMath-Web-Pro-Max。"
+  evidence_note: "OctoThinker 的中训练以其 Web-Pro 子集为核心，并证明它优于 FineMath-4+；Hugging Face 的 SmolLM3 在第二阶段引入 MegaMath（含 QA 合成、Pro 改写与文本-代码交错块）；AI2 在 Web-Pro 子集上按 OctoThinker 的提示词重新改写出 MegaMatt，用于 Olmo 3 中训练。"
   summary: "从 Common Crawl 重新抽取数学网页（面向数学的 HTML 处理、fastText 筛选与去重），从 Stack-v2 召回数学相关代码，并合成 QA、数学代码与文本-代码交错数据，共 371B token，是规模最大的开放数学预训练语料之一。"
   plain: "把全网的数学内容重新“淘”一遍，配上代码和合成习题，做成一个超大题库，供中训练直接取用。"
   takeaways:
@@ -249,7 +249,7 @@
   facets: [data]
   tier: rec
   evidence: [adopted, ablation, open-source]
-  evidence_note: "Kimi K2 技术报告说明其数学数据改写“遵循 SwallowMath 的方法”写成学习笔记风格；AI2 在 Olmo 3 中训练配比里放入 10% 的 SwallowCode，并把 SwallowMath 纳入数学桶（dolma3 仓库配置可查）。数据与流水线开源。"
+  evidence_note: "Kimi K2 技术报告说明其数学数据改写“遵循 SwallowMath 的方法”写成学习笔记风格；AI2 按同一流程改用 Qwen 模型重新生成了许可更宽松的 CraneCode 与 CraneMath，放进 Olmo 3 的中训练（代码约占 10%，dolma3 仓库有说明）。数据与流水线开源。"
   summary: "用 70B 模型把代码与数学语料“改写后保留”而非过滤丢弃，得到 SwallowCode（16.1B token）与 SwallowMath（2.3B）；50B token 续训 8B 模型，HumanEval +17.0、GSM8K +12.4。"
   plain: "网上的代码和数学题常常写得乱、缺上下文；与其扔掉，不如请大模型改写成“标准答案”风格再拿来学。"
   takeaways:
@@ -368,7 +368,7 @@
   facets: [data, algorithm]
   tier: must
   evidence: [adopted, ablation, open-source, community]
-  evidence_note: "2025-04 先以 Notion 博客与模型发布，2025-06 发布技术报告。其释出的 MegaMath-Web-Pro-Max 被 AI2 放进 Olmo 3 的中训练配比（dolma3 仓库配置中的改写版）；论文在 Llama-3.2 上对语料、QA 格式、指令数据、长短 CoT 与学习率调度做了成组消融，模型、代码与数据开源。"
+  evidence_note: "2025-04 先以 Notion 博客与模型发布，2025-06 发布技术报告。AI2 按其 MegaMath-Web-Pro-Max 的改写配方重新生成了 MegaMatt，放进 Olmo 3 的中训练配比（dolma3 仓库有说明）；论文在 Llama-3.2 上对语料、QA 格式、指令数据、长短 CoT 与学习率调度做了成组消融，模型、代码与数据开源。"
   summary: "探究 Llama 为何比 Qwen 难做 RL：优质数学语料（MegaMath-Web-Pro）同时抬高 base 与 RL；QA 式长 CoT 与指令数据再加分，但长 CoT 易致冗长与不稳；据此提出 Stable-then-Decay 两段中训练。"
   plain: "同样参加“RL 集训”，有的学生一点就通、有的怎么练都不进步；差别在集训前的“预习”：预习材料质量高、题型贴近考试，集训效果才好。"
   takeaways:

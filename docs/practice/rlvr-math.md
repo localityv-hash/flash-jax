@@ -46,7 +46,7 @@ DAPO 在 Qwen2.5-32B 基座上的逐项消融（AIME 2024 avg@32）：朴素 GRP
 **最常用：Qwen2.5-Math-1.5B/7B。** 数学先验强、社区结果多，便于对照。但有三个坑要提前知道：
 
 - **上下文短**。它的原生上下文只有 4k，Dr. GRPO 的示例把生成上限设为 3000 token；verl 的 DAPO 7B 测试脚本特意提示下载后要把 `max_position_embeddings` 改成 32768。回答上限不宜一开始就开得很长。
-- **“随机奖励也涨分”**。Spurious Rewards 发现，在 Qwen2.5-Math 上，随机奖励、只看格式的奖励甚至错误标签，都能明显提升 MATH-500，而同样的奖励在 Llama3、OLMo2 上往往带不来提升；也有工作怀疑 Qwen2.5 在公开数学基准上存在数据污染。**只在 Qwen2.5-Math 上成立的结论，不足以证明你的算法或奖励有效**——详见 [伪奖励之争](/lenses/principles#spurious-rewards)。
+- **“随机奖励也涨分”**。Spurious Rewards 发现，在 Qwen2.5-Math 上，随机奖励、只看格式的奖励甚至错误标签，都能明显提升 MATH-500，而同样的奖励在 Llama3、OLMo2 上往往带不来提升（[Spurious Rewards](/library/?id=spurious-rewards)）；也有工作指出 Qwen2.5 在公开数学基准上存在数据污染（[推理还是记忆](/library/?id=reasoning-or-memorization)）。**只在 Qwen2.5-Math 上成立的结论，不足以证明你的算法或奖励有效**——详见 [伪奖励之争](/lenses/principles#spurious-rewards)。
 - **模板敏感**。Dr. GRPO 发现，不匹配的提示模板（例如在 Qwen2.5-Math-1.5B 上套 R1 模板）会先破坏模型的推理能力，RL 再把它“修回来”，表面上的提升因此被夸大[^drgrpo]。
 
 **通用基座**：DAPO 用的是 Qwen2.5-32B Base；SimpleRL-Zoo 在 Llama3 8B、Mistral 7B/24B、DeepSeekMath 7B、Qwen2.5 0.5B–32B 等 10 个基座上跑过同一套配方，是跨模型家族对照的好参考[^simplerl]。
@@ -163,11 +163,11 @@ python3 -m verl.trainer.main_ppo \
 6. **放大**：分阶段加长回答上限、加大批次或换更大的模型；每次放大都重新看一遍监控曲线。
 7. **最终评测**：多种子、avg@k、去污染检查，见下文评测协议。
 
-每加一项修正，应该在曲线上看到对应的变化；看不到，往往说明配置没生效或者问题不在这里。下表的“预期”对应 DAPO 论文中的消融曲线：
+每加一项修正，应该在曲线上看到对应的变化；看不到，往往说明配置没生效或者问题不在这里。下表中 Clip-Higher 及以下四行的“预期”对应 DAPO 论文中的消融曲线（DAPO 从一开始就不带 KL，第一行是推导上的预期）：
 
 | 这一步 | 预期看到的变化 | 如果没看到 |
 |---|---|---|
-| 去掉 KL | 奖励上升更快；与参考模型的偏离不再受约束，RLVR 下通常无害 | 确认 `use_kl_loss` 与 `use_kl_in_reward` 都已关闭 |
+| 去掉 KL | 策略可以离参考模型更远，奖励曲线不再被 KL 项拖住；有可靠验证器时通常无害 | 确认 `use_kl_loss` 与 `use_kl_in_reward` 都已关闭 |
 | Clip-Higher | 熵下降变慢或回升，同题回答更多样 | 查 `clip_ratio_high` 是否生效；熵仍塌缩时降低学习率 |
 | token 级损失 | 熵与长度的增长更平稳，错误回答不再无谓变长 | 确认 `loss_agg_mode` 为 `token-mean` |
 | 软超长惩罚 | 截断比例下降，长度在上限前被“软挡住” | 缓冲区是否按回答上限缩放 |

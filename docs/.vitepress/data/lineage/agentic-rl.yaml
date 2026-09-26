@@ -78,12 +78,6 @@ nodes:
     note: "工业级端到端智能体 RL 的公开样本：REINFORCE、γ 衰减奖励、上下文管理与轮次级 partial rollout。"
     href: "#reward"
     entry: kimi-researcher
-  - id: kimi-dev
-    label: Kimi-Dev
-    date: 2025-06
-    lane: swe
-    note: "相似度奖励会奖励“长得像”：改为 Docker 中测试全过才给 1 分，并用 150B token 中训练打底。"
-    entry: kimi-dev
   - id: websailor
     label: WebSailor
     date: 2025-07
@@ -150,6 +144,13 @@ nodes:
     lane: general
     note: "面向长程“智能体工程”：模型扩到 744B-A40B，并用异步 RL 基础设施 slime 提升后训练吞吐。"
     entry: glm-5
+  - id: kimi-k3
+    label: Kimi K3
+    date: 2026-07
+    lane: general
+    note: "长程执行进入百万 token 量级：可暂停续跑的 microVM 沙箱、可组合的多脚手架训练环境、隐藏验证器防作弊，再用多教师在线蒸馏合并各领域专家。"
+    href: "#industry"
+    entry: kimi-k3
 edges:
   - { from: webgpt, to: oai-dr, label: 浏览环境 + 端到端 RL }
   - { from: react, to: search-r1, label: 推理与检索交错 }
@@ -165,8 +166,8 @@ edges:
   - { from: websailor, to: tongyi-dr, label: 高不确定性数据合成 }
   - { from: zerosearch, to: tongyi-dr, label: 模拟环境先行 }
   - { from: zerosearch, to: kimi-k2, label: 用模拟器规模化造工具数据 }
-  - { from: swe-rl, to: kimi-dev, label: 相似度奖励 → 执行奖励 }
   - { from: swe-rl, to: deepswe, label: 真实执行环境 + 纯 RL }
   - { from: deepswe, to: qwen3-coder, label: 工业级环境规模化 }
   - { from: kimi-k2, to: kimi-k25, label: 单智能体 → 并行智能体 }
   - { from: glm-45, to: glm-5, label: 异步 RL + 长程工程任务 }
+  - { from: kimi-k25, to: kimi-k3, label: 从并行编排到百万 token 长程执行 }

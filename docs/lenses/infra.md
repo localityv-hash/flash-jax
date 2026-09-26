@@ -189,7 +189,7 @@ AReaL 的贡献不只在系统：它把“陈旧度上限 + 解耦目标”这�
 
 - **kernel 不同**：推理引擎为小批量 decode 优化（分页注意力、融合算子、CUDA graph），训练框架为大批量前向 + 反向优化；两边的矩阵形状完全不同，会选到不同的 kernel。
 - **归约顺序随批大小变化**：浮点加法不满足结合律，为小批量优化的 kernel 常把归约再切分，切法随批大小变化，而推理服务的批大小又随负载波动。Thinking Machines 指出，这种<Term t="batch-invariance">批不变性</Term>的缺失才是推理非确定性的主因[^tm]。
-- **数值精度**：BF16 只有 7 位尾数，舍入误差大；FP8/INT8 量化 rollout 更甚；LM head 与 logits 的精度也有影响——MiniMax-M1 把推理端 LM head 提到 FP32 来缓解[^trl-mismatch]。
+- **数值精度**：BF16 只有 7 位尾数，舍入误差大；FP8/INT8 量化 rollout 更甚；LM head 与 logits 的精度也有影响——MiniMax-M1 把 LM head 提到 FP32 来缓解[^trl-mismatch]。
 - **采样处理**：温度与 top-p/top-k 截断改变了实际采样分布；如果引擎返回的是处理前的 logprob，修正公式的分母本身就是错的[^trl-vllm]。
 - **MoE 路由**：logits 的微小差异会让两边选中不同专家，把连续的小误差放大成离散的跳变，见 [MoE](#moe)。
 
@@ -197,13 +197,13 @@ AReaL 的贡献不只在系统：它把“陈旧度上限 + 解耦目标”这�
 
 ### 为什么小差异会拖垮训练
 
-2025 年 8 月，Feng Yao、Liyuan Liu 等人（UCSD 与微软研究院）在博客 *Your Efficient RL Framework Secretly Brings You Off-Policy RL Training* 中把问题点破[^tis]。背景是他们在做 FP8/INT8 量化 rollout（FlashRL），量化把训推差异放大到无法忽视。核心论点是：在“vLLM 生成 + FSDP 训练”的混合系统里，样本来自 $\mu$，PPO 却以训练端重算的 $\pi_{\theta_\text{old}}$ 为基准，同一组权重下两者的 token 概率可以差得很远；标准 PPO 对这段差异不做任何修正。他们给出的截断重要性采样（TIS）只在原目标前乘一个有上限的权重：
+2025 年 8 月，Feng Yao、Liyuan Liu 等人（UCSD 与微软研究院）在博客 *Your Efficient RL Framework Secretly Brings You Off-Policy RL Training* 中把问题点破[^tis]；同一团队的 FlashRL 用 INT8/FP8 量化 rollout 提速，而量化只会把训推差异进一步放大。核心论点是：在“vLLM 生成 + FSDP 训练”的混合系统里，样本来自 $\mu$，PPO 却以训练端重算的 $\pi_{\theta_\text{old}}$ 为基准，同一组权重下两者的 token 概率可以差得很远；标准 PPO 对这段差异不做任何修正。他们给出的截断重要性采样（TIS）只在原目标前乘一个有上限的权重：
 
 $$
 \mathcal L_\text{TIS}(\theta)=-\E_{y\sim\mu}\Big[\frac{1}{\lvert y\rvert}\sum_t\min\Big(\frac{\pi_{\theta_\text{old}}(y_t\mid s_t)}{\mu(y_t\mid s_t)},\,C\Big)\min\Big(\rho_t(\theta)\hat A_t,\ \clip\big(\rho_t(\theta),1-\varepsilon,1+\varepsilon\big)\hat A_t\Big)\Big]
 $$
 
-这里 $\rho_t(\theta)=\pi_\theta(y_t\mid s_t)/\pi_{\theta_\text{old}}(y_t\mid s_t)$ 是常规 PPO 比率；截断权重只依赖 $\theta_\text{old}$，不回传梯度；上限 $C$ 只截高端，权重可以自由小于 1。这篇博客的证据以中等规模实验为主，但结论简单、代价几乎为零，几周内就被 verl、OpenRLHF、slime 等跟进，TRL 更是对 vLLM 生成默认开启 TIS[^trl-mismatch]，由此引发了 2025 年下半年一整波“训推不一致”研究。
+这里 $\rho_t(\theta)=\pi_\theta(y_t\mid s_t)/\pi_{\theta_\text{old}}(y_t\mid s_t)$ 是常规 PPO 比率；截断权重只依赖 $\theta_\text{old}$，不回传梯度；上限 $C$ 只截高端，权重可以自由小于 1。它的说服力来自简单：诊断清楚、改动只有一个乘法、几乎零开销。随后 verl、OpenRLHF、slime 等主流框架都实现了同类修正，TRL 更是对 vLLM 生成默认开启 TIS[^trl-mismatch]；2025 年下半年一整波“训推不一致”研究由此展开。
 
 ::: derive 为什么差异会变成偏差，又为什么随长度放大
 记 $g(y)=\sum_t\nabla_\theta\log\pi_\theta(y_t\mid s_t)\hat A_t$。PPO 代理目标在 $\theta=\theta_\text{old}$ 处的梯度是 $\E_{y\sim\mu}[g(y)]$（因为 $\rho_t(\theta_\text{old})=1$，且 $\nabla\rho_t=\rho_t\nabla\log\pi_\theta$），而我们想要的是 $\E_{y\sim\pi_{\theta_\text{old}}}[g(y)]$。两者之差满足
@@ -254,12 +254,12 @@ Miles 团队的大量实验给了一个务实的参照：在不崩溃的常规�
 算法补偿承认差异、事后修正；另一条路是从系统上让 $\mu=\pi$。
 
 - **FP16 替代 BF16**：Sea AI Lab 与新加坡国立大学的论文把根源归到 BF16 的舍入误差：它范围大、精度粗，而 RL 后训练用不到那么大的范围。训练与推理统一改用 FP16（10 位尾数）后，训推差异大幅下降，这一结论在 VeRL 与 Oat 两套框架、多种算法与模型族上都得到复现；verl 随后加入了 FSDP 与 Megatron（稠密模型）的 FP16 训练支持[^fp16]。这个结论有些反直觉——BF16 成为默认正是因为它的范围——因此引发了不少讨论。
-- **批不变 kernel**：Thinking Machines Lab 的 Horace He 等人在 Connectionism 博客首篇（2025 年 9 月）中论证，推理非确定性的主因不是笼统的“GPU 并发 + 浮点误差”，而是 kernel 缺乏批不变性；他们给出批不变的 RMSNorm、矩阵乘与注意力，并演示了训推 KL 恒为 0 的真 on-policy RL[^tm]。代价是速度：SGLang 的博客引述其初版实现慢约 61.5%，SGLang 自己的实现借助 CUDA graph 把平均开销降到约 34%，并与 slime 合作做到两次独立 RL 运行的曲线完全一致[^sglang-det]。
+- **批不变 kernel**：Thinking Machines Lab 的 Horace He 等人在 Connectionism 博客首篇（2025 年 9 月）中论证，推理非确定性的主因不是笼统的“GPU 并发 + 浮点误差”，而是 kernel 缺乏批不变性；他们给出批不变的 RMSNorm、矩阵乘与注意力，并演示了训推 KL 恒为 0 的真 on-policy RL[^tm]。代价是速度：SGLang 的博客引述其初版实现慢约 61.5%；SGLang 自己的实现在兼容 CUDA graph、前缀缓存的同时把平均开销降到约 34%，并与 slime 合作做到两次独立 RL 运行的曲线完全一致[^sglang-det]。
 - **训推比特一致**：vLLM 与 TorchTitan 团队逐个核对前向中的每一次 kernel 调用，为 vLLM 的融合算子补写反向，让 Qwen3 1.7B 的 RL 训推 KL 恒为 0，比关闭批不变时步数更少、奖励更高，但整体慢了 2.4 倍[^vllm-bitwise]。Miles 用 FlashAttention-3、DeepGEMM、批不变 kernel 与 `torch.compile` 在稠密模型上做到了严格为 0 的训推差异，但也坦言：在他们的系统里稠密模型从未因训推不一致崩溃，打开比特一致后奖励曲线也没有更好[^miles-mismatch]。
-- **取对 logprob**：让引擎返回经温度与截断处理后的 logprob（TRL 要求 vLLM 以 `--logprobs-mode processed_logprobs` 启动）[^trl-vllm]；使用 top-p/top-k 时还要把采样时的截断掩码带回训练端，训练端在同一掩码上重新归一化——即 DeepSeek-V3.2 的 Keep Sampling Mask，prime-rl 会自动完成这一回放[^prime-inference]。
+- **取对 logprob**：让引擎返回经温度与截断处理后的 logprob（TRL 文档给出的 vLLM 启动参数是 `--logprobs-mode processed_logprobs`）[^trl-vllm]；使用 top-p/top-k 时还要把采样时的截断掩码带回训练端，训练端在同一掩码上重新归一化——即 DeepSeek-V3.2 的 Keep Sampling Mask，prime-rl 会自动完成这一回放[^prime-inference]。
 
 ::: evidence 这一波工作的证据强度
-TIS 与 MIS 的证据主要来自中小规模复现与框架维护者的实验，但几乎被所有主流框架采纳，属于“成本低、共识高”的默认项；FP16 的结论跨两套框架、多种算法复现，在稠密模型上可信，MoE 支持仍在完善；比特一致已被多个团队在 1.7B–8B 稠密模型上独立做到，但吞吐代价显著，目前更适合做对照实验和排查问题，而非大规模生产训练。
+TIS 与 MIS 的证据主要来自中小规模复现与框架维护者的实验，但几乎被所有主流框架采纳，属于“成本低、共识高”的默认项；FP16 的结论跨两套框架、多种算法复现，在稠密模型上可信，MoE 支持仍在完善；训推比特一致已被 vLLM × TorchTitan、Miles 等团队在稠密模型上独立做到（公开演示以小模型为主），但吞吐代价显著，目前更适合做对照实验和排查问题，而非大规模生产训练。
 :::
 
 <EntryGrid :ids="['tis-offpolicy', 'rl-collapse-mismatch', 'fp16-mismatch', 'tm-nondeterminism', 'stabilizing-rl-llm']" />
@@ -305,7 +305,7 @@ Agent RL 的 rollout 不是一次 `generate`，而是“生成 → 解析工具�
 1. **按轨迹异步，而不是按批同步**：环境延迟（编译、跑测试、网页请求）高且方差大，批同步会被最慢的环境拖住。ROLL Flash 把环境交互做成环境级异步并配合队列调度，在 agentic 任务上报告最高 2.72 倍提速[^rollflash]；prime-rl 的编排器给每个环境开独立子进程和可伸缩的 worker 池[^prime-overview]。
 2. **token 进、token 出**：多轮拼接时不要把文本解码后再重新分词——重分词可能改变 token 边界，存下的 logprob 就和训练时的 token 对不上了。OpenRLHF 的 agent 执行器、prime-rl 的编排器都以 token 为单位拼接轨迹；Miles 团队还发现，Search-R1、ReTool 一类示例会对模型输出做字符串后处理，这同样会破坏 IS 所需的 token 与 logprob 的对应[^miles-mismatch]。环境返回的观察 token 要用 <Term t="loss-mask">loss mask</Term> 排除在梯度之外。
 3. **沙箱池**：容器冷启动慢、占资源，需要预热池与快照（rLLM 支持 Docker、Daytona、Modal 等沙箱，并提供快照与预热池加速[^rllm]），让环境跑在 CPU 节点上、与 GPU 解耦。
-4. **长尾与超时**：设最大轮数与墙钟预算。超时轨迹要么截断后屏蔽损失、要么记为失败，但一定要单独统计，避免“超时即负奖励”把模型推向更短、更保守的行为。也可以超额发起请求、凑够一批后中止其余请求——APRIL 在 slime 上实现了这种主动式部分 rollout[^april]。
+4. **长尾与超时**：设最大轮数与墙钟预算。超时轨迹要么截断后屏蔽损失、要么记为失败，但一定要单独统计，避免“超时即负奖励”把模型推向更短、更保守的行为。也可以超额发起请求，凑够一批就中止其余请求，未完成的部分留到下一轮继续——APRIL 在 slime 上实现了这种主动式部分 rollout[^april]。
 5. **路由与缓存**：让同一条轨迹的各轮落到同一个推理实例上（会话亲和或一致性哈希），才能复用前缀缓存；slime 通过 router 策略支持这一点[^slime-readme]。
 
 ## 演化脉络 {#lineage}

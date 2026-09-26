@@ -176,7 +176,7 @@ SWE-bench 的评测按 `run_id` 与 `instance_id` 缓存结果：同一个 `run_
 
 - **环境规模**：Qwen3-Coder 并行运行 2 万个环境[^13]；Kimi K2 基于 Kubernetes 支持 1 万以上并发沙箱，SWE 环境由 GitHub 的 PR、issue 与可执行单元测试构成[^12]；MiniMax-M2.5 在 10 多种编程语言、20 万以上真实环境中训练[^14]。
 - **中训练打底**：Kimi-Dev 用约 150B token 的 issue 与 PR 数据中训练[^9]；Meta 的 CWM 在 RL 之前用执行轨迹与约 300 万条容器环境中的智能体交互轨迹做中训练，再做覆盖多轮 SWE 环境的多任务 RL[^15]。
-- **跨脚手架泛化**：MiniMax 的 Forge 框架支持接入任意智能体脚手架进行训练[^14]。
+- **跨脚手架泛化**：MiniMax 的 Forge 框架支持接入任意智能体脚手架进行训练[^14]；Kimi K3 把脚手架拆成工具接口、系统提示、上下文管理策略等可组合模块，训练时按任务组动态拼出 Kimi Code、Claude Code、Codex 等不同脚手架，其训练环境也覆盖软件工程与 kernel 优化任务[^17]。
 
 更完整的对照见 [Agentic RL 专题的工业实践一节](/topics/agentic-rl#industry)。
 
@@ -219,3 +219,4 @@ SWE-bench 的评测按 `run_id` 与 `instance_id` 缓存结果：同一个 `run_
 [^14]: MiniMax-M2.5 仓库 README（编码环境规模、Forge、跨脚手架评测）与 MiniMax-M2 仓库 README（交错思考）：<https://github.com/MiniMax-AI/MiniMax-M2.5>、<https://github.com/MiniMax-AI/MiniMax-M2>
 [^15]: Meta FAIR, *CWM: An Open-Weights LLM for Research on Code Generation with World Models*，模型卡（训练流程与 SWE-bench Verified 结果）：<https://github.com/facebookresearch/cwm/blob/main/MODEL_CARD.md>
 [^16]: SWE-bench 官方仓库 README（SWE-bench Verified 500 题、Docker 化评测、硬件建议、按 run_id 缓存结果）：<https://github.com/SWE-bench/SWE-bench>
+[^17]: Kimi Team, *Kimi K3: Open Frontier Intelligence* 技术报告（§1 概述、§4.2.1 统一白盒 RL 环境）：<https://github.com/MoonshotAI/Kimi-K3>

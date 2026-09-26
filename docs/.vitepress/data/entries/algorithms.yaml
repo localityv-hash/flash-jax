@@ -35,7 +35,7 @@
   facets: [algorithm, theory]
   tier: rec
   evidence: [adopted, community, ablation]
-  evidence_note: "LLM 上 PPO 的标准优势估计器：verl（algorithm.adv_estimator 默认 gae）与 OpenRLHF 都以它实现 PPO；ByteDance Seed 的 VAPO 在其上提出解耦 GAE 与长度自适应 GAE。原论文在连续控制任务上系统比较了不同 γ、λ，经典 RL 中被引极高。"
+  evidence_note: "LLM 上 PPO 的标准优势估计器：verl（algorithm.adv_estimator 默认 gae）与 OpenRLHF 都以它实现 PPO；字节 Seed 的 VAPO 与 Seed1.5-Thinking 在其上采用了解耦 GAE（λ_value=1、λ_policy=0.95）与长度自适应 GAE。原论文在连续控制任务上系统比较了不同 γ、λ，经典 RL 中被引极高。"
   summary: "提出广义优势估计：把 TD 误差按 (γλ)^l 几何加权求和，Â_t = Σ_l (γλ)^l δ_{t+l}，用 λ 在单步 TD（低方差、有偏）与蒙特卡洛回报（无偏、高方差）之间连续调节，配合信任域更新在高维控制上稳定学习。"
   plain: "评价一步棋好不好，可以只看下一步的局面估值（快，但估值不准就会看走眼），也可以等整盘下完再算（准，但运气成分大）。GAE 用一个旋钮 λ 在两者之间折中。"
   takeaways:

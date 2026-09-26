@@ -354,7 +354,7 @@ $$
 
 四项修正各自对应一个问题：
 
-1. **Clip-Higher**（$\varepsilon_\text{low}=0.2$，$\varepsilon_\text{high}=0.28$）。上界裁剪对低概率 token 更苛刻：$\varepsilon=0.2$ 时，旧概率 0.01 的 token 一轮最多涨到 0.012，旧概率 0.9 的 token 却可以涨到 1.08（等于不设限）。探索性的低概率 token 最需要上涨空间，于是单独放宽上界；下界保持 0.2，因为放宽下界会把 token 概率压向 0、使采样空间坍缩。论文观察到被上界裁剪的 token 概率几乎都低于 0.2，放宽之后熵不再快速塌缩（见 [熵与熵塌缩](/lenses/principles#entropy)）。
+1. **Clip-Higher**（$\varepsilon_\text{low}=0.2$，$\varepsilon_\text{high}=0.28$）。上界裁剪对低概率 token 更苛刻：$\varepsilon=0.2$ 时，旧概率 0.01 的 token 一轮最多涨到 0.012，旧概率 0.9 的 token 却可以涨到 1.08（等于不设限）。探索性的低概率 token 最需要上涨空间，于是单独放宽上界；下界保持 0.2，因为放宽下界会把 token 概率压向 0、使采样空间坍缩。论文观察到被上界裁剪的 token 概率几乎都低于 0.2，放宽之后熵不再快速塌缩（见 [熵与熵塌缩](/lenses/principles#entropy)）。同一个不对称还是“随机奖励也涨分”的一种机制解释：期望优势为零时，裁剪仍会系统性地抬高模型原本就高概率的行为（见 [伪奖励与数据污染](/lenses/principles#spurious-rewards)）。
 2. **<Term t="dynamic-sampling">动态采样</Term>**。组内全对或全错时优势全为 0，这些提示只占位置、不贡献梯度，而且随训练推进越来越多（全对的比例持续上升）。DAPO 过采样并过滤掉它们，直到批次填满。在同步系统里生成时间主要被长尾样本决定，多采的这部分并不显著拖慢训练。
 3. **<Term t="token-level-loss">token 级损失</Term>**。分母换成组内总 token 数 $\sum_i\lvert y_i\rvert$，长回答里的每个 token 与短回答里的 token 权重相同：好的长推理能被充分学习，冗长重复的坏模式也能被充分惩罚。它消除了上面的长度偏置（但保留了 std 归一化）；归一化常数随批次里的总长度变化，严格说只是把偏置从“每条回答”挪到了“每个批次”。
 4. **<Term t="overlong-shaping">超长奖励塑形</Term>**。被截断的回答直接判错，会误伤“思路对但没写完”的样本，给奖励引入噪声。先是 Overlong Filtering（截断样本不计损失），再是软超长惩罚：
@@ -529,7 +529,7 @@ $$
 | PPO | $\pi_{\theta_\text{old}}$ | $\rho_t\hat A_t^\text{GAE}$，越界置 0 | 逐 token，经 critic |
 | On-Policy 蒸馏 | 学生 $\pi_\theta$ 自己采样 | $\sg\big(\log\pi_T(y_t\mid s_t)-\log\pi_\theta(y_t\mid s_t)\big)$ | 逐 token，来自教师 |
 
-```mermaid 统一视角：一个更新公式，两个旋钮
+```mermaid 统一视角：同一个更新公式，不同的 q 与 w
 flowchart LR
   SFT["SFT"] --> Q1["q：示范数据<br/>w：常数 1"]
   RFT["RFT / 在线 RFT"] --> Q2["q：模型采样且只留正确<br/>w：常数 1"]
@@ -575,7 +575,7 @@ flowchart LR
 ::: takeaway
 - 读任何一个算法，先确认三件事：样本来自哪个分布、每个 token 的权重是什么、哪些量要停止梯度。多数难以复现的问题出在这里。
 - KL 当损失时不要直接对 k1 求导；直接对 k3 求导正则的是正向 KL。需要反向 KL，就用 k2 当损失、给 k3 乘上 ρ（DeepSeek-V3.2），或把 k1 放进奖励。
-- 损失聚合方式会改变优化目标：按序列平均带来长度偏置，token 级平均让每个 token 同等对待，除以固定常数才严格无偏。
+- 损失聚合方式会改变优化目标：按序列平均带来长度偏置，token 级平均让每个 token 同等对待，按 token 求和再除以固定常数才与真实梯度严格成正比。
 - 数学 RLVR 的起步配置：组相对优势、token 级损失、Clip-Higher（0.2/0.28）、动态采样、软超长惩罚，$\beta=0$；MoE 或训推差异明显时，再加序列级比率或 IS 修正。
 - clip fraction、新旧策略 KL、训推 logprob 差要分开监控：它们分别对应信任域、策略陈旧与训推不一致三种不同病因。
 :::

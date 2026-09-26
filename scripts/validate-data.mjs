@@ -100,7 +100,8 @@ for (const file of yamlFiles(path.join(dataDir, 'entries'))) {
         err(where, '必读需至少 3 类证据且包含 industrial 或 adopted')
     }
     if (e.tier === 'rec' && (e.evidence ?? []).length < 2) err(where, '推荐需至少 2 类证据')
-    const len = (s) => [...String(s ?? '')].length
+    // 公式按一个字符计：`$\\pi_\\theta$` 的 LaTeX 源码不该算进阅读长度
+    const len = (s) => [...String(s ?? '').replace(/\$[^$\n]+?\$/g, 'x')].length
     if (len(e.summary) > 130) warn(where, `summary 偏长（${len(e.summary)} 字）`)
     if (len(e.plain) > 130) warn(where, `plain 偏长（${len(e.plain)} 字）`)
     if ((e.takeaways ?? []).length > 3) warn(where, 'takeaways 建议不超过 3 条')

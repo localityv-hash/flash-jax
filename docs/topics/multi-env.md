@@ -72,7 +72,7 @@ flowchart LR
 3. **工具。** 无状态工具（计算器、检索）只是函数；有状态工具（shell、数据库、浏览器、虚拟机）才需要沙箱。verifiers 的 `ToolEnv` 要求工具幂等、无状态，需要注入沙箱句柄或凭证时升级为 `StatefulToolEnv`[^verifiers]。
 4. **状态与重置。** 每个回合必须有隔离且可一键恢复的初始状态：τ-bench 与 AgentScaler 用数据库初始态，OSWorld 用虚拟机快照，SWE 环境用容器镜像。Kimi K3 的 microVM 沙箱还支持 **fork**：从完全相同的状态复制一个沙箱专门用来判分，避免判分操作污染现场[^k3]。
 5. **终止条件。** 模型给出最终回答、不再调用工具（verifiers 的 `ToolEnv` 即以此结束）、超过最大轮数、超过 token 或时间预算。被截断的轨迹怎么计奖励要单独约定，否则会悄悄变成长度惩罚。
-6. **验证器与奖励。** 规则匹配、执行单元测试、比对终态、按 rubric 让 LLM 评审打分，逐级更通用、也逐级更容易被钻空子。
+6. **验证器与奖励。** <Term t="verifier">验证器</Term>可以是规则匹配、执行单元测试、比对终态，也可以是按 rubric 打分的 LLM 评审，逐级更通用、也逐级更容易被钻空子。
 
 ::: human
 环境就像一间考场：发卷（任务）、答题纸（接口）、允许带的工具、考前把桌面收拾干净（重置）、收卷规则（终止）、阅卷老师（验证器）。任何一个环节松了，模型学到的就可能是“钻考场的空子”，而不是本事。
@@ -105,7 +105,7 @@ flowchart LR
 
 三个趋势值得注意：
 
-- **分发：从代码仓库到 Hub。** verifiers 的环境是带 `pyproject.toml` 的 Python 包，暴露统一的 `load_environment` 入口，可以一条命令推送到 Environments Hub、在任意机器上安装[^verifiers]；Prime Intellect 随后用 Hub 上的环境训练并评测了开源模型 INTELLECT-3[^intellect3]。OpenEnv 则把每个环境做成可部署到 Hugging Face Spaces 的容器服务[^openenv]。
+- **分发：从代码仓库到 Hub。** verifiers 的环境是带 `pyproject.toml` 的 Python 包，暴露统一的 `load_environment` 入口，可以一条命令推送到 <Term t="environment-hub">Environments Hub</Term>、在任意机器上安装[^verifiers]；Prime Intellect 随后用 Hub 上的环境训练并评测了开源模型 INTELLECT-3[^intellect3]。OpenEnv 则把每个环境做成可部署到 Hugging Face Spaces 的容器服务[^openenv]。
 - **互通：生态开始相互兼容。** NeMo Gym 可以直接接入 Reasoning Gym、verifiers、OpenEnv 与 Harbor 的环境[^nemo]；verifiers v1 支持 Harbor 格式的任务集；SWE-Bench Pro 在 2026-09 的 V2 也以 Harbor 格式发布[^swepro]。
 - **解耦：任务与 harness 分开。** verifiers v1 把“任务集”（数据、工具、奖励）与“harness”（模型运行其中的程序，如 Claude Code、Codex、mini-swe-agent）拆成两层[^verifiers]；NeMo Gym 把 harness 列为环境的四个组成部分之一[^nemo]。Kimi K3 走得更远：用一个“白盒”环境把 <Term t="scaffold">脚手架</Term> 拆成可配置的工具接口、系统提示、上下文管理、技能与子智能体等模块，训练时为不同任务组合出不同 harness，理由是“用单一固定 harness 训练会让模型过拟合某种工具 schema、提示或交互协议”[^k3]。
 

@@ -143,7 +143,7 @@
   repo: open-thought/reasoning-gym
   areas: [rl-llm]
   facets: [env, data]
-  tier: must
+  tier: rec
   evidence: [adopted, open-source, community]
   evidence_note: "仓库的 “Projects Using Reasoning Gym” 列出 NVIDIA 的 ProRL、BroRL 与 Nemotron 3 Super 技术报告、Prime Intellect 的 SYNTHETIC-2 数据集等工业工作；verifiers、GEM、NeMo Gym 都直接集成了它。社区共建，持续新增任务。"
   summary: "100 多个程序化任务生成器与验证器，覆盖代数、算术、几何、图论、逻辑和多种游戏；每类任务难度参数可调、题目可无限生成，可按权重组合成复合数据集，评分函数直接作为 RLVR 奖励。"
@@ -388,7 +388,7 @@
   url: https://livecodebench.github.io/
   areas: [rl-llm]
   facets: [eval]
-  tier: must
+  tier: rec
   evidence: [adopted, open-source, community]
   evidence_note: "Kimi K2、Kimi K2.5、Seed2.0、Qwen3-Coder-Next 等技术报告都按版本报告其成绩；持续从 LeetCode、AtCoder、Codeforces 收集新题（release_v6 已含 1,055 题），并维护勘误列表。论文即用时间窗口揭示了部分模型在旧题上的污染迹象。"
   summary: "持续从三大竞赛平台收集新发布的题目并记录发布日期：评测时只用模型训练截止之后的题，从而检测并规避污染；除代码生成外还覆盖自我修复、代码执行与测试输出预测。"
@@ -410,7 +410,7 @@
   url: https://www.swebench.com/
   areas: [agentic-rl]
   facets: [eval, env]
-  tier: must
+  tier: rec
   evidence: [adopted, open-source, community]
   evidence_note: "定义了“仓库级修 issue”这一评测范式：OpenAI 与作者合作推出 Verified 子集，SWE-Gym、SWE-smith、SWE-rebench、SWE-bench Pro 等训练环境与后继基准都沿用其任务格式与判分方式；2024 年起评测改为全容器化，并支持云端评测。"
   summary: "从 12 个 Python 仓库收集 2,294 个真实 issue：模型拿到代码库和 issue 描述后生成补丁，以对应 PR 的测试由失败转为通过、且其余测试不被破坏作为判分标准。"
@@ -496,7 +496,7 @@
     - { label: Harbor 评测框架, url: "https://github.com/laude-institute/harbor" }
   areas: [agentic-rl]
   facets: [eval, env]
-  tier: must
+  tier: rec
   evidence: [adopted, open-source, community]
   evidence_note: "Kimi K3、Kimi K2.5、Seed2.0、Qwen3-Coder-Next 等技术报告以及多家头部实验室的模型发布都报告其成绩，已成为智能体编程的主流基准；任务、测试与参考解全部开源并由社区持续贡献。2.0 版（论文 2026-01）改由 Harbor 运行，可在 Daytona、Modal 等云沙箱上大规模并行。"
   summary: "在真实终端沙箱里考智能体：每个任务有自然语言指令、独立容器环境、人工参考解和测试脚本，涵盖编译、训练模型、搭服务、安全等场景；2.0 版精选 89 个难题，发布时前沿模型成绩不到 65%。"
@@ -518,7 +518,7 @@
   repo: sierra-research/tau-bench
   areas: [agentic-rl]
   facets: [eval, env]
-  tier: must
+  tier: rec
   evidence: [adopted, open-source, community]
   evidence_note: "Kimi K2、AgentScaler、Seed2.0 等以 τ-bench / τ²-bench 作为核心工具使用基准，头部实验室的模型发布也普遍报告；它提出的 pass^k 成为衡量智能体稳定性的通用指标。原仓库已提示任务版本过时，推荐改用 τ³-bench。"
   summary: "模拟零售、航空客服：LLM 扮演的用户与被测智能体多轮对话，智能体须遵守领域政策并调用 API 改写数据库；以对话结束时数据库状态是否与目标一致判分，并提出衡量稳定性的 pass^k。"
@@ -586,7 +586,7 @@
     - { label: OSWorld-Verified 说明, url: "https://xlang.ai/blog/osworld-verified" }
   areas: [agentic-rl]
   facets: [eval, env]
-  tier: must
+  tier: rec
   evidence: [adopted, open-source, community]
   evidence_note: "电脑操作方向最常被引用的基准，Anthropic、OpenAI 的电脑操作模型以及 UI-TARS-2、Kimi K2.5（OSWorld-Verified 63.3%）等都报告其成绩；2025-07-28 发布 OSWorld-Verified，修复社区反馈的任务问题并支持 AWS 并行，官方要求新旧版本成绩分开比较。"
   summary: "在真实操作系统虚拟机里评测多模态智能体：369 个跨应用任务，每个任务配有初始状态配置和基于执行结果的检查脚本；发布时人类约 72%，最好的模型约 12%。"
@@ -611,7 +611,7 @@
     - { label: Anthropic：评测中的“识破考题”案例, url: "https://www.anthropic.com/engineering/eval-awareness-browsecomp" }
   areas: [agentic-rl]
   facets: [eval]
-  tier: must
+  tier: rec
   evidence: [industrial, adopted, open-source]
   evidence_note: "OpenAI 用于评测 Deep Research 等浏览智能体，参考实现开源在 simple-evals；Tongyi DeepResearch、Kimi K2.5/K3、Seed2.0 等都以它为深度研究主指标。Anthropic 曾记录模型在评测中推断出题目来源、找到加密数据集的镜像并自行解密答案的案例，说明开放网络评测需要主动防护。"
   summary: "1,266 道“难找易验”的问题：答案是简短事实，便于自动核对，但需要在开放网络上长时间、多跳地搜索才能找到，专门衡量浏览智能体的检索坚持度与搜索策略。"

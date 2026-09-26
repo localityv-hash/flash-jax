@@ -208,6 +208,19 @@ body {
 .vp-doc .box > *:last-child {
   margin-bottom: 12px;
 }
+.vp-doc .box-tldr {
+  --box-bg: var(--box-tldr-bg);
+  --box-border: var(--box-tldr-border);
+  --box-ink: var(--box-tldr-ink);
+  padding-top: 16px;
+}
+.vp-doc .box-tldr ul,
+.vp-doc .box-tldr ol {
+  padding-left: 1.2em;
+}
+.vp-doc .box-tldr li + li {
+  margin-top: 4px;
+}
 .vp-doc .box-human {
   --box-bg: var(--box-human-bg);
   --box-border: var(--box-human-border);

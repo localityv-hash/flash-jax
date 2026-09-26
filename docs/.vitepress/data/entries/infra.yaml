@@ -42,7 +42,7 @@
     - { label: 确定性推理与可复现 RL, url: https://lmsys.org/blog/2025-09-22-sglang-deterministic/ }
   areas: [rl-llm, agentic-rl]
   facets: [infra]
-  tier: must
+  tier: rec
   evidence: [industrial, adopted, open-source, community]
   evidence_note: "生产级推理引擎；slime 只用 SGLang 做 rollout，支撑智谱 GLM-4.5 起的 RL 训练；AReaL 以它为默认推理后端，verl、Miles 深度集成。为 RL 新增了 /abort_request（与 AReaL 团队共同设计，用于动态采样与部分 rollout）、分桶权重更新、返回 MoE 路由专家与确定性推理。"
   summary: "以 RadixAttention 在请求之间自动复用 KV 前缀，配合高效调度与结构化生成；同题多采样与多轮 agent 的前缀高度重叠，使它成为 RL rollout 的主流引擎之一。"
@@ -85,7 +85,7 @@
   repo: OpenRLHF/OpenRLHF
   areas: [rl-llm]
   facets: [infra]
-  tier: must
+  tier: rec
   evidence: [adopted, open-source, community]
   evidence_note: "最早把 Ray 调度与 vLLM 生成结合的开源 RLHF 框架；阶跃星辰与清华的 Open-Reasoner-Zero 明确基于它构建，HKUST 的 R1-Zero 小模型复现、LMM-R1、MARTI 等以它为底座或 fork。提供共置（hybrid engine + sleep）、异步、异步 + 部分 rollout 三种模式，内置截断式与掩码式 IS 修正。"
   summary: "用 Ray 把 actor、critic、奖励与参考模型调度到不同 GPU，vLLM 生成、DeepSpeed ZeRO-3 训练，经 NCCL 或 CUDA IPC 同步权重；后续加入共置、异步流水与 agent 执行器。"
@@ -172,7 +172,7 @@
     - { label: Miles（RadixArk 基于 slime 的企业版）, url: https://github.com/radixark/miles }
   areas: [rl-llm, agentic-rl]
   facets: [infra]
-  tier: must
+  tier: rec
   evidence: [industrial, adopted, open-source, community]
   evidence_note: "官方 README 列为 GLM-4.5、4.6、4.7 与 GLM-5 系列的 RL 框架；RadixArk 的 Miles、vLLM 项目的 vime、RedAI Infra 的 Relax、阿里 Accio 的 Dressage 等都构建在 slime 之上；与 SGLang 团队合作实现了确定性推理下的可复现 RL。"
   summary: "Megatron 训练 + SGLang 推理的原生组合，两端参数直通；一个开关在共置与分离之间切换，rollout 以 server 模式经 router 暴露，自定义生成函数即可接入多轮工具调用、沙箱与全异步 rollout。"
@@ -509,7 +509,7 @@
   arxiv: "2510.11370"
   areas: [rl-llm]
   facets: [infra, algorithm]
-  tier: must
+  tier: rec
   evidence: [adopted, ablation, community]
   evidence_note: "verl、ROLL、slime/Miles、prime-rl、NeMo-RL 均已内置 router replay，SGLang 与 vLLM 提供返回路由专家的接口；verl 文档称 DeepSeek-V3.2、GLM-5、MiMo-V2 等均采用 R3 式路由回放，prime-rl 文档称它能把训推差异降低一个数量级。论文在 MoE 上与 GSPO、TIS 做了对比。"
   summary: "发现 MoE 在训练与推理阶段的路由选择明显不一致，是 RL 崩溃的重要来源；提出 Rollout Routing Replay（R3）：记录推理引擎为每个 token 选的专家，训练前向复用同一组专家，显著降低训推 KL 且几乎不影响速度。"

@@ -389,7 +389,7 @@
     - { label: "OpenAI PDF", url: "https://cdn.openai.com/pdf/34f2ada6-870f-4c26-9790-fd8def56387f/CoT_Monitoring.pdf" }
   areas: [rl-llm]
   facets: [eval, theory]
-  tier: must
+  tier: rec
   evidence: [industrial, ablation, community]
   evidence_note: "OpenAI 在前沿推理模型（与 o3-mini 同级）的智能体编码 RL 训练中实际用 CoT 监控抓到了真实的 reward hacking，并对比了“监控信号是否进入奖励”的训练；其结论推动了多家实验室“不对 CoT 施加强优化压力”的共识（见 CoT Monitorability 立场论文）。"
   summary: "用 GPT-4o 读取前沿推理模型在智能体编码任务中的 CoT，比只看动作更能发现 reward hacking；把监控信号并入奖励后，优化压力小时模型更强也更守规矩，压力加大后则学会在 CoT 里隐藏意图、继续 hack，即“混淆”。"

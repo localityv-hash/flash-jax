@@ -15,7 +15,7 @@
     - { label: "博客：用 Math-Verify 修正 Open LLM Leaderboard", url: "https://huggingface.co/blog/math_verify_leaderboard" }
   areas: [rl-llm]
   facets: [eval, data]
-  tier: must
+  tier: rec
   evidence: [industrial, adopted, open-source]
   evidence_note: "Hugging Face 用它替换 Open LLM Leaderboard 的数学判分器，重评了全部 3,751 个模型，平均每个模型多判对约 61 题；小米 MiMo-7B 直接用它做数学 RL 的规则奖励，NVIDIA NeMo Gym 的数学环境、阶跃星辰 Open-Reasoner-Zero 的评测、verl 的内置 reward 与 Open-R1 的 accuracy_reward 都调用它。"
   summary: "规则式数学判分库：格式无关地抽取答案，归一化 LaTeX、单位与百分号后转成 SymPy，再做字符串、符号与数值容差比较，覆盖集合、区间与矩阵；部分比较刻意不对称，防止模型钻空子。"
@@ -87,7 +87,7 @@
     - { label: CodeForces-CoTs, url: "https://huggingface.co/datasets/open-r1/codeforces-cots" }
   areas: [sft, rl-llm]
   facets: [data, infra]
-  tier: must
+  tier: rec
   evidence: [adopted, open-source, community]
   evidence_note: "阶跃星辰 Open-Reasoner-Zero 的扩展数学集主要由 OpenR1-Math-220k 清洗而来，360 的 Light-R1 从中收集训练题，OpenThoughts2-1M 也混入了 OpenR1-Math；仓库是 GitHub 上关注度最高的 R1 复现项目之一，数据、脚本与评测复现全部公开。"
   summary: "Hugging Face 主导的 DeepSeek-R1 全开源复现：公开 R1 蒸馏数据集（Mixture-of-Thoughts 含 35 万条已验证轨迹），以及去污染、通过率过滤、沙箱代码奖励和 SFT/GRPO 脚本。"
@@ -114,7 +114,7 @@
     - { label: "KodCode-V1-SFT-R1", url: "https://huggingface.co/datasets/KodCode/KodCode-V1-SFT-R1" }
   areas: [rl-llm, sft]
   facets: [data]
-  tier: must
+  tier: rec
   evidence: [adopted, open-source, ablation, community]
   evidence_note: "Kimi K2 技术报告把 KodCode 列为竞赛编程 RL 的开源题源之一，MiniCPM4 的代码数据也包含 KodCode；论文验证了自验证机制的有效性、做了污染分析与 SFT 对比实验，ACL 2025 录用，并获 ICML 2025 DataWorld 研讨会最佳论文。"
   summary: "全合成可验证代码数据：12 类来源合成题目并语义去重，GPT-4o 同写解答与单元测试、执行互验（难题最多重试 10 次），共 44.7 万组“题-解-测试”，另用 R1 按测试拒绝采样出 SFT 数据。"

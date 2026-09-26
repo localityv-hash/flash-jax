@@ -316,7 +316,7 @@
     - { label: 后训练数据集, url: "https://huggingface.co/datasets/nvidia/Llama-Nemotron-Post-Training-Dataset" }
   areas: [sft, rl-llm]
   facets: [data, infra]
-  tier: must
+  tier: rec
   evidence: [industrial, adopted, ablation, open-source]
   evidence_note: "NVIDIA 以商用许可发布 Nano 8B / Super 49B / Ultra 253B，并开放完整后训练数据与训练代码（NeMo、NeMo-Aligner、Megatron-LM）；AI2 的 open-instruct 收录了该数据集的 SFT 转换脚本。报告逐阶段给出 SFT 与 RL 的效果。"
   summary: "从 Llama 3 做架构搜索与蒸馏得到高吞吐的 8B/49B/253B 推理模型；以 R1 等教师的推理轨迹与非推理回答混合 SFT，用系统提示 “detailed thinking on/off” 切换推理，Ultra 再经大规模 RL 部分超过教师。"

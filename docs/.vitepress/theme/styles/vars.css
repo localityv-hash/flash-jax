@@ -40,6 +40,9 @@
   --area-rl: #db2777;
   --area-classic: #52606d;
 
+  --box-tldr-bg: #f0f8f6;
+  --box-tldr-border: #bfe0d9;
+  --box-tldr-ink: #0f766e;
   --box-human-bg: #fff8ec;
   --box-human-border: #f1d9ab;
   --box-human-ink: #955a00;
@@ -97,6 +100,9 @@
   --area-rl: #f472b6;
   --area-classic: #94a3b8;
 
+  --box-tldr-bg: rgba(58, 209, 189, 0.06);
+  --box-tldr-border: rgba(58, 209, 189, 0.24);
+  --box-tldr-ink: #3ad1bd;
   --box-human-bg: rgba(245, 166, 35, 0.07);
   --box-human-border: rgba(245, 166, 35, 0.26);
   --box-human-ink: #f5b544;

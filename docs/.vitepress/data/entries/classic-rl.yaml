@@ -44,7 +44,7 @@
   url: https://docs.cleanrl.dev/
   areas: [classic-rl]
   facets: [infra, algorithm]
-  tier: must
+  tier: rec
   evidence: [open-source, community, adopted]
   evidence_note: "最常被当作参考实现阅读的深度 RL 代码库之一，实验曲线在 Open RL Benchmark 上公开可查。PyTorch 团队的 LeanRL（pytorch-labs）在 CleanRL 实现上做 CUDA Graphs 等加速，CORL 按同样风格实现离线 RL，Hugging Face Deep RL 课程以 CleanRL 的 PPO 作为从零实现的范本。"
   summary: "把每个算法变体的全部细节写进一个独立文件（如 ppo_atari.py 约 340 行），配套基准曲线、种子复现与实验追踪；牺牲代码复用，换取可逐行对照、可快速魔改的研究基线。"
@@ -345,7 +345,7 @@
   repo: google-deepmind/alphadev
   areas: [classic-rl]
   facets: [algorithm]
-  tier: must
+  tier: rec
   evidence: [industrial, open-source, community]
   evidence_note: "发现的排序例程已并入 LLVM 标准 C++ 库（libc++）的 sort 实现，是强化学习发现的算法直接替换生产代码组件的罕见案例；仓库公开了 AssemblyGame 伪代码，以及 sort3–sort8 等汇编程序与正确性测试。"
   summary: "把写更快的排序汇编变成单人游戏 AssemblyGame：每步追加一条汇编指令，奖励由测试输入上的正确性与实测延迟组成；AlphaZero 式智能体从零发现了优于人类基准的短序列排序例程。"

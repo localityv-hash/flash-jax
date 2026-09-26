@@ -118,7 +118,7 @@
   repo: langfengQ/verl-agent
   areas: [agentic-rl]
   facets: [algorithm]
-  tier: must
+  tier: rec
   evidence: [adopted, open-source, ablation, community]
   evidence_note: "阿里 ROLL 框架已原生支持 GiGPO，OpenManus-RL 采用了 verl-agent 式训练管线（见 verl-agent 仓库 News）；NeurIPS 2025 接收；verl-agent 提供 ALFWorld、WebShop、Search、Sokoban 等环境与完整训练日志。"
   summary: "在 GRPO 的轨迹级组内优势之外，按“锚状态”（不同轨迹中的相同环境观察）回溯构造步级小组，计算步级相对优势并加权相加；无需 critic、不增 rollout，ALFWorld、WebShop 上比 GRPO 高 12%、9% 以上。"
@@ -628,7 +628,7 @@
     - { label: 项目主页, url: "https://seed-tars.com/showcase/ui-tars-2/" }
   areas: [agentic-rl]
   facets: [env, infra, algorithm]
-  tier: must
+  tier: rec
   evidence: [industrial, ablation, community]
   evidence_note: "字节 Seed 的 GUI 智能体旗舰技术报告，覆盖数据飞轮、稳定化多轮 RL、GUI + 文件系统 + 终端的混合环境与统一沙箱平台，是 GUI/计算机使用方向披露最完整的多轮 RL 工程实践之一；前代 UI-TARS-1.5 已开源 7B 权重。"
   summary: "原生 GUI 智能体：数据飞轮持续产出训练数据，在集成文件系统与终端的混合 GUI 环境中做稳定化多轮 RL，统一沙箱支撑大规模 rollout；OSWorld 47.5、Online-Mind2Web 88.2。"
@@ -673,7 +673,7 @@
     - { label: Qwen3-Coder-Next, url: "https://qwenlm.github.io/blog/qwen3-coder-next/" }
   areas: [agentic-rl]
   facets: [env, infra]
-  tier: must
+  tier: rec
   evidence: [industrial, open-source, community]
   evidence_note: "开源 480B-A35B 等多个尺寸的编码智能体模型；官方博客明确披露依托阿里云搭建了可并行运行 2 万个独立环境的 Agent RL 系统，是“环境规模化”最常被引用的工业数据点之一。"
   summary: "480B 总参、35B 激活的编码智能体。后训练在可验证代码 RL 之外引入长程 Agent RL，让模型在真实软件环境中多轮用工具完成任务；依托阿里云搭建了可并行运行 2 万个独立环境的系统。"

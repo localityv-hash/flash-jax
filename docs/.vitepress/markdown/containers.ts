@@ -3,6 +3,7 @@ import type MarkdownIt from 'markdown-it'
 
 /** 站内统一的内容盒子。用法：`::: human 可选副标题` … `:::` */
 const BOXES: Record<string, string> = {
+  tldr: '30 秒速读',
   human: '说人话',
   takeaway: '可执行结论',
   pitfall: '踩坑提示',

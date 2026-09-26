@@ -385,7 +385,8 @@
   authors: "Su et al."
   date: "2025-09"
   arxiv: "2509.13310"
-  repo: Alibaba-NLP/DeepResearch
+  links:
+    - { label: 代码仓库（与 Tongyi DeepResearch 共用）, url: "https://github.com/Alibaba-NLP/DeepResearch" }
   areas: [mid-training, agentic-rl]
   facets: [data]
   tier: rec
@@ -455,7 +456,7 @@
     - { label: 发布博客, url: "https://allenai.org/blog/olmo3" }
   areas: [mid-training]
   facets: [data, eval]
-  tier: must
+  tier: rec
   evidence: [industrial, ablation, open-source]
   evidence_note: "AI2 的 7B / 32B 全开源模型：OLMo-core 给出每个阶段的官方训练脚本与数据清单（7B：5.93T 预训练 → 100B 中训练 → 50B 长上下文），OLMo-core 与 dolma3 仓库公开了中训练来源配比、各轮迭代配置与去污染工具 decon，每个数字都可以对着配置核对。"
   summary: "三段式 base 训练：Dolma 3 预训练、Dolmino 中训练（100B token，含数学、代码、QA、指令与思维链，全部去污染）、Longmino 长上下文（YaRN 扩到 64K）；32B 对两次中训练结果做模型汤。"

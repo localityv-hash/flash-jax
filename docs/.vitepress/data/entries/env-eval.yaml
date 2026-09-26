@@ -37,7 +37,7 @@
     - { label: INTELLECT-3 技术报告, url: "https://arxiv.org/abs/2512.16144" }
   areas: [agentic-rl, rl-llm]
   facets: [env, infra]
-  tier: must
+  tier: rec
   evidence: [industrial, adopted, open-source, community]
   evidence_note: "Prime Intellect 用它和 Environments Hub 上的社区环境训练并评测了开源模型 INTELLECT-3（技术报告 arXiv 2512.16144）；NVIDIA NeMo Gym 把 verifiers 列为可直接接入的外部环境库，Reasoning Gym 官方推荐用它训练；是 GitHub 上使用最广的 LLM 环境库之一。2026 年重构为以 taskset、harness、trace 为核心的 v1。"
   summary: "把 RL 环境做成可安装的 Python 模块：数据集、交互逻辑与 Rubric（加权奖励函数）三件套，同一环境可直接用于评测、合成数据与训练，并可发布到 Environments Hub 共享。"
@@ -345,7 +345,7 @@
   repo: OpenHands/OpenHands
   areas: [agentic-rl]
   facets: [env, eval]
-  tier: must
+  tier: rec
   evidence: [industrial, adopted, open-source, community]
   evidence_note: "All Hands AI 以它为核心产品；SWE-Gym 用它作训练与评测脚手架，NVIDIA NeMo Gym 把它列为内置智能体 harness，是 SWE-bench 等榜单上最常见的开源脚手架之一；GitHub star 数居开源智能体项目前列。"
   summary: "开源软件开发智能体平台：智能体在 Docker 沙箱里用命令行、代码编辑、浏览器等动作与环境交互，接入 SWE-bench、WebArena 等十多个基准，既是评测脚手架，也常作 RL 交互框架。"

@@ -9,6 +9,14 @@ prereq:
 
 # LLM 强化学习：从 RLHF 到 RLVR
 
+::: tldr
+- RLHF 的奖励是学出来的代理，必须拴 KL；RLVR 的奖励由程序判定，能支撑几千步的长程训练。
+- 推理 RL 的默认起点是去掉 KL 的 GRPO / DAPO 加难度筛选与长度管理，基座和数据决定上限，算法技巧决定能否稳定地接近上限。
+- 奖励要先判得准：规则判不准就换会推理的验证器，开放任务用 rubric 或生成式评委，并在线盯住“只变长、不变好”。
+- 规模上去后，失稳主要来自离策略与训推不一致；2026 年的旗舰用 RL 训分领域专家，再用多教师在线策略蒸馏合成一个模型。
+- 如果只读一节：读[工业配方对照](#recipes)。
+:::
+
 **LLM 强化学习**让模型对提示自己采样回答，由奖励信号给回答打分，再按“比基线好的多学、比基线差的少学”的方向更新<Term t="policy">策略</Term>。奖励来自人类或 AI 的偏好时叫 <Term t="rlhf">RLHF</Term>，来自可自动判定的结果（答案对不对、测试过没过）时叫 <Term t="rlvr">RLVR</Term>。2022 年的 InstructGPT 让 RLHF 成为对齐的标准工序；2024 年 9 月的 o1 与 2025 年 1 月的 DeepSeek-R1 之后，RLVR 驱动的推理训练成了后训练里投入最大的一环：DeepSeek-V3.2 的后训练算力已超过预训练成本的 10%[^v32]。
 
 ::: human
@@ -171,7 +179,7 @@ $\pi_\phi$ 就是用结果标签训练的 PRM 本身（由 SFT 模型初始化�
 - Kimi k1.5 用带思维链的奖励模型判数学答案，人工抽检准确率 98.5%，传统奖励模型只有 84.4%[^k15]。
 - Seed1.5-Thinking 的思考型验证器在 456 条人工标注的难例上准确率 99.3%，原则型的 Seed-Verifier 为 82.7%，前者也更难被投机取巧[^seed]。
 - Qwen3 的通用 RL 混用三类奖励：规则奖励、给出参考答案的模型评分（避免规则把对的判成错的）、无需参考答案的偏好奖励模型[^qwen3]。
-- DeepSeekMath-V2 面对没有最终答案的证明题，训练按量表打分的证明验证器，再用“元验证”检查验证器指出的问题是否真实存在，最后以验证器为奖励训练会自我检查的生成器，在 Putnam 2024 上得到 118/120[^dsmv2]。
+- DeepSeekMath-V2 面对没有最终答案的证明题，训练按量表打分的证明验证器，再用“元验证”检查验证器指出的问题是否真实存在，最后以验证器为奖励训练会自我检查的生成器；在扩展测试时算力的设置下，Putnam 2024 得分 118/120[^dsmv2]。
 
 ### 没有标准答案：rubric 与生成式 RM {#rubric}
 
@@ -206,16 +214,16 @@ $\pi_\phi$ 就是用结果标签训练的 PRM 本身（由 SFT 模型初始化�
 
 <LineageGraph graph="reasoning-rl" />
 
-四列泳道对应四股力量：闭源模型指出方向，工业报告给出能上生产的配方，开源复现检验哪些做法真正必要，方法修正解决规模化时暴露的具体毛病。
+四列泳道对应四股力量：OpenAI 的先行工作指出方向，工业报告给出能上生产的配方，开源复现检验哪些做法真正必要，方法修正解决规模化时暴露的具体毛病。
 
 ### 信号：o1、R1 与 k1.5 {#signals}
 
-OpenAI 的 o1 博客[^o1]只给出两条曲线：性能随 RL 训练算力和测试时思考算力同时平滑上升（AIME 2024 单样本 74%，64 样本共识 83%，用学到的打分函数从 1000 个样本中重排可达 93%），没有配方。四个月后，DeepSeek-R1 与 Kimi k1.5 在同一天（2025-01-22）各给出一份配方，结论惊人地一致：**不用 MCTS、不用 PRM、不用价值网络**。R1 用 GRPO 加规则奖励；k1.5 用在线镜像下降变体（以采样均值为基线、对上一轮策略加平方正则），配合长度惩罚、课程与优先采样，以及把超长回答分段生成的 partial rollout[^k15]。
+OpenAI 的 o1 博客[^o1]只给出两条曲线：性能随 RL 训练算力和测试时思考算力同时平滑上升（AIME 2024 单样本 74%，64 样本共识 83%，用学到的打分函数从 1000 个样本中重排可达 93%），没有配方。四个月后，DeepSeek-R1 与 Kimi k1.5 在同一天（2025 年 1 月 20 日，arXiv 版两天后上线）各给出一份配方，结论惊人地一致：**不用 MCTS、不用 PRM、不用价值网络**。R1 用 GRPO 加规则奖励；k1.5 用在线镜像下降变体（以采样均值为基线，用平方损失把更新约束在上一轮策略附近），配合长度惩罚、课程与优先采样，以及把超长回答分段生成的 partial rollout[^k15]。
 
 ### 开源复现：基座与数据比技巧重要 {#reproductions}
 
 - DeepScaleR 从 R1 蒸馏的 1.5B 模型出发，把上下文从 8K 分段加长到 24K，AIME 2024 从 28.8% 提到 43.1%[^deepscaler]。
-- Open-Reasoner-Zero 用原版 PPO（GAE $\lambda=\gamma=1$）、只奖励正确性、完全不加 KL，在 Qwen2.5-32B 上以约 1/10 的步数超过 R1-Zero 的同尺寸复现[^orz]。
+- Open-Reasoner-Zero 用原版 PPO（GAE $\lambda=\gamma=1$）、只奖励正确性、完全不加 KL，在 Qwen2.5-32B 基座上以约 1/10 的训练步数，超过 DeepSeek 在同一基座上做的 R1-Zero 式训练（DeepSeek-R1-Zero-Qwen-32B）[^orz]。
 - SimpleRL-Zoo 把 zero-RL 搬到 10 个基座上，发现格式奖励与题目难度必须随基座调整[^simplerl]。
 - Dr. GRPO 的作者发现 DeepSeek-V3-Base 本身已有“顿悟”式反思，Qwen2.5 基座不加模板也很强；与预训练分布不匹配的模板会先破坏能力、再由 RL“修复”，造成虚高的提升[^drgrpo]。
 
@@ -231,7 +239,7 @@ OpenAI 的 o1 博客[^o1]只给出两条曲线：性能随 RL 训练算力和测
 |---|---|---|---|
 | 熵坍缩 | 策略熵迅速下降，采样趋同，探索停止 | 放宽上裁剪（clip-higher）；自适应熵系数；不丢弃低概率 token | DAPO、Skywork-OR1、CISPO |
 | 零梯度样本 | 组内全对或全错，优势为 0 | 动态采样过滤；易题池低概率回放 | DAPO、MiMo |
-| 长度偏置 | 错误回答越写越长 | 去掉 $1/\lvert y_i\rvert$ 与标准差归一化；token 级损失 | Dr. GRPO、DAPO |
+| 长度偏置 | 错误回答越写越长 | 去掉 $1/\lvert y_i\rvert$，改用常数或 token 级归一化 | Dr. GRPO、DAPO |
 | 截断噪声 | 被截断的超长回答被当成错误 | 过滤超长样本，或按超出程度软惩罚 | DAPO |
 | 比率噪声与 MoE 不稳 | 长回答与 MoE 路由放大 token 级比率的方差 | 序列级比率与裁剪；裁剪重要性权重本身 | GSPO、CISPO |
 
@@ -245,7 +253,7 @@ GRPO 给第 $i$ 个回答的每个 token 施加同一个优势 $\hat A_i$，再�
 - 答对（$\hat A_i>0$）时，回答越短，每个 token 得到的正向权重越大，模型倾向于把正确回答写短；
 - 答错（$\hat A_i<0$）时，回答越长，每个 token 受到的惩罚越小，模型倾向于把错误回答写长。
 
-两者叠加，就是训练中“平均长度一路上涨、主要是错误回答在变长”的现象。DAPO 把归一化改成对一组（或一批）中所有 token 取平均，即乘以 $1/\sum_i\lvert y_i\rvert$；Dr. GRPO 直接去掉 $1/\lvert y_i\rvert$ 并改用常数归一化。两种做法都让每个 token 的权重不再随它所在回答的长度变化。
+两者叠加，就是训练中“平均长度一路上涨、主要是错误回答在变长”的现象。DAPO 把归一化改成对一组（实现中常为一批）中所有 token 取平均，即乘以 $1/\sum_i\lvert y_i\rvert$；Dr. GRPO 直接去掉 $1/\lvert y_i\rvert$ 并改用常数归一化。两种做法下，同一组内每个 token 的权重相同，不再因所在回答的长短而不同。
 
 标准差归一化是另一个问题：组内奖励方差很小（题目过易或过难）时，除以一个很小的标准差会放大这些题的权重。Dr. GRPO 同样把它去掉，完整分析见[算法谱系](/lenses/algorithms#dr-grpo)。
 :::
@@ -260,37 +268,37 @@ GRPO 给第 $i$ 个回答的每个 token 施加同一个优势 $\hat A_i$，再�
 - **Qwen3** 的推理 RL 只用 3,995 组题目-验证器，Qwen3-235B-A22B 的 AIME'24 在 170 步内从 70.1 升到 85.1，全程没有手动调超参；小模型改用在线策略蒸馏[^qwen3]。
 - **MiniMax-M1** 用 CISPO 在 512 张 H800 上三周完成全量 RL，并发现训练与推理 kernel 的精度不一致会让奖励停止增长，把 LM head 提到 FP32 才解决[^m1]。
 - **Magistral** 不借用任何其他模型的推理数据，从 Mistral Medium 3 纯 RL 训出推理模型，用语言一致性奖励让思维链跟随用户的语言[^magistral]；**MiMo** 为代码题设计了按测试难度给部分分的奖励[^mimo]。
-- **DeepSeek-V3.2** 把后训练算力推到预训练的 10% 以上，稳定性手段几乎都指向训推一致：无偏 KL 估计、离策略序列掩码、保持 MoE 路由与采样截断掩码[^v32]。
+- **DeepSeek-V3.2** 把后训练算力推到预训练的 10% 以上，稳定性手段几乎都在处理离策略与训推不一致：无偏 KL 估计、离策略序列掩码、保持 MoE 路由与采样截断掩码[^v32]。
 
 ### 扩展：从“能训”到“可预测” {#scaling}
 
-ScaleRL 用超过 40 万 GPU 小时的消融，把 RL 的算力-性能曲线拟合成 sigmoid：不同配方的渐近上限不同，而损失聚合、归一化、课程、离策略算法这类细节主要改变的是效率；在小规模上拟合出的曲线成功外推了一次 10 万 GPU 小时的长跑[^scalerl]。它组合出的 ScaleRL 配方采用了 MiniMax-M1 的 CISPO 损失，这也是方法修正与工业报告两条线的一次汇合。
+ScaleRL 用超过 40 万 GPU 小时的消融，把 RL 的算力-性能曲线拟合成 sigmoid：不同配方的渐近上限不同，而损失聚合、归一化、课程、离策略算法这类细节主要改变的是效率；8B 模型的一次长跑中，用前 5 万 GPU 小时拟合的曲线准确预测了它跑到 10 万 GPU 小时的表现[^scalerl]。它组合出的 ScaleRL 配方采用了 MiniMax-M1 的 CISPO 损失，这也是方法修正与工业报告两条线的一次汇合。
 
 ## 工业配方对照 {#recipes}
 
-只列报告里写明的做法；“—”表示报告未说明，不代表没用。
+只列报告里写明的做法，每一格都对照过报告原文；“—”表示报告没有写明或本站未能核实，不代表没用。
 
 | 报告 | 策略优化 | KL | 奖励与验证 | 稳定与探索 | 长度与上下文 |
 |---|---|---|---|---|---|
-| DeepSeek-R1（2025-01） | GRPO | 保留，k3 估计 | 规则：答案匹配、编译测试、格式；R1 加语言一致性；全场景阶段加奖励模型 | 冷启动 SFT；拒绝采样约 60 万推理 + 20 万通用数据 | — |
-| Kimi k1.5（2025-01） | 在线镜像下降变体，均值基线，无价值网络 | 对上一轮策略的平方正则 | 规则 + 思维链奖励模型；剔除选择、判断、证明与易猜题 | 课程采样 + 按失败率优先采样 | 长度惩罚（先预热）；partial rollout；long2short |
-| Open-Reasoner-Zero（2025-03） | PPO，GAE λ=γ=1 | 无 | 只奖励正确性，无格式奖励；约 12.9 万题 | batch 级优势归一化 | — |
+| DeepSeek-R1（2025-01） | GRPO | 保留，k3 估计 | 规则：答案匹配、代码跑预设测试、`<think>` 格式；R1 加语言一致性；全场景阶段对通用数据用奖励模型 | 冷启动 SFT；拒绝采样约 60 万推理 + 20 万非推理样本 | — |
+| Kimi k1.5（2025-01） | 在线镜像下降变体，采样均值作基线，无价值网络 | 相对熵正则，锚点是上一轮策略（写成平方损失） | 数学用思维链奖励模型，代码跑自动生成的测试；剔除选择、判断、证明与易猜题 | 课程采样 + 按失败率优先采样 | 长度惩罚（先预热）；partial rollout；long2short |
+| Open-Reasoner-Zero（2025-03） | PPO，GAE $\lambda=\gamma=1$ | 无 | 只奖励正确性，无格式奖励；约 12.9 万题 | batch 级优势归一化 | — |
 | DAPO（2025-03） | GRPO 改 | 无 | 规则 ±1；DAPO-Math-17K | clip-higher（0.2 / 0.28）；动态采样；token 级损失 | 超长过滤 + 软惩罚（16K + 4K 缓冲） |
-| Seed1.5-Thinking（2025-04） | VAPO（actor-critic）+ DAPO | — | 思考型验证器；不可验证数据用成对生成式奖励模型 | 价值预训练、解耦 GAE、动态采样、clip-higher、token 级损失、正样本 LM 损失 | 长度自适应 GAE |
-| Qwen3（2025-05） | GRPO | — | 3,995 组题目-验证器；通用 RL 用规则、带参考答案的模型评分与奖励模型 | 大 batch、多 rollout、离策略更新；控制熵平稳上升或持平 | 思考预算（推理时截断） |
-| MiMo-7B（2025-05） | GRPO 改 | 无 | 13 万题，只给正确性；代码按测试难度给部分分 | 动态采样、clip-higher、10% 易题回放 | 不设长度奖励；最长 32K |
-| Skywork-OR1（2025-05） | GRPO（verl） | 无 | 数学 + 代码，按起点模型通过率离线筛选 | 自适应熵控制；过滤全对或全错的组 | 8K → 16K → 32K 分阶段 |
-| MiniMax-M1（2025-06） | CISPO | 无 | 规则（数学、逻辑、竞赛编程、SWE 沙箱）+ 生成式奖励模型；先推理、后混入通用 | 动态采样；LM head 用 FP32；重复检测提前截断 | 长度惩罚；40K → 80K 分六档扩窗 |
-| Magistral（2025-06） | GRPO 改 | 无 | 正确性 + 格式 + 语言一致性 | 放宽上裁剪；batch 级归一化；在线过滤无差异组 | — |
-| DeepSeek-V3.2（2025-12） | GRPO | 保留，重要性加权的无偏估计 | 规则 + 长度惩罚 + 语言一致性；通用任务用带 rubric 的生成式奖励模型；1,800+ 合成环境 | 离策略序列掩码；保持 MoE 路由与采样掩码 | 长度惩罚（见奖励） |
-| Kimi K2 → K3（2025-07 → 2026-07） | k1.5 目标；K2.5 起加 token 级 log-ratio 掩码 | 无参考策略 | 可验证任务 + 自我批评 rubric（K2）→ 智能体化生成式奖励模型（K3） | PTX 损失、温度衰减（K2）；partial rollout 容忍陈旧数据（K3） | 按任务类型的 token 预算（K2）；Toggle（K2.5）；三档推理强度（K3） |
-| ScaleRL（2025-10） | CISPO 损失 + 异步 PipelineRL | — | — | batch 级优势归一化、prompt 级损失平均、FP32 logits、零方差过滤、移除已掌握的题 | 强制长度中断 |
+| Seed1.5-Thinking（2025-04） | PPO 式 actor-critic，组合 VAPO 与 DAPO 的技巧 | — | 可验证数据用思考型验证器；不可验证数据用成对生成式奖励模型 | 价值预训练、解耦 GAE、动态采样、clip-higher、token 级损失、正样本 LM 损失 | 长度自适应 GAE |
+| MiMo-7B（2025-04） | GRPO 改，token 级损失 | 无 | 约 13 万道数学与代码题，只用规则正确性奖励；代码按测试难度给部分分 | 动态采样、clip-higher、以 10% 概率回放易题 | 不加格式与长度奖励；最大长度 32K |
+| Qwen3（2025-05） | GRPO | — | 推理 RL 用 3,995 组题目-验证器；通用 RL 混用规则、带参考答案的模型评分与奖励模型 | 大 batch、每题多 rollout、离策略更新；控制熵平稳上升或持平 | 思考预算：推理时按预算截断（模式融合后自然获得） |
+| Skywork-OR1（2025-05） | GRPO 改，token 级损失 | 无 | 数学 + 代码；按起点模型通过率离线筛题，每阶段再剔除上一阶段已全对的题 | 自适应熵控制；只保留优势非零的组；采样温度 1.0 | 分阶段加长（Math-7B：8K→16K→32K；32B：16K→24K） |
+| MiniMax-M1（2025-06） | CISPO | 无 | 规则（数学、逻辑、竞赛编程、SWE 沙箱）+ 生成式奖励模型；先只训规则奖励的推理任务，再逐步混入通用任务 | 动态采样；LM head 用 FP32；按 token 概率检测重复并提前截断 | 长度惩罚；从 40K 起每档加 8K，扩到 80K |
+| Magistral（2025-06） | GRPO 改，token 级损失 | 无 | 格式 + 正确性 + 软长度惩罚 + 语言一致性 | 放宽上裁剪（0.26–0.28）；minibatch 级优势归一化；过滤无差异组 | 软长度惩罚；不受罚长度 16K→24K→32K |
+| ScaleRL（2025-10） | CISPO 损失 + 异步 PipelineRL（离策略最多 8 步） | 无 | 可验证数学题（Polaris-53K） | batch 级优势归一化、prompt 级损失平均、FP32 logits、零方差过滤、通过率 ≥ 0.9 的题不再采样 | 强制中断：插入“结束思考”的短语 |
+| DeepSeek-V3.2（2025-12） | GRPO，优势只减组均值 | 保留，k3 乘重要性权重得到无偏梯度；强度按领域调，数学上可弱化或去掉 | 推理与智能体：规则结果奖励 + 长度惩罚 + 语言一致性；通用任务：按题 rubric 的生成式奖励模型；1,800+ 合成环境 | 离策略序列掩码（只掩负优势序列）；保持 MoE 路由与采样截断掩码 | 长度惩罚（见奖励） |
+| Kimi K2 → K3（2025-07 → 2026-07） | k1.5 目标；K2.5 起对 log-ratio 越界的 token 置零梯度 | 不设 $\pi_\text{ref}$，只约束离上一轮策略的距离 | 可验证奖励 + 自我批评 rubric（K2）→ 多套 GRM rubric（K2.5）→ 智能体化生成式奖励模型（K3） | PTX 损失、温度衰减（K2）；partial rollout，靠逐 token 正则容忍陈旧数据（K3） | 按任务类型的 token 预算（K2）；Toggle（K2.5）；超出 $\tau\cdot b_0(x)$ 记 −1，训出三档推理强度（K3） |
 
-表中事实分别出自各报告正文[^r1][^k15][^orz][^dapo][^seed][^qwen3][^mimo][^skywork][^m1][^magistral][^v32][^k2][^k25][^k3][^scalerl]。读表可以得到四个结论：
+表中事实分别出自各报告正文[^r1][^k15][^orz][^dapo][^seed][^mimo][^qwen3][^skywork][^m1][^magistral][^scalerl][^v32][^k2][^k25][^k3]。读表可以得到四个结论：
 
-1. **KL 从标配变成选配。** ORZ、DAPO、MiMo、Skywork-OR1、MiniMax-M1、Magistral 都去掉了对参考模型的 KL，理由是可验证奖励不易被刷、长思维链需要走得更远；DeepSeek 保留了 KL，并在 V3.2 中修正了它在离策略数据上的估计偏差；Kimi 约束的是离上一轮策略的距离，而不是离初始模型的距离。
+1. **KL 从标配变成选配。** ORZ、DAPO、MiMo、Skywork-OR1、MiniMax-M1、Magistral、ScaleRL 都去掉了对参考模型的 KL，理由是可验证奖励不易被刷、长思维链需要走得更远；DeepSeek 保留了 KL，在 V3.2 中修正了它在离策略数据上的梯度偏差，并按领域调强度；Kimi 约束的是离上一轮策略的距离，而不是离初始模型的距离。
 2. **人人都在筛难度。** 离线按起点模型的通过率筛题、训练中过滤全对或全错的组，几乎是所有报告的共同步骤（见[难度筛选](/lenses/data#difficulty)）。
-3. **长度被显式管理。** 长度惩罚、超长软惩罚、分阶段加长上下文、按题或按任务的 token 预算，至少用了一种。
+3. **长度被显式管理。** 长度惩罚、超长软惩罚、分阶段加长上下文、按题或按任务的 token 预算、强制中断，表中多数配方至少用了一种。
 4. **稳定性的瓶颈从算法移向系统。** LM head 精度、MoE 路由、采样截断掩码、离策略掩码都是在对齐训练与推理两侧（见[训推不一致](/lenses/infra#mismatch)）。
 
 <EntryGrid :ids="['kimi-k1-5', 'seed-thinking-1-5', 'qwen3', 'minimax-m1', 'magistral', 'mimo', 'deepseek-v3-2', 'kimi-k3']" />
@@ -301,23 +309,25 @@ ScaleRL 用超过 40 万 GPU 小时的消融，把 RL 的算力-性能曲线拟�
 
 ### 信任域的锚点：从参考模型移到采样器 {#frontier-trust-region}
 
-KL 正则正在退场：GLM-5 为“加速 RL 提升”移除了 KL 项，Kimi 从 K2 到 K3 的配方既没有 KL 惩罚也没有参考策略[^glm5][^course]。取而代之的是约束“训练策略离实际采样的策略有多远”：DeepSeek-V3.2 掩码偏离过大的负样本序列，并复用推理时的 MoE 路由[^v32]；Kimi K2.5 只对 log-ratio 落在区间内的 token 计算梯度，区间外直接置零[^k25]；IcePop[^icepop] 与 DPPO（用直接估计的总变差距离做掩码）[^dppo] 走的是同一条路——**掩码，而不是裁剪**。原因是异步与 partial rollout、训推引擎的数值差异，让“离采样器太远”成了比“离初始模型太远”更常见的失稳源头。Qwen 团队进一步说明，常用的 token 级目标只是序列级目标的一阶近似，只有训推差异与策略陈旧都很小时才成立（[资料库](/library/?id=stabilizing-rl-llm)）。系统侧的成因与修正见[训推不一致](/lenses/infra#mismatch)与[离策略修正](/lenses/algorithms#off-policy)。
+对参考模型的 KL 正在退场：GLM-5 在推理 RL 中明确为“加速 RL 提升”去掉了 KL 项[^glm5]；Kimi 从 K2 到 K3 都不设参考策略，只在平方损失里用 $\tau\log(\pi_\theta/\pi_{\theta_\text{old}})$ 约束离上一轮策略的距离[^k2][^k3]。
+
+取而代之的是约束“训练策略离实际采样的策略有多远”：DeepSeek-V3.2 掩码偏离过大的负优势序列，并复用推理时的 MoE 路由[^v32]；Kimi K2.5 只对 log-ratio 落在区间内的 token 计算梯度，区间外直接置零，不论优势正负[^k25]；IcePop 对训推概率比越界的 token 做同样的掩码[^icepop]，DPPO 改用概率差（总变差距离的近似）而不是概率比来判定越界[^dppo]。共同点是：**直接屏蔽离采样策略太远的 token 或序列，而不只是按新旧概率比裁剪**。原因是异步与 partial rollout、训推引擎的数值差异，让“离采样器太远”成了比“离初始模型太远”更常见的失稳源头。Qwen 团队进一步说明，常用的 token 级目标只是序列级目标的一阶近似，只有训推差异与策略陈旧都很小时才成立（[资料库](/library/?id=stabilizing-rl-llm)）。系统侧的成因与修正见[训推不一致](/lenses/infra#mismatch)与[离策略修正](/lenses/algorithms#off-policy)。
 
 ### RL 负责造专家，蒸馏负责合并 {#frontier-mopd}
 
-DeepSeek-V3.2 先用大规模 RL 训练多个领域专家、蒸馏回一个模型，再做一次混合 GRPO[^v32]。2026 年这条路更进一步，专家的能力改用多教师在线策略蒸馏（<Term t="mopd">MOPD</Term>）合并：据 RLHF Book 课程的整理，MiMo-V2-Flash 最早清晰地提出这一步，DeepSeek-V4 与 Nemotron 3 Ultra 把教师数扩到十个以上（后者做了两轮），Kimi K3 用三个领域 × 三档推理强度共九个 RL 专家做教师[^course][^k3][^mopd]。流行的原因很务实：混在一个 RL 里的数学、代码与智能体任务会互相拖累，而分领域的“SFT + RL”容易并行、容易分工。也有例外：GLM-5 在合并前按推理、智能体、通用分三段做 RL，微软的 MAI-Thinking-1 用轨迹蒸馏 SFT 合并各段 RL[^course]。蒸馏本身的原理与代价见 [On-Policy 蒸馏](/topics/opd)。
+DeepSeek-V3.2 先用大规模 RL 训练多个领域专家、蒸馏回一个模型，再做一次混合 GRPO[^v32]。2025 年底起，这条路又进了一步：专家的能力改用多教师在线策略蒸馏（<Term t="mopd">MOPD</Term>）合并[^mopd]。小米 MiMo-V2-Flash 的报告（2025 年 12 月）把这一步明确提为一种后训练范式[^mimov2]；DeepSeek-V4 沿用 V3.2 的专家训练，但用十个以上教师的在线策略蒸馏整个取代了混合 RL 阶段[^v4]；Kimi K3 用三个领域 × 三档推理强度共九个 RL 专家做教师[^k3]；据 RLHF Book 课程的整理，Nemotron 3 Ultra 也用了十个以上教师，并做了两轮[^course]。按课程的归纳，流行的原因很务实：混在一个 RL 里的数学、代码与智能体任务会互相拖累，而分领域的“SFT + RL”容易并行、容易分工[^course]。也有不走 MOPD 的：GLM-5 按推理、智能体、通用三段依次做 RL，最后以各段检查点为教师做在线策略蒸馏，找回前面阶段学到的能力[^glm5]；据课程整理，微软的 MAI-Thinking-1 用轨迹蒸馏 SFT 合并各段 RL[^course]。蒸馏本身的原理与代价见 [On-Policy 蒸馏](/topics/opd)。
 
 ### 推理长度成为训练目标 {#frontier-length}
 
-Qwen3 融合思考与非思考模式后，获得了在推理时按预算截断思考的能力[^qwen3]；Kimi K2 按任务类型设定 token 预算，超出即截断并惩罚[^k2]；K2.5 的 Toggle 交替进行“预算内作答”与“放开长度”两个阶段，平均减少 25%–30% 的输出 token 而几乎不掉分，要解决的正是“长度过拟合”——在死板预算下训练的模型，给它更多算力也不会用[^k25]。K3 把长度直接写进奖励：按题估计初始预算 $b_0(x)$，总 token 数超过 $\tau\cdot b_0(x)$ 即记 −1，逐步收紧 $\tau$ 得到低、高、极高三档<Term t="thinking-budget">推理强度</Term>[^k3]。
+Qwen3 融合思考与非思考模式后，获得了在推理时按预算截断思考的能力[^qwen3]；Kimi K2 按任务类型设定 token 预算，超出即截断并惩罚[^k2]；K2.5 的 Toggle 交替进行“预算内作答”与“放开长度”两个阶段，在 K2 Thinking 上平均减少 25%–30% 的输出 token 而几乎不掉分，要解决的正是“长度过拟合”——在死板预算下训练的模型，给它更多算力也不会用[^k25]。K3 把长度直接写进奖励：用冷启动模型按题估计初始预算 $b_0(x)$，总 token 数（智能体任务还包括工具调用参数）超过 $\tau\cdot b_0(x)$ 即把奖励改为 −1；先用较大的 $\tau$ 训出 max 档，再逐步收紧 $\tau$ 得到 high、low 两档<Term t="thinking-budget">推理强度</Term>[^k3]。
 
 ### 扩展仍在继续 {#frontier-scaling}
 
-ProRL 及后续的 ProRL v2、BroRL 分别从训练步数和每题 rollout 数两个方向加码[^prorl]；Kimi K3 的报告显示，智能体任务的得分与平均工具调用步数都随 RL FLOPs 稳定上升[^k3]。未解决的问题是：ScaleRL 式的扩展曲线高度依赖配方与数据，能否跨领域、跨模型迁移还没有答案；智能体环境的规模（MiniMax-M2.5 称已有数十万个 RL 环境[^m25]）正在成为新的瓶颈，见[多环境与环境工程](/topics/multi-env)。
+ProRL 及后续的 ProRL v2、BroRL 分别从训练步数和每题 rollout 数两个方向加码[^prorl]；Kimi K3 的报告显示，知识、推理、视觉、智能体与编程等多项评测的得分和平均工具调用步数，都随 RL FLOPs 稳定上升[^k3]。未解决的问题是：ScaleRL 式的扩展曲线高度依赖配方与数据，能否跨领域、跨模型迁移还没有答案；智能体环境的规模（MiniMax-M2.5 称已有数十万个 RL 环境[^m25]）正在成为新的瓶颈，见[多环境与环境工程](/topics/multi-env)。
 
 ### 奖励的边界：开放任务、环境作弊与“RL 教会了什么” {#frontier-reward}
 
-开放任务的评委正在变成智能体：Kimi K3 要求评委先读产物、再生成 rubric、逐项打分并记入计分板[^k3]；DeepSeekMath-V2 用元验证约束验证器本身[^dsmv2]。环境越真实，作弊空间越大：K3 在内核优化任务中专门检测 CUDA graph 重放、输入缓存和降精度[^k3]，MiniMax-M2.5 引入过程奖励监控长轨迹的生成质量[^m25]。更根本的问题仍悬而未决：RL 究竟教会了新能力，还是把已有能力采样得更准？Qwen3 的对照中，RL 没有提高 AIME 的 pass@64，在线策略蒸馏却提高了[^qwen3]；ProRL 则报告长程 RL 能解出基座怎么采样都做不出的题[^prorl]。两类证据如何调和，见 [pass@k 之争](/lenses/principles#pass-at-k-debate)。
+开放任务的评委正在变成智能体：Kimi K3 要求评委先读产物、再生成 rubric、逐项打分并记入计分板[^k3]；DeepSeek-V4 不再训练标量奖励模型，而是对按 rubric 打分的生成式奖励模型本身做 RL，让策略模型兼任评委[^v4]；DeepSeekMath-V2 用元验证约束验证器本身[^dsmv2]。环境越真实，作弊空间越大：K3 在内核优化任务中专门检测 CUDA graph 重放、输入缓存和降精度[^k3]，MiniMax-M2.5 引入过程奖励监控长轨迹的生成质量[^m25]。更根本的问题仍悬而未决：RL 究竟教会了新能力，还是把已有能力采样得更准？Qwen3 的对照中，RL 没有提高 AIME 的 pass@64，在线策略蒸馏却提高了[^qwen3]；ProRL 则报告长程 RL 能解出基座怎么采样都做不出的题[^prorl]。两类证据如何调和，见 [pass@k 之争](/lenses/principles#pass-at-k-debate)。
 
 ## 精读清单 {#reading}
 
@@ -359,7 +369,7 @@ ProRL 及后续的 ProRL v2、BroRL 分别从训练步数和每题 rollout 数�
 
 <EntryGrid :ids="['rlhf-book', 'kl-approx', 'reward-hacking-weng', 'openai-o1', 'scale-rl']" />
 
-[^v32]: DeepSeek-AI, *DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models*, 2025. <https://arxiv.org/abs/2512.02556> ；“领域专家蒸馏 + 混合 RL”流程与奖励设计见 V3.2-Exp 报告 <https://github.com/deepseek-ai/DeepSeek-V3.2-Exp>
+[^v32]: DeepSeek-AI, *DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models*, 2025（“专家蒸馏 + 混合 RL”流程与奖励设计见 §3，无偏 KL、离策略序列掩码、保持路由与采样掩码见 §3.1）. <https://arxiv.org/abs/2512.02556> ；V3.2-Exp 报告与代码 <https://github.com/deepseek-ai/DeepSeek-V3.2-Exp>
 [^k15]: Kimi Team, *Kimi k1.5: Scaling Reinforcement Learning with LLMs*, 2025. <https://arxiv.org/abs/2501.12599>
 [^r1]: DeepSeek-AI, *DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning*, 2025（Nature 645:633–638）. <https://arxiv.org/abs/2501.12948>
 [^instructgpt]: Ouyang et al., *Training language models to follow instructions with human feedback*, NeurIPS 2022. <https://arxiv.org/abs/2203.02155>
@@ -381,7 +391,7 @@ ProRL 及后续的 ProRL v2、BroRL 分别从训练步数和每题 rollout 数�
 [^rlcf]: Viswanathan et al., *Checklists Are Better Than Reward Models For Aligning Language Models*, 2025. <https://arxiv.org/abs/2507.18624>
 [^k2]: Kimi Team, *Kimi K2: Open Agentic Intelligence*, 2025（自我批评 rubric 奖励见 §3.2.2，RL 算法与预算控制见 §3.2.3）. <https://arxiv.org/abs/2507.20534>
 [^k25]: Kimi Team, *Kimi K2.5: Visual Agentic Intelligence*, 2026（§4.4.2）. <https://github.com/MoonshotAI/Kimi-K2.5/blob/master/tech_report.pdf>
-[^k3]: Kimi Team, *Kimi K3: Open Frontier Intelligence*, 2026（后训练见 §4.1，环境与防作弊见环境章节）. <https://arxiv.org/abs/2607.24653> ；<https://github.com/MoonshotAI/Kimi-K3>
+[^k3]: Kimi Team, *Kimi K3: Open Frontier Intelligence*, 2026（SFT、九个 RL 专家、推理强度控制、智能体化 GRM 与 MOPD 见 §4.1，RL 环境与防作弊见 §4.2）. <https://arxiv.org/abs/2607.24653> ；<https://github.com/MoonshotAI/Kimi-K3>
 [^m1]: MiniMax, *MiniMax-M1: Scaling Test-Time Compute Efficiently with Lightning Attention*, 2025（CISPO 见 §3.1，生成式奖励模型的长度偏置见 §4.2.2，长度扩展见 §5）. <https://arxiv.org/abs/2506.13585>
 [^weng]: Lilian Weng, *Reward Hacking in Reinforcement Learning*, 2024-11-28. <https://lilianweng.github.io/posts/2024-11-28-reward-hacking/>
 [^gaming]: Helff et al., *LLMs Gaming Verifiers: RLVR can Lead to Reward Hacking*, 2026. <https://arxiv.org/abs/2604.15149>
@@ -389,17 +399,19 @@ ProRL 及后续的 ProRL v2、BroRL 分别从训练步数和每题 rollout 数�
 [^deepscaler]: Luo et al., *DeepScaleR: Surpassing O1-Preview with a 1.5B Model by Scaling RL*, 2025. <https://pretty-radio-b75.notion.site/DeepScaleR-Surpassing-O1-Preview-with-a-1-5B-Model-by-Scaling-RL-19681902c1468005bed8ca303013a4e2>
 [^orz]: Hu et al., *Open-Reasoner-Zero: An Open Source Approach to Scaling Up Reinforcement Learning on the Base Model*, 2025. <https://arxiv.org/abs/2503.24290>
 [^simplerl]: Zeng et al., *SimpleRL-Zoo: Investigating and Taming Zero Reinforcement Learning for Open Base Models in the Wild*, COLM 2025. <https://arxiv.org/abs/2503.18892>
-[^drgrpo]: Liu et al., *Understanding R1-Zero-Like Training: A Critical Perspective*, 2025. <https://arxiv.org/abs/2503.20783>
+[^drgrpo]: Liu et al., *Understanding R1-Zero-Like Training: A Critical Perspective*, COLM 2025. <https://arxiv.org/abs/2503.20783>
 [^dapo]: Yu et al., *DAPO: An Open-Source LLM Reinforcement Learning System at Scale*, 2025（逐项消融见表 1）. <https://arxiv.org/abs/2503.14476>
 [^vapo]: Yue et al., *VAPO: Efficient and Reliable Reinforcement Learning for Advanced Reasoning Tasks*, 2025. <https://arxiv.org/abs/2504.05118>
-[^magistral]: Mistral AI, *Magistral*, 2025. <https://arxiv.org/abs/2506.10910> ；去 KL、放宽裁剪、batch 级归一化等做法与 RLHF Book 第 7 章的整理交叉核对。
+[^magistral]: Mistral AI, *Magistral*, 2025（对 GRPO 的改动见 §2.1，格式、正确性、软长度惩罚与语言一致性奖励见 §2.2，不受罚长度的调整见 §5.2）. <https://arxiv.org/abs/2506.10910>
 [^mimo]: Xiaomi LLM-Core Team, *MiMo: Unlocking the Reasoning Potential of Language Model – From Pretraining to Posttraining*, 2025（RL 数据与配方见 §3.2–3.3）. <https://arxiv.org/abs/2505.07608>
-[^skywork]: He et al., *Skywork Open Reasoner 1 Technical Report*, 2025. <https://arxiv.org/abs/2505.22312> ；自适应熵、分组过滤与 8K/16K/32K 分阶段设置见仓库训练脚本 <https://github.com/SkyworkAI/Skywork-OR1>
+[^skywork]: He et al., *Skywork Open Reasoner 1 Technical Report*, 2025（MAGIC 配方见 §3.1，各模型的分阶段上下文长度见表 10–12）. <https://arxiv.org/abs/2505.22312> ；训练脚本 <https://github.com/SkyworkAI/Skywork-OR1>
 [^scalerl]: Khatri et al., *The Art of Scaling Reinforcement Learning Compute for LLMs*, 2025. <https://arxiv.org/abs/2510.13786>
 [^prorl]: Liu et al., *ProRL: Prolonged Reinforcement Learning Expands Reasoning Boundaries in Large Language Models*, 2025. <https://arxiv.org/abs/2505.24864> ；ProRL v2 <https://research.nvidia.com/labs/lpr/prorlv2/> ；BroRL <https://arxiv.org/abs/2510.01180>
 [^glm5]: GLM-5 Team, *GLM-5: From Vibe Coding to Agentic Engineering*, 2026, §3.2. <https://arxiv.org/abs/2602.15763>
-[^course]: Nathan Lambert, RLHF Book 课程材料（2026），整理了 DeepSeek-V4、Nemotron 3 Ultra、MAI-Thinking-1、GLM-5、Kimi K3 的配方与 KL 的去留. <https://github.com/natolambert/rlhf-book/tree/main/teach/course>
-[^icepop]: Xin Zhao et al., *Small Leak Can Sink a Great Ship—Boost RL Training on MoE with IcePop!*, 2025-09. <https://ringtech.notion.site/icepop>
+[^course]: Nathan Lambert, RLHF Book 课程材料（2026）：Conversation 1 梳理了 MiMo-V2-Flash、DeepSeek-V4、Nemotron 3 Ultra、MAI-Thinking-1、GLM-5 的后训练配方与 MOPD 流行的原因；Nemotron 3 Ultra 与 MAI-Thinking-1 的说法本页只经由这份整理引用. <https://github.com/natolambert/rlhf-book/tree/main/teach/course>
+[^icepop]: X. Zhao et al.（蚂蚁集团），*Small Leak Can Sink a Great Ship—Boost RL Training on MoE with IcePop!*, 2025-09. <https://ringtech.notion.site/icepop>
 [^dppo]: Qi et al., *Rethinking the Trust Region in LLM Reinforcement Learning*, 2026. <https://arxiv.org/abs/2602.04879>
 [^mopd]: Ma et al., *MOPD: Multi-Teacher On-Policy Distillation for Capability Integration in LLM Post-Training*, 2026. <https://arxiv.org/abs/2606.30406>
 [^m25]: MiniMax, MiniMax-M2.5 模型说明中的“RL Scaling”一节, 2026. <https://github.com/MiniMax-AI/MiniMax-M2.5>
+[^v4]: DeepSeek-AI, *DeepSeek-V4: Towards Highly Efficient Million-Token Context Intelligence*, 2026（专家训练、三档推理强度与生成式奖励模型见 §5.1.1，多教师在线策略蒸馏见 §5.1.2）. <https://arxiv.org/abs/2606.19348>
+[^mimov2]: Xiaomi LLM-Core Team, *MiMo-V2-Flash Technical Report*, 2025-12（MOPD 见 §4）. <https://arxiv.org/abs/2601.02780> ；<https://github.com/XiaomiMiMo/MiMo-V2-Flash>

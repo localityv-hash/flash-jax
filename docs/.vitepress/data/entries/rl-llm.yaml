@@ -16,11 +16,11 @@
   facets: [algorithm]
   tier: must
   evidence: [industrial, adopted, ablation, community]
-  evidence_note: "OpenAI 在 InstructGPT 中用 PPO 完成 RLHF；Tülu 3 的 RLVR、Open-Reasoner-Zero、VAPO 与 Seed1.5-Thinking 仍以 PPO 为骨架；GRPO、DAPO、CISPO 都是在它的裁剪代理目标上做的修改。原文在 MuJoCo 与 Atari 上对比了多种代理目标。"
-  summary: "提出裁剪重要性比率的代理目标 min(ρÂ, clip(ρ,1±ε)Â)，让同一批样本可安全地做多轮小批量更新，兼得 TRPO 的稳定与一阶优化的简单。"
-  plain: "每次更新只允许新策略在旧策略附近挪一小步：比率超出 1±ε 的那部分收益不再计入，防止一次学太猛把模型带歪。"
+  evidence_note: "OpenAI 在 InstructGPT 中用 PPO 完成 RLHF；Tülu 3 的 RLVR、Open-Reasoner-Zero、VAPO 与 Seed1.5-Thinking 仍以 PPO 为骨架；GRPO、DAPO 沿用它的裁剪代理目标，CISPO 则改为裁剪重要性权重。原文在 MuJoCo 与 Atari 上对比了多种代理目标。"
+  summary: '提出裁剪代理目标 $\min\big(\rho\hat A,\ \clip(\rho,1-\varepsilon,1+\varepsilon)\hat A\big)$，让同一批样本可安全地做多轮小批量更新，兼得 TRPO 的稳定与一阶优化的简单。'
+  plain: '每次更新只允许新策略在旧策略附近挪一小步：比率超出 $1\pm\varepsilon$ 的那部分收益不再计入，防止一次学太猛把模型带歪。'
   takeaways:
-    - "在 LLM 上用 PPO 时，把 ε、GAE 的 λ 和价值模型初始化当作一等超参：Open-Reasoner-Zero 发现推理 RL 中 λ=1 比 0.95 稳定得多。"
+    - '在 LLM 上用 PPO 时，把 $\varepsilon$、GAE 的 $\lambda$ 和价值模型初始化当作一等超参：Open-Reasoner-Zero 发现推理 RL 中 $\lambda=1$ 比 $\lambda=0.95$ 稳定得多。'
     - "显存吃紧或奖励只在序列末尾出现时，先用 GRPO、RLOO 这类无 critic 方法建立基线，再决定是否值得维护价值网络。"
   builds_on: [trpo]
   tags: [策略梯度, 信任域, 裁剪]
@@ -61,7 +61,7 @@
   facets: [data, algorithm]
   tier: must
   evidence: [industrial, adopted, ablation, community]
-  evidence_note: "Anthropic 用宪法方法训练 Claude；Google 的 RLAIF 研究（Lee et al., 2023）系统比较了 AI 反馈与人类反馈，Hugging Face 发布了开源复现配方（Constitutional AI Recipe）。仓库为论文补充材料。"
+  evidence_note: "Anthropic 用宪法方法训练 Claude；Google Research 的 RLAIF 研究（Lee et al., 2023）沿用 AI 反馈思路，与人类反馈做了系统对照；Hugging Face 发布了用开源模型复现的配方。仓库为论文补充材料。"
   summary: "只用一份自然语言“宪法”代替人工有害性标注：SL 阶段让模型按原则自我批评并改写，RL 阶段用 AI 给出的偏好训练偏好模型再做 RL（RLAIF），得到无害且不回避的助手。"
   plain: "不再请人逐条判断哪句话有害，而是给模型一本“守则”，让它自己挑刺、自己改，再用它的判断去训练打分员。"
   takeaways:
@@ -128,9 +128,9 @@
   facets: [algorithm]
   tier: rec
   evidence: [ablation, community]
-  evidence_note: "在多组 RLHF 设置下与 PPO、DPO、RAFT 做受控对比；Kimi k1.5 去掉价值网络时直接以它为依据，TRL、OpenRLHF、verl 都提供 RLOO，PRIME 也用它估计优势。"
-  summary: "论证 PPO 为经典 RL 设计的许多组件在 RLHF 中并不必要：把整段回答当作一个动作，用同题其余 k−1 个样本的平均奖励作留一基线（RLOO），效果与成本均优于 PPO、DPO 和 RAFT。"
-  plain: "同一道题做 k 遍，每个答案都拿“其他几遍的平均分”当及格线，既不用估分网络，又不会自己跟自己比。"
+  evidence_note: "在多组 RLHF 设置下与 PPO、DPO、RAFT 做受控对比；Kimi k1.5 论证去掉价值网络时引用了它，TRL、OpenRLHF、verl 都提供 RLOO，PRIME 也用它估计优势。"
+  summary: '论证 PPO 为经典 RL 设计的许多组件在 RLHF 中并不必要：把整段回答当作一个动作，用同题其余 $k-1$ 个样本的平均奖励作留一基线（RLOO），效果优于 PPO、DPO 和 RAFT，且不需要价值网络。'
+  plain: '同一道题做 $k$ 遍，每个答案都拿“其他几遍的平均分”当及格线，既不用估分网络，又不会自己跟自己比。'
   takeaways:
     - "RLHF 中奖励只在结尾出现时，把整段回答当成单个动作往往就够了；先上 RLOO，再考虑 PPO 的复杂度是否值得。"
   builds_on: [ppo]
@@ -150,7 +150,7 @@
   tier: must
   evidence: [industrial, adopted, open-source, community]
   evidence_note: "DeepSeek 在 DeepSeekMath、V3、R1、V3.2 中持续使用；Qwen3、MiMo、Magistral 等工业报告以它为起点修改，DAPO、Dr. GRPO、GSPO 都是对它的修正；权重与评测代码开源。"
-  summary: "用 120B 数学 token 继续预训练得到 DeepSeekMath 7B，并提出 GRPO：同一题采样一组回答，以组内奖励的均值与标准差归一化作优势，去掉价值网络，显著降低 PPO 的显存开销。"
+  summary: "构建 120B token 的数学语料继续预训练出 DeepSeekMath 7B，并提出 GRPO：同一题采样一组回答，以组内奖励的均值与标准差归一化作优势，去掉价值网络，显著降低 PPO 的显存开销。"
   plain: "同一道题让模型做一组，拿组内平均分当及格线、组内分差当尺度来打分，不再需要另一个和模型一样大的“估分老师”。"
   takeaways:
     - "奖励稀疏、只看最终答案时，GRPO 是最省事的起点；但它的长度归一化与标准差归一化会引入偏置，见 Dr. GRPO。"
@@ -172,8 +172,8 @@
   repo: openai/prm800k
   areas: [rl-llm]
   facets: [data, algorithm]
-  tier: must
-  evidence: [industrial, open-source, ablation, community]
+  tier: rec
+  evidence: [open-source, ablation, community]
   evidence_note: "OpenAI 团队在同一基座上大规模对照结果监督与过程监督；公开 80 万条步骤级标注 PRM800K，成为后续 PRM 研究最常用的对照数据；DeepSeek-R1 讨论 PRM 取舍时即以它为代表。"
   summary: "在 MATH 上系统比较结果监督（ORM）与过程监督（PRM）：逐步标注训练的 PRM 用于 best-of-N 重排显著优于 ORM，在代表性子集上解出 78% 的题；主动学习能进一步提升标注效率。"
   plain: "老师不只看最后答案，而是一步步批改；用这种“逐步批改员”从很多份答卷里挑最好的，比只看结果挑得准。"
@@ -186,7 +186,7 @@
   title: "Process Reinforcement through Implicit Rewards"
   short: PRIME
   kind: paper
-  org: 清华大学 · UIUC 等
+  org: 上海人工智能实验室 · 清华大学 · UIUC 等
   authors: "Ganqu Cui et al."
   date: 2025-01
   arxiv: "2502.01456"
@@ -196,7 +196,7 @@
   tier: rec
   evidence: [open-source, ablation, community]
   evidence_note: "2025-01 先发布博客、代码与模型，2 月上线论文；Eurus-2-7B-PRIME 权重与数据开源，算法已并入 verl 的 recipe；消融覆盖 PRM 初始化、在线更新与优势组合方式。"
-  summary: "隐式 PRM 只用结果标签训练，却能给出逐 token 的过程奖励，并随策略在线更新以减轻分布漂移与奖励作弊；Eurus-2-7B-PRIME 在数学竞赛基准上比 SFT 模型平均提升 16.7%。"
+  summary: "隐式 PRM 只用结果标签训练，却能给出逐 token 的过程奖励，并随策略在线更新以减轻分布漂移与奖励作弊；Eurus-2-7B-PRIME 在主要数学推理基准上比 SFT 模型平均提升 16.7%。"
   plain: "不用人一步步标注，只用“最后对没对”训练一个会给每一步打分的模型，并且边训练边更新，让策略不容易钻它的空子。"
   takeaways:
     - "想要稠密奖励又没有步骤标注时，可用 SFT 模型初始化隐式 PRM，再用结果验证器的标签在线更新。"
@@ -215,8 +215,8 @@
   areas: [rl-llm]
   facets: [algorithm, eval]
   tier: rec
-  evidence: [industrial, open-source, ablation]
-  evidence_note: "DeepSeek 与清华合作，在多个奖励模型基准上对比标量 RM、成对 RM 与生成式 RM，并比较推理时扩展与训练时扩展；DeepSeek-GRM 权重已在 Hugging Face 与 ModelScope 发布。"
+  evidence: [ablation, community]
+  evidence_note: "DeepSeek 与清华合作，在多个奖励模型基准上对比标量 RM、成对 RM 与生成式 RM，并比较推理时扩展与训练时扩展；论文发布后被广泛引用。DeepSeek-V3.2、V4 在通用任务上都改用按 rubric 打分的生成式奖励模型，但报告没有说明是否直接沿用本文的 SPCT。"
   summary: "采用逐点生成式奖励模型：先为问题生成评判原则，再写批评并打分；用 SPCT（拒绝式微调 + 基于规则的在线 RL）训练，推理时并行采样并由元 RM 引导投票，使奖励质量随推理算力提升。"
   plain: "让“评委模型”先写评分标准、再逐条点评打分；多请几次评委，再请一位“评委的评委”筛掉不靠谱的意见，分数就更准。"
   takeaways:
@@ -298,7 +298,7 @@
   facets: [theory]
   tier: ref
   evidence: [community]
-  evidence_note: "Lilian Weng 的长文综述（约 37 分钟阅读），被广泛转引；以梳理案例与成因为主，作者自述缓解方法仍有待系统研究。"
+  evidence_note: "Lilian Weng 的长文综述，被广泛转引；以梳理案例与成因为主，作者自述缓解方法仍有待系统研究。"
   summary: "从奖励设定与虚假相关出发定义奖励作弊，汇总经典 RL 与 LLM 中的典型案例：RLHF 中迎合用户偏好、编程任务里改单元测试、LLM 裁判的偏差、上下文内奖励作弊等，并分析成因。"
   plain: "一篇把“模型钻奖励空子”讲透的综述：从游戏刷分 bug，到大模型改测试、拍用户马屁，案例和原因都有。"
   takeaways:
@@ -362,7 +362,7 @@
   tier: rec
   evidence: [industrial, ablation, community]
   evidence_note: "月之暗面 Kimi k1.5 的训练报告，与 R1 同日发布；含负梯度（对比 ReST）、课程采样、long2short 等对照实验。其策略优化与 partial rollout 被 Kimi K2、K2.5、K3 一路沿用。"
-  summary: "在线镜像下降变体：采样均值作基线、对上一轮策略加 τ 正则，不用价值网络与 PRM；配合长度惩罚、课程与优先采样、partial rollout 和 long2short，把长上下文 RL 做成系统。"
+  summary: '在线镜像下降变体：采样均值作基线、以系数 $\tau$ 的相对熵正则锚定上一轮策略，不用价值网络与 PRM；配合长度惩罚、课程与优先采样、partial rollout 和 long2short，把长上下文 RL 做成系统。'
   plain: "每轮以当前模型为参照、只允许小步改进；答案太长要扣分，难题多练，长答案分段生成，最后再把长思考压缩成短回答。"
   takeaways:
     - "答案可被猜中的题（选择、判断、证明）会制造假阳性：k1.5 直接剔除，并删掉不写推理、8 次内就能猜中答案的题。"
@@ -406,7 +406,7 @@
   summary: "旗舰模型四阶段：长 CoT 冷启动、推理 RL（3,995 组题目-验证器，GRPO）、思考模式融合、20 余类任务的通用 RL；小模型改用离策略加在线策略蒸馏。"
   plain: "大模型靠少量精选难题做 RL 学会推理，再把“想”和“不想”两种模式合进一个模型；小模型直接跟着大模型学，比自己做 RL 便宜得多。"
   takeaways:
-    - "推理 RL 的题目在精不在多：选冷启动模型能学会但仍困难、且没在 SFT 中出现过的题，几千条就能支撑一次稳定的长程训练。"
+    - "推理 RL 的题目在精不在多：选冷启动模型能学会但仍困难、且没在冷启动阶段用过的题，几千条就能支撑一次无需手动调参的稳定训练。"
     - "有强教师时，小模型优先做在线策略蒸馏：Qwen3-8B 上它比直接 RL 分数更高，GPU 时约为 RL 的 1/10。"
   builds_on: [deepseek-r1, grpo]
   tags: [思考模式融合, 强到弱蒸馏, 通用 RL]
@@ -416,14 +416,14 @@
   short: MiMo-7B
   kind: report
   org: 小米 LLM-Core
-  date: 2025-05
+  date: 2025-04
   arxiv: "2505.07608"
   repo: XiaomiMiMo/MiMo
   areas: [rl-llm, mid-training]
   facets: [algorithm, data]
   tier: rec
   evidence: [industrial, open-source, ablation]
-  evidence_note: "小米开源 MiMo-7B 全系列权重；13 万道 RL 题的清洗、奖励设计与 rollout 引擎细节完整，可直接照做。"
+  evidence_note: "小米开源 MiMo-7B 全系列权重，技术报告于 2025-04-30 随模型发布（arXiv 版在 5 月）；13 万道 RL 题的清洗、奖励设计与 rollout 引擎细节完整，可直接照做。"
   summary: "从预训练起为推理服务；RL 用 13 万道可验证的数学与代码题、只给正确性奖励，GRPO 去 KL 并加动态采样与 clip-higher，另设测试难度加权的代码奖励与易题重采样。"
   plain: "代码题按测试点难度给部分分，避免“全过才给分”太稀疏；已经全会的题留一点比例继续练，防止训练后期不稳。"
   takeaways:
@@ -467,8 +467,8 @@
   facets: [algorithm]
   tier: rec
   evidence: [industrial, open-source, ablation]
-  evidence_note: "Mistral 首个推理模型：Magistral Medium 不依赖其他模型的蒸馏数据，只用自家模型与基础设施做 RL；Magistral Small 以 Apache 2.0 开源。去 KL、放宽裁剪等做法与 RLHF Book 的整理交叉核对。"
-  summary: "从 Mistral Medium 3 出发纯 RL 训练推理：GRPO 去 KL、放宽上裁剪、batch 级归一化、在线过滤无差异组，加格式与语言一致性奖励；纯文本 RL 保持甚至提升了多模态能力。"
+  evidence_note: "Mistral 首个推理模型：Magistral Medium 不依赖其他模型的蒸馏数据，只用自家模型与基础设施做 RL；Magistral Small 以 Apache 2.0 开源。报告 §2 逐项列出对 GRPO 的修改与奖励设计，并有 batch 大小、优势归一化等消融。"
+  summary: "从 Mistral Medium 3 出发纯 RL 训练推理：GRPO 去 KL、token 级损失、放宽上裁剪、minibatch 级优势归一化、过滤无差异组，奖励含格式、正确性、软长度惩罚与语言一致性；纯文本 RL 保持甚至提升了多模态能力。"
   plain: "不抄别人的推理草稿，从自家模型直接用“答对给分”练出推理，还要求它用提问的语言思考和回答。"
   takeaways:
     - "多语言产品要在 RL 里显式加语言一致性奖励，否则思维链容易混用语言。"
@@ -488,8 +488,8 @@
   facets: [algorithm, infra]
   tier: rec
   evidence: [industrial, open-source, community]
-  evidence_note: "DeepSeek 开源权重的旗舰模型报告；其离策略序列掩码已被社区提议集成进 TRL 的 GRPOTrainer，RLHF Book 将其列为 2025 年底的代表性推理报告。"
-  summary: "后训练算力超过预训练的 10%：先训领域专家再蒸馏，最后一次混合 GRPO；引入无偏 KL 估计、离策略序列掩码、保持路由与采样掩码，并合成 1,800+ 环境做智能体 RL。"
+  evidence_note: "DeepSeek 开源权重的旗舰模型报告；TRL 的 GRPO 配置已实现其离策略序列掩码与无偏 KL 估计，RLHF Book 将其列为 2025 年底的代表性推理报告。"
+  summary: "后训练算力超过预训练的 10%：先训领域专家再蒸馏，最后一次混合 GRPO（优势只减组均值）；引入无偏 KL 估计、离策略序列掩码、保持路由与采样掩码，并合成 1,800+ 环境做智能体 RL。"
   plain: "在 RL 上花更多钱，同时把训练与推理两边的“小差异”对齐（同样的专家路由、同样的采样截断），偏离太大的负样本干脆不学。"
   takeaways:
     - "RL 规模上去后，训推不一致会主导稳定性：MoE 要复用推理时的专家路由，top-p / top-k 截断掩码也要在训练时保持一致。"
@@ -510,10 +510,10 @@
   tier: rec
   evidence: [industrial, open-source]
   evidence_note: "月之暗面开源 2.8T 参数模型权重与完整报告；RL 算法沿用 Kimi K2.5（token 级 log-ratio 掩码加平方正则），RLHF Book 的课程材料把它列为 2026 年“领域专家 RL + 多教师在线蒸馏”配方的代表。"
-  summary: "后训练三步：SFT 冷启动；三个领域 × 三档推理强度各训一个 RL 专家（共九个）；再用多教师在线策略蒸馏合并。RL 用 partial rollout 容忍陈旧数据，并按题预算控制推理长度。"
+  summary: "后训练三步：SFT 冷启动；三个领域 × 三档推理强度各训一个 RL 专家（共九个）；再用多教师在线策略蒸馏合并。RL 用 partial rollout 砍掉长尾等待，靠逐 token 正则容忍由此带来的陈旧数据，并按题预算控制推理长度。"
   plain: "先分科、分档培养九位“专科尖子”，再让一个学生跟着他们边做边学；训练时超出字数预算的答案直接判负，防止无休止地想。"
   takeaways:
-    - "推理长度可以当作训练目标来调：按题估计初始 token 预算，超出阈值倍数即奖励记 −1，逐步收紧阈值得到不同推理强度的模型。"
+    - '推理长度可以当作训练目标来调：用冷启动模型按题估计初始 token 预算 $b_0(x)$，超过 $\tau\cdot b_0(x)$ 即把奖励改为 −1；先用大 $\tau$ 训出最高档，再逐步收紧 $\tau$ 得到低档。'
     - "智能体环境要把被评者与验证器隔离：公开验证器给诊断反馈、隐藏验证器评估留出场景，并限制提交次数。"
     - "生成式 RM 容易偏爱冗长输出：K3 规定超出长度阈值的候选在两两比较中直接判负。"
   builds_on: [kimi-k1-5, kimi-k2-5]
@@ -534,11 +534,11 @@
   facets: [algorithm]
   tier: rec
   evidence: [open-source, ablation, community]
-  evidence_note: "代码、约 12.9 万条训练数据与多尺寸权重全部开源；对 GAE λ、KL 损失与 KL 奖励塑形做了对照实验。"
-  summary: "极简配方复现并超越 R1-Zero：原版 PPO（GAE λ=γ=1）、只看对错的规则奖励、不加 KL；在 Qwen2.5-32B 上以约 1/10 的步数，在三项推理基准上胜过 R1-Zero-Qwen-32B。"
+  evidence_note: '代码、约 12.9 万条训练数据与多尺寸权重全部开源；对 GAE 的 $\lambda$、KL 损失与 KL 奖励塑形做了对照实验。'
+  summary: '极简配方复现 R1-Zero 式训练：原版 PPO（GAE $\lambda=\gamma=1$）、只看对错的规则奖励、不加 KL；在 Qwen2.5-32B 上以约 1/10 的步数，在 AIME24、MATH500 与 GPQA Diamond 上胜过 DeepSeek-R1-Zero-Qwen-32B。'
   plain: "不用花哨技巧：标准 PPO、答对给分、不拴 KL 绳子，只要数据与规模够，基座模型一样能自己学会长推理。"
   takeaways:
-    - "推理 RL 中价值模型的 GAE 取 λ=γ=1 更稳；在该设定下 KL 损失和 KL 惩罚既拖慢训练又占资源，可以先去掉。"
+    - '推理 RL 中价值模型的 GAE 取 $\lambda=\gamma=1$ 更稳；在该设定下 KL 损失和 KL 惩罚既拖慢训练又占资源，可以先去掉。'
     - "基座本身能写出合格格式时，不必加格式奖励；只奖励正确性也能很快学会格式。"
   builds_on: [ppo, deepseek-r1]
   tags: [zero-RL, PPO, 开源复现]
@@ -601,8 +601,8 @@
   facets: [algorithm, data]
   tier: rec
   evidence: [industrial, open-source, ablation]
-  evidence_note: "开源 7B / 32B 权重、基于 verl 的训练代码与 RL 数据（模型于 2025-04 先行发布）；报告对熵坍缩的成因与缓解做了大量消融。"
-  summary: "在 R1 蒸馏模型上做 8K→16K→32K 多阶段 RL，系统研究熵坍缩并用自适应熵控制维持探索；32B 模型在 AIME24/25 与 LiveCodeBench 上平均分从 57.8% 升到 72.8%。"
+  evidence_note: "开源 7B / 32B 权重、基于 verl 的训练代码与 RL 数据（模型于 2025-04 先行发布）；报告对熵坍缩的成因与缓解做了大量消融，并列出各模型的分阶段配置。"
+  summary: "在 R1 蒸馏模型上做分阶段加长上下文的 RL（Math-7B 为 8K→16K→32K，32B 为 16K→24K），系统研究熵坍缩并用自适应熵控制维持探索；32B 模型在 AIME24/25 与 LiveCodeBench 上平均分从 57.8% 升到 72.8%。"
   plain: "模型越训越“笃定”、不再尝试新解法时就会卡住；Skywork 给熵设一个目标值，低于它就自动加大鼓励探索的力度。"
   takeaways:
     - "监控策略熵：过早坍缩往往先于验证集停滞；用自适应熵系数把熵拉回目标值，比固定的熵奖励更安全。"
@@ -646,7 +646,7 @@
   facets: [algorithm, theory]
   tier: rec
   evidence: [industrial, ablation, open-source]
-  evidence_note: "NVIDIA 的长程 RL 研究，后续 ProRL v2 与 BroRL 继续加长训练、加大 rollout 数；NeMo-RL 公开了 ProRL v2 配方（动态采样、非对称裁剪、token 级损失、REINFORCE++ 优势估计）。"
+  evidence_note: "NVIDIA 的长程 RL 研究，沿用 DAPO 的非对称裁剪与动态采样；后续 ProRL v2 与 BroRL 继续加长训练、加大 rollout 数，ProRL v2 博客公开了配方（REINFORCE++-baseline 优势、Clip-Higher、动态采样、周期性余弦长度惩罚、KL 正则与参考策略重置）；权重开源。"
   summary: "在多样化任务上把 RL 训练拉长到远超常规的步数，用 KL 控制与定期重置参考策略维持稳定，论证长时间 RL 能发现基座模型大量采样也得不到的推理策略，扩展而不只是锐化推理边界。"
   plain: "RL 练得够久、题目够杂，模型能学会原本怎么抽样都做不出来的解法；中途把“参照物”换成最新模型，防止被旧参照拖住。"
   takeaways:
@@ -674,7 +674,7 @@
   summary: "针对朴素 GRPO 的熵坍缩与奖励噪声，提出 clip-higher、动态采样、token 级损失、超长奖励塑形并去掉 KL；AIME24 由 30 逐项升到 50，步数只有 R1-Zero-Qwen-32B 的一半。"
   plain: "给低概率的好点子留出更大的上涨空间，全对或全错的题不浪费算力，长答案按 token 公平计分，太长的答案温和扣分。"
   takeaways:
-    - "按 DAPO 的消融顺序排查：先处理超长截断（过滤或软惩罚），再放宽上裁剪（ε_high≈0.28），然后换 token 级损失，最后开动态采样。"
+    - '按 DAPO 的消融顺序排查：先处理超长截断（过滤或软惩罚），再放宽上裁剪（$\varepsilon_\text{high}\approx0.28$），然后换 token 级损失，最后开动态采样。'
     - "动态采样会多花采样算力，但每批都有有效梯度，总收敛时间不一定变长。"
   builds_on: [grpo, deepseek-r1]
   tags: [clip-higher, 动态采样, token 级损失, 超长惩罚]
@@ -686,6 +686,7 @@
   org: Sea AI Lab · 新加坡国立大学
   authors: "Zichen Liu et al."
   date: 2025-03
+  venue: COLM 2025
   arxiv: "2503.20783"
   repo: sail-sg/understand-r1-zero
   areas: [rl-llm]
@@ -714,7 +715,7 @@
   tier: rec
   evidence: [industrial, ablation]
   evidence_note: "字节 Seed 在 Seed1.5-Thinking 中把 VAPO 作为 actor-critic 路线的主力算法；论文报告多次独立运行均未崩溃。"
-  summary: "为长 CoT 重新启用价值模型：价值预训练、解耦 GAE、随长度自适应的 λ，再叠加 clip-higher、token 级损失等技巧；Qwen2.5-32B 上 5,000 步内 AIME24 达 60.4。"
+  summary: '为长 CoT 重新启用价值模型：价值预训练、解耦 GAE、随长度自适应的 $\lambda$，再叠加 clip-higher、token 级损失等技巧；Qwen2.5-32B 上 5,000 步内 AIME24 达 60.4。'
   plain: "请回“估分老师”，但先让它在固定策略上预习好，再对长短不同的答案用不同的折扣，给长推理更准的逐步反馈。"
   takeaways:
     - "价值模型的偏差主要来自初始化与长序列上的 GAE 衰减：先用 SFT 策略的蒙特卡洛回报预训练价值模型，再上 PPO。"
@@ -735,11 +736,11 @@
   facets: [algorithm]
   tier: rec
   evidence: [adopted, open-source, ablation]
-  evidence_note: "NVIDIA NeMo-RL 的 ProRL v2 配方采用 REINFORCE++ 优势估计（先减组均值、再做全局归一化）；OpenRLHF 内置实现并提供 REINFORCE++-baseline 变体。"
+  evidence_note: "NVIDIA 的 ProRL v2 配方采用 REINFORCE++-baseline 优势（先减组均值、再做全局 batch 归一化）；OpenRLHF 内置实现并提供 REINFORCE++-baseline 变体。"
   summary: "去掉 critic、保留 PPO 的裁剪等技巧，用整个 batch 的统计量归一化优势，缓解组内归一化在小组与难题上的方差放大；baseline 变体先减组均值、再做全局归一化。"
   plain: "不用估分老师，也不只和同组比：先减掉同题平均分，再按整批题目的分数分布统一换算，免得难题与易题的尺度被放大。"
   takeaways:
-    - "组内样本少（G 小）或奖励尺度不稳时，把标准差归一化从组级换成 batch 级通常更稳。"
+    - '组内样本少（$G$ 小）或奖励尺度不稳时，把标准差归一化从组级换成 batch 级通常更稳。'
   builds_on: [grpo, rloo]
   tags: [全局归一化, 无 critic]
 
@@ -758,7 +759,7 @@
   tier: rec
   evidence: [industrial, community]
   evidence_note: "Qwen 团队用于最新 Qwen3 系列模型的 RL 训练；论文把 GRPO 在长回答与 MoE 上的不稳定归因于 token 级重要性权重的误用。"
-  summary: "把重要性比率定义在序列似然上（按长度开 |y| 次方归一化），并在序列级裁剪与优化，使比率与序列级奖励的粒度一致；效率与效果优于 GRPO，并显著稳定了 MoE 的 RL 训练。"
+  summary: '把重要性比率定义在序列似然上（取 $1/\lvert y\rvert$ 次幂做长度归一化），并在序列级裁剪与优化，使比率与序列级奖励的粒度一致；效率与效果优于 GRPO，并显著稳定了 MoE 的 RL 训练。'
   plain: "奖励是按整段回答给的，新旧策略差多少也该按整段来算，而不是每个 token 各算各的；这样噪声小很多，MoE 也不容易崩。"
   takeaways:
     - "MoE 做 RL 频繁崩溃时，优先尝试序列级比率（GSPO）或路由重放，而不是一味调小学习率。"
@@ -801,7 +802,7 @@
   tier: rec
   evidence: [adopted, community]
   evidence_note: "DeepSeekMath / R1 的 GRPO 目标中的 KL 项正是文中的 k3 估计器，verl 等框架的 KL 实现注释也直接引用本文；后续关于 KL 梯度估计偏差的讨论大多以它为起点。"
-  summary: "比较三种用样本估计 KL 的方法（r 为概率比）：k1=−log r 无偏但方差大、可为负；k2=½(log r)² 低方差但有偏；k3=(r−1)−log r 无偏、非负且方差低，成为 LLM RL 的事实标准。"
+  summary: '比较三种用样本估计 $\KL(q\,\|\,p)$ 的方法（$x\sim q$，$r=p(x)/q(x)$）：$k_1=-\log r$ 无偏但方差大、可为负；$k_2=\tfrac12(\log r)^2$ 低方差但有偏；$k_3=(r-1)-\log r$ 无偏、非负且方差低，成为 LLM RL 的事实标准。'
   plain: "KL 没法精确算，只能拿采样到的回答去估；作者比较了三种估法，第三种不会估出负数、波动也小，所以大家都用它。"
   takeaways:
     - "用 k3 时分清它是加在奖励里还是作为损失求导：直接对 k3 求梯度并不等于反向 KL 的梯度，离策略时还需用重要性权重修正（参见 DeepSeek-V3.2 的无偏 KL）。"

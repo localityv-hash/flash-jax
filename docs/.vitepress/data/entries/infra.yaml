@@ -21,7 +21,7 @@
   facets: [infra]
   tier: must
   evidence: [industrial, adopted, open-source, community]
-  evidence_note: "生产级开源推理引擎，也是 RL 框架最常用的 rollout 后端：OpenRLHF、verl、TRL、prime-rl、NeMo-RL、SkyRL 都用它生成样本；为 RL 专门提供了 sleep mode（释放权重与 KV cache）、在线权重更新接口和批不变推理模式（VLLM_BATCH_INVARIANT）。"
+  evidence_note: "生产级开源推理引擎，也是 RL 框架最常用的 rollout 后端：OpenRLHF、verl、TRL、prime-rl、NeMo-RL、SkyRL 都用它生成样本；为 RL 专门提供了 sleep mode（释放权重与 KV cache）、在线权重更新接口和批不变推理模式（`VLLM_BATCH_INVARIANT`）。"
   summary: "用分页式 KV cache（PagedAttention）消除显存碎片并支持连续批处理，同等延迟下吞吐比当时的主流系统高 2–4 倍；在 RL 中负责生成 rollout，并通过 sleep/wake 与在线权重更新和训练引擎配合。"
   plain: "像操作系统管内存那样按页管理 KV cache，一张卡能同时服务更多请求。RL 里它就是“做题”的那一半：负责又快又多地生成回答。"
   takeaways:
@@ -44,7 +44,7 @@
   facets: [infra]
   tier: rec
   evidence: [industrial, adopted, open-source, community]
-  evidence_note: "生产级推理引擎；slime 只用 SGLang 做 rollout，支撑智谱 GLM-4.5 起的 RL 训练；AReaL 以它为默认推理后端，verl、Miles 深度集成。为 RL 新增了 /abort_request（与 AReaL 团队共同设计，用于动态采样与部分 rollout）、分桶权重更新、返回 MoE 路由专家与确定性推理。"
+  evidence_note: "生产级推理引擎；slime 只用 SGLang 做 rollout，支撑智谱 GLM-4.5 起的 RL 训练；AReaL 以它为默认推理后端，verl、Miles 深度集成。为 RL 新增了 `/abort_request`（与 AReaL 团队共同设计，用于动态采样与部分 rollout）、分桶权重更新、返回 MoE 路由专家与确定性推理。"
   summary: "以 RadixAttention 在请求之间自动复用 KV 前缀，配合高效调度与结构化生成；同题多采样与多轮 agent 的前缀高度重叠，使它成为 RL rollout 的主流引擎之一。"
   plain: "同一道题采样 8 次、多轮对话每轮都带着前文——这些重复的开头只算一次、大家共用，生成自然就快了。"
   takeaways:
@@ -91,7 +91,7 @@
   summary: "用 Ray 把 actor、critic、奖励与参考模型调度到不同 GPU，vLLM 生成、DeepSpeed ZeRO-3 训练，经 NCCL 或 CUDA IPC 同步权重；后续加入共置、异步流水与 agent 执行器。"
   plain: "把 RLHF 里“出题、打分、改模型”的几个角色拆给不同显卡组，用 Ray 当调度员；卡不够时也能让它们挤在同一组卡上轮流干活。"
   takeaways:
-    - "验证新算法先用 --train.colocate_all 的共置模式（严格 on-policy），确认收敛后再打开异步追求吞吐。"
+    - "验证新算法先用 `--train.colocate_all` 的共置模式（严格 on-policy），确认收敛后再打开异步追求吞吐。"
     - "异步模式下用队列长度控制 off-policy 程度，并同时打开 token 级 IS 修正。"
   builds_on: [vllm]
   tags: [Ray, vLLM, DeepSpeed, RLHF]
@@ -109,11 +109,11 @@
   tier: rec
   evidence: [industrial, open-source, community]
   evidence_note: "Hugging Face 官方后训练库，SFTTrainer、DPOTrainer、GRPOTrainer 被大量教程与开源复现（如 Open-R1）使用；vLLM 生成支持共置（默认）与独立 server 两种模式，server 模式经 NCCL 推送权重，并对 vLLM 生成默认开启截断重要性采样修正训推差异。"
-  summary: "基于 Transformers 与 Accelerate 的后训练库，覆盖 SFT、DPO、GRPO、RLOO 等；用 vLLM 加速在线生成，内置训推差异监控与 TIS/MIS 修正，适合中小规模实验与教学。"
+  summary: "基于 Transformers 与 Accelerate 的后训练库，覆盖 SFT、DPO、GRPO、RLOO 等；用 vLLM 加速在线生成，内置训推差异监控与 TIS/MIS 修正，另有实验性的异步 GRPO 与工具调用训练，适合中小规模实验与教学。"
   plain: "Hugging Face 生态里最顺手的后训练工具箱：几行代码就能跑 SFT、DPO 或 GRPO；规模上去以后再换专门的大规模框架。"
   takeaways:
     - "单机到几台机器的小模型实验首选；上百卡或大 MoE 时迁移到 verl、slime 等支持 Megatron 的框架。"
-    - "盯住 sampling/sampling_logp_difference 这类指标：它持续上升说明训推差异在变大。"
+    - "盯住 `sampling/sampling_logp_difference` 这类指标：它持续上升说明训推差异在变大。"
   tags: [GRPO, DPO, SFT, vLLM]
 
 - id: verl
@@ -135,7 +135,7 @@
   summary: "混合控制器编程模型：单控制器编排数据流、多控制器执行计算；3D-HybridEngine 在训练与生成间就地重分片 actor 权重。后端覆盖 FSDP/Megatron × vLLM/SGLang，并扩展出异步训练与 agent loop。"
   plain: "算法流程写在一个“总指挥”脚本里，繁重的计算交给分布在各卡上的工人；同一份模型在训练形态和推理形态之间就地变身，不必各存一份。"
   takeaways:
-    - "从同步共置起步：先跑通官方 GRPO/DAPO 示例，再按 rollout 耗时占比决定是否切到 one-step-off 或 fully_async。"
+    - "从同步共置起步：先跑通官方 GRPO/DAPO 示例，再按 rollout 耗时占比决定是否切到 `one_step_off_policy` 或 `fully_async_policy`。"
     - "打开 rollout correction 的诊断指标；训推差异升高时先用 token 级 TIS，长序列上恶化再换序列级掩码。"
   builds_on: [deepspeed-chat]
   tags: [HybridFlow, FSDP, Megatron, 异步]
@@ -156,7 +156,7 @@
   summary: "NVIDIA 的 Ray 编排后训练库：DTensor（FSDP2 等）与 Megatron Core 双训练后端，共置时经 IPC、分离时经 NCCL 广播或分片到分片的重分发同步权重；支持 GRPO、DAPO、在线蒸馏与异步训练。"
   plain: "英伟达自家的 RL 训练框架，Nemotron 系列就是用它训的；在 NVIDIA 硬件与 Megatron 生态里最省心。"
   takeaways:
-    - "用 Async GRPO 时从 max_trajectory_age_steps=1 起步，并按文档要求打开重要性采样修正。"
+    - "用 Async GRPO 时从 `max_trajectory_age_steps: 1` 起步，并按文档要求打开重要性采样修正。"
   tags: [Megatron, DTensor, Nemotron]
 
 - id: slime
@@ -178,7 +178,7 @@
   summary: "Megatron 训练 + SGLang 推理的原生组合，两端参数直通；一个开关在共置与分离之间切换，rollout 以 server 模式经 router 暴露，自定义生成函数即可接入多轮工具调用、沙箱与全异步 rollout。"
   plain: "只做一件事并做到极致：训练用 Megatron、生成用 SGLang，中间用数据缓冲区连起来；想训 agent，就把“怎么生成数据”这一步换成你自己的函数。"
   takeaways:
-    - "大 MoE、需要 Megatron 全套并行（TP/PP/EP/CP）时优先考虑；调性能先用 --debug-rollout-only 与 --debug-train-only 分别压测两端。"
+    - "大 MoE、需要 Megatron 全套并行（TP/PP/EP/CP）时优先考虑；调性能先用 `--debug-rollout-only` 与 `--debug-train-only` 分别压测两端。"
     - "agent 场景让环境直接调用 router 暴露的 OpenAI 兼容接口，不要把环境逻辑塞进训练循环。"
   builds_on: [sglang]
   tags: [Megatron, SGLang, GLM, agentic RL]
@@ -187,7 +187,7 @@
   title: "AReaL: A Large-Scale Asynchronous Reinforcement Learning System for Language Reasoning"
   short: AReaL
   kind: paper
-  org: 蚂蚁集团 AReaL 团队 · 清华大学交叉信息研究院
+  org: 蚂蚁集团 AReaL 团队 · 清华大学交叉信息研究院 · 香港科技大学
   authors: "Wei Fu et al."
   date: 2025-05
   venue: NeurIPS 2025
@@ -201,10 +201,10 @@
   tier: must
   evidence: [industrial, adopted, ablation, open-source, community]
   evidence_note: "蚂蚁用它训练 ASearcher 搜索智能体与 AReaL-SEA 等模型；verl 的 one-step-off 实现以 AReaL 为参考，其全异步训练器在“部分 rollout + 训练端重算 logprob”配置下即近似 AReaL 的 decoupled PPO；CAMEL-AI 的终端智能体 SETA 用 AReaL 训练。论文给出吞吐、陈旧度与目标函数的消融。"
-  summary: "把生成与训练彻底解耦到两组 GPU：rollout 可被权重更新打断，丢弃旧 KV cache 后用新权重续写；用陈旧度上限 η 控制样本版本差，并以 decoupled PPO 区分行为策略与近端策略，相对同步系统吞吐最高约 2.57 倍。"
-  plain: "出题的人一直出、改卷的人攒够一批就改；卷子不能太旧（最多落后 η 个版本），改的时候还要按“当时是谁出的题”做修正。"
+  summary: '把生成与训练彻底解耦到两组 GPU：rollout 可被权重更新打断，丢弃旧 KV cache 后用新权重续写；用陈旧度上限 $\eta$ 控制样本版本差，并以 decoupled PPO 区分行为策略与近端策略，相对同步系统吞吐最高约 2.57 倍。'
+  plain: '出题的人一直出、改卷的人攒够一批就改；卷子不能太旧（最多落后 $\eta$ 个版本），改的时候还要按“当时是谁出的题”做修正。'
   takeaways:
-    - "从 η=1（相当于一步重叠）开始调，逐步放大，每次都对照同步基线的收敛曲线。"
+    - '从 $\eta=1$（相当于一步重叠）开始调，逐步放大，每次都对照同步基线的收敛曲线。'
     - "异步时一定分开行为策略与近端策略：裁剪锚定在训练端重算的近端策略上，行为策略与它的差异用重要性权重修正。"
   builds_on: [async-rlhf]
   tags: [异步 RL, 陈旧度, decoupled PPO]
@@ -227,7 +227,7 @@
   tier: rec
   evidence: [industrial, ablation, open-source]
   evidence_note: "阿里淘天未来生活实验室与 AI Engine 团队开发，阿里的 ROME 智能体模型在其 ROCK + ROLL 生态中训练；后续论文 ROLL Flash 报告异步化在 RLVR 上最高 2.24 倍、agentic 任务上最高 2.72 倍加速，RollPacker 处理同步训练的长尾；文档对 R3 路由回放的实现与限制写得很细。"
-  summary: "基于 Ray 的多角色 RL 库：训练后端覆盖 Megatron-Core、DeepSpeed、FSDP2，推理支持 vLLM 与 SGLang；提供 RLVR、agentic、蒸馏流水线，ROLL Flash 又加入了异步训练。"
+  summary: "基于 Ray 的多角色 RL 库：训练后端为 Megatron-Core 与 FSDP2，推理支持 vLLM 与 SGLang；提供 RLVR、agentic、蒸馏流水线，ROLL Flash 又加入了异步训练。"
   plain: "阿里开源的一站式 RL 训练库：数学题、多轮 agent、蒸馏都有现成流水线，规模大了还能让出题和改卷两边异步跑。"
   takeaways:
     - "agent 任务先把环境交互做成环境级异步（一个慢环境不拖住整批），再叠加 rollout 与训练的解耦。"
@@ -248,7 +248,7 @@
   facets: [infra, env]
   tier: rec
   evidence: [open-source, community]
-  evidence_note: "伯克利 Sky Lab 与 Anyscale 合作：训练后端 FSDP / Megatron，推理后端 vLLM / SGLang；提供 PipelineRL / AReaL 式全异步与飞行中权重更新，skyrl-tx 实现了 Tinker API 的自托管后端；Mercor 发布过用 SkyRL 训练 397B 知识工作智能体的指南，OpenThoughts-Agent 等项目基于它。"
+  evidence_note: "伯克利 Sky Lab 与 Anyscale 合作：训练后端 FSDP / Megatron（另有 JAX 后端），推理用 vLLM；提供 PipelineRL / AReaL 式全异步与飞行中权重更新，skyrl-tx 实现了 Tinker API 的自托管后端；Mercor 发布过用 SkyRL 训练 397B 知识工作智能体的指南，OpenThoughts-Agent 等项目基于它。"
   summary: "由训练库 skyrl-train、agent 层 skyrl-agent 与环境库 skyrl-gym 组成，从 SWE-Bench 这类长程真实环境任务出发，强调模块化与异步；兼容 Tinker API，可在自有 GPU 上运行 Tinker 脚本。"
   plain: "伯克利做的 RL 全家桶：训练、agent、环境三件套拆开也能单独用，特别照顾 SWE 这类又长又慢的真实任务。"
   takeaways:
@@ -312,7 +312,7 @@
   tier: rec
   evidence: [industrial, adopted, open-source]
   evidence_note: "Thinking Machines Lab 的首个产品（2025-10-01 发布），以 LoRA 实现多租户共享算力；开源的 tinker-cookbook 提供 SFT、RL、蒸馏与 RLHF 配方。其 API 设计被其他团队采纳：SkyRL 的 skyrl-tx 与 verl 的 VeRL-Tinker 都实现了兼容 Tinker API 的自托管后端，rLLM 也可用 Tinker 做训练后端。"
-  summary: "把分布式训练封装成 forward_backward、optim_step、sample 等少数原语：用户在本地写算法循环，服务端负责集群、并行与容错；cookbook 支持最多落后 K 步的异步 RL。"
+  summary: "把分布式训练封装成 `forward_backward`、`optim_step`、`sample` 等少数原语：用户在本地写算法循环，服务端负责集群、并行与容错；cookbook 支持最多落后 K 步的异步 RL。"
   plain: "你只管写“怎么学”的那几行代码，GPU 集群、并行切分、权重同步全交给服务商，像调用云函数一样训练大模型。"
   takeaways:
     - "做算法研究而非系统研究时，托管训练 API 能省掉大部分工程；但它基于 LoRA，结论迁移到全参训练前要复核。"
@@ -422,7 +422,7 @@
   tier: must
   evidence: [adopted, open-source, community]
   evidence_note: "引发 2025 年下半年“训推不一致”讨论的起点：TRL 的 GRPOTrainer 对 vLLM 生成默认开启 TIS，verl（rollout correction）、OpenRLHF、slime/Miles、NeMo-RL 都实现了同类修正；Qwen 团队的 Stabilizing RL with LLMs 把它纳入统一的理论解释。配套 Flash-RL 仓库提供精确的 rollout logprob 与 FP8/INT8 量化 rollout。"
-  summary: "指出 vLLM 生成 + FSDP 训练的系统即使权重相同，token 概率也显著不同，等于隐性 off-policy 训练；提出截断重要性采样 min(π_train/π_rollout, C) 修正，也让量化 rollout 能稳定训练。"
+  summary: '指出 vLLM 生成、FSDP 训练的系统即使权重相同，token 概率也不同，等于隐性 off-policy；用截断权重 $\min(\pi_\text{train}/\pi_\text{rollout},C)$ 修正，量化 rollout 也能稳定训练。'
   plain: "出题用的“快速版模型”和改卷用的“标准版模型”算出的概率不一样，相当于拿别人的卷子来学。给每个词乘一个有上限的修正系数，把偏差补回来。"
   takeaways:
     - "凡是“推理引擎生成、训练引擎重算”的系统，都应保存 rollout logprob 并默认开启 token 级 TIS。"
@@ -444,7 +444,7 @@
   facets: [algorithm, infra, theory]
   tier: rec
   evidence: [adopted, community]
-  evidence_note: "三篇系列博客，用 TV 距离刻画偏差、χ² 散度刻画方差来分析训推不一致；verl 的 rollout correction 以它为理论文档并内置 Seq-MIS、Geo-RS 等预设，Miles 的训推不一致专文推荐 MIS 作为稳健默认，TRL 也实现了 MIS。后续整理为论文 Trust Region Masking（arXiv 2512.23075）。"
+  evidence_note: "三篇系列博客，用 TV 距离刻画偏差、$\\chi^2$ 散度刻画方差来分析训推不一致；verl 的 rollout correction 以它为理论文档并内置 Seq-MIS、Geo-RS 等预设，Miles 的训推不一致专文推荐 MIS 作为稳健默认，TRL 也实现了 MIS。后续整理为论文 Trust Region Masking（arXiv 2512.23075）。"
   summary: "说明训推差异不小时 token 级 IS 修正的偏差随长度增长，序列级 IS 无偏但方差随长度爆炸；提出超界即整条丢弃的序列级掩码 IS（MIS）与按几何平均比率过滤的 Geo-RS，避免长回答被系统性误伤。"
   plain: "按词修正会越攒越偏，按整句修正又波动太大；干脆设一道门槛：整句偏离太多的样本直接不学。为了不冤枉长回答，门槛看的是“平均每个词偏了多少”。"
   takeaways:
@@ -503,7 +503,7 @@
   title: "Stabilizing MoE Reinforcement Learning by Aligning Training and Inference Routers"
   short: R3 路由回放
   kind: paper
-  org: 小米 · 北京大学
+  org: 小米 等
   authors: "Wenhan Ma et al."
   date: 2025-10
   arxiv: "2510.11370"
@@ -516,6 +516,6 @@
   plain: "MoE 像医院分诊台：推理时把某个词分给了 3 号和 7 号专家，训练时却因为一点数值误差分给了 3 号和 9 号，学到的就不是同一回事。R3 让训练照抄推理时的分诊记录。"
   takeaways:
     - "MoE 模型做 RL 默认开启 R3；训练端仍用自己的 router logits 在回放的专家集合上做 softmax，路由器照常得到梯度。"
-    - "评估工程代价：每个 token × 每层 × top-k 的专家索引要随样本传输，部分框架暂不支持与 sequence packing 或 P/D 分离同时使用。"
+    - "评估工程代价：每个 token × 每层 × top-k 的专家索引要随样本传输；部分框架暂不支持与 sequence packing 同时开启（如 ROLL），P/D 分离部署下也要先查兼容性。"
   builds_on: [gspo]
   tags: [MoE, 路由回放, 训推不一致]

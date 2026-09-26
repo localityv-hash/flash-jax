@@ -9,6 +9,14 @@ prereq:
 
 # 经典 RL 五年（2021–2026）：LLM 从业者需要知道的部分
 
+::: tldr
+- 迁移得最好的是原理（信任域与 KL 约束、分布偏移、实现细节、评测统计），机制则多半要变形：GRPO 用组内基线替代价值网络，长思维链把显式搜索内化，经典探索手段基本没搬过来。
+- DPO、拒绝采样微调、AWR/IQL 是同一个闭式解 $\pi^*\propto\mu\exp(Q/\beta)$ 的不同落地方式；纯离线方法有天花板，要尽早迭代采样或在线化。
+- 以回报为条件的序列建模只能取出数据里已有的好行为，不会拼接次优片段：条件生成不等于策略改进。
+- 搜索加学习的上限由验证器决定：AlphaZero 式“搜索—蒸馏”闭环在 Lean、单元测试这类精确验证器的领域最有效。
+- 如果只读一节：读[离线 RL：从 CQL、IQL 到 DPO 与拒绝采样](#offline-rl)。
+:::
+
 **一句话定义**：一份写给大模型从业者的“迁移清单”，不是 RL 综述——过去五年的经典强化学习里，哪些思想、工程经验与失败教训真正进入了后训练，哪些只是看起来相似。
 
 ::: human
@@ -120,7 +128,7 @@ flowchart TD
 
 2020 年的两项研究先把问题摆上桌面。Engstrom 等人发现，PPO 相对 TRPO 的优势很大程度来自论文没写的代码级优化，控制住这些细节后两者的目标函数表现相近[^1]；Andrychowicz 等人把 on-policy 算法拆成 50 多个设计选择、训练超过 25 万个智能体，逐个量化其影响[^2]。
 
-2022 年 3 月发表在 ICLR 博客赛道的《The 37 Implementation Details of Proximal Policy Optimization》把这些研究变成了可执行的清单[^3]。作者 Shengyi Huang（CleanRL 作者）与 Stable-Baselines3 维护者 Antonin Raffin 等人先考证 openai/baselines 的历史版本，确定哪一版才算“官方实现”，再逐条列出 37 个细节（13 条通用核心，其余针对 Atari、连续控制、LSTM 等），每条附源码永久链接与相关文献结论，并用单文件实现复现了官方曲线。它随后成为复现 PPO 的标准参照：Hugging Face 的 Deep RL 课程把它列为必读，HF 在 2023 年复现 OpenAI 早期 RLHF 代码时也照搬了“逐条列细节 + 对齐学习曲线”的做法[^4]。
+2022 年 3 月发表在 ICLR 博客赛道的《The 37 Implementation Details of Proximal Policy Optimization》把这些研究变成了可执行的清单[^3]。作者 Shengyi Huang（CleanRL 作者）与 Stable-Baselines3 维护者 Antonin Raffin 等人先考证 openai/baselines 的历史版本，确定哪一版才算“官方实现”，再逐条列出 37 个细节（13 条通用核心，其余针对 Atari、连续控制、LSTM 等），每条附源码永久链接与相关文献结论，并用单文件实现复现了官方曲线。它随后成为复现 PPO 的常用参照，Hugging Face 的 Deep RL 课程把它列为必读；2023 年 Huang 等人在 Hugging Face 复现 OpenAI 早期的 RLHF 代码，沿用的也是“逐条列细节 + 对齐学习曲线”这套做法[^4]。
 
 博客末尾的调试清单同样适用于 GRPO：
 
@@ -134,7 +142,7 @@ flowchart TD
 |---|---|
 | 小批量级的优势归一化 | GRPO 的组内标准化、REINFORCE++ 的全局归一化；Dr. GRPO 指出除以组内标准差会引入难度偏置 |
 | 价值损失裁剪 | 大规模消融认为它无益甚至有害[^2]；重启价值模型的 VAPO 改从价值预训练、解耦 GAE 入手 |
-| 调试指标 `approx_kl`（k1）与更好的 k3 估计 | k3 $=r-1-\log r$ 成了 GRPO 类方法 KL 惩罚的事实标准（见 <Term t="kl-estimator">KL 估计量</Term>） |
+| 调试指标 `approx_kl`（k1）与更好的 k3 估计 | k3（$\frac{\pi_\text{ref}}{\pi_\theta}-1-\log\frac{\pi_\text{ref}}{\pi_\theta}$）成了 GRPO 类方法 KL 惩罚的事实标准（见 <Term t="kl-estimator">KL 估计量</Term>） |
 | Adam 的 ε 等“看不见”的超参数 | HF 发现 PyTorch 与 TensorFlow 的 Adam 实现差异会让 RLHF 早期更新过猛[^4] |
 | 算 logprob 前按采样温度缩放 logits、禁用 dropout、取 γ=1 | 出自 OpenAI 2019 年的 RLHF 代码；漏掉温度缩放，KL 涨得比预期快、效果变差[^4] |
 | 熵奖励 | LLM RL 中常设为 0 或很小；熵塌缩多改用 Clip-Higher 等手段处理 |
@@ -157,7 +165,7 @@ CQL 在普通的贝尔曼误差上加一个正则（下式是论文中的 CQL(H)
 
 $$\min_Q\ \alpha\,\E_{s\sim\mathcal D}\Big[\log\sum_a\exp Q(s,a)-\E_{a\sim\mu(\cdot\mid s)}Q(s,a)\Big]+\frac12\,\E_{(s,a,s')\sim\mathcal D}\Big[\big(Q(s,a)-\hat{\mathcal B}^{\pi}\hat Q(s,a)\big)^2\Big]$$
 
-其中 $\alpha$ 是正则强度，$\hat{\mathcal B}^{\pi}$ 是用样本估计的贝尔曼算子，$\hat Q$ 是上一轮的 Q。$\log\sum_a\exp Q$ 是对所有动作 Q 值的“软最大”，最小化它会压低被高估的动作，减去数据内动作的 Q 则把真实出现过的动作抬回来。论文证明这样学到的 Q 在期望意义上是策略真实价值的下界，并报告在复杂、多模态数据上常取得 2–5 倍的最终回报[^6]。
+其中 $\alpha$ 是正则强度，$\hat{\mathcal B}^{\pi}$ 是用样本估计的贝尔曼算子，$\hat Q$ 是上一轮的 Q。$\log\sum_a\exp Q$ 是对所有动作 Q 值的“软最大”，最小化它会压低被高估的动作，减去数据内动作的 Q 则把真实出现过的动作抬回来。论文证明这样学到的 Q 在期望意义上是策略真实价值的下界，并报告在复杂、多模态的数据上，最终回报常是已有离线方法的 2–5 倍[^6]。
 
 ### IQL：干脆不碰数据外的动作
 
@@ -210,7 +218,7 @@ $$\max_\phi\ \E_s\,\E_{a\sim\mu(\cdot\mid s)}\Big[\frac{\exp\big(Q(s,a)/\beta\bi
 1. **AWR 与 IQL**：如上，按 $\exp(A/\beta)$ 加权模仿数据里的动作。
 2. **DPO**：把状态换成提示 $x$、动作换成整条回答 $y$、行为策略换成参考模型 $\pi_\text{ref}$、价值换成奖励 $r(x,y)$，得到 $\pi^*(y\mid x)\propto\pi_\text{ref}(y\mid x)\exp\big(r(x,y)/\beta\big)$。反解出 $r=\beta\log\big(\pi^*/\pi_\text{ref}\big)+\beta\log Z(x)$ 代入 Bradley–Terry 偏好模型，$Z(x)$ 恰好消掉，就是 DPO 的损失（见 [DPO 推导](/lenses/algorithms#dpo)）。DPO 论文推导这一步时引用的，正是 reward-weighted regression 与 AWR 这条经典 RL 路线[^8]。
 3. **<Term t="rejection-sampling">拒绝采样</Term>微调**：奖励只有 0/1 时让 $\beta\to0$，$\pi^*$ 退化为“参考模型在答对条件下的分布”，投影就变成只在答对样本上做 SFT。STaR、ReST、ReST-EM 都是它的迭代版本，ReST 论文直接自称受 growing batch RL 启发[^9]。
-4. **ILQL**：把 IQL 搬到 token 级，再加 CQL 式正则压低没出现过的 token；解码时把 $\beta(Q-V)$ 加到语言模型的 logits 上，正是在从 $\pi^*$ 采样[^10]。
+4. **ILQL**：把 IQL 搬到 token 级，再加 CQL 式正则压低没出现过的 token；解码时把 $(Q-V)/\beta$ 加到语言模型的 logits 上（ILQL 论文写成 $\beta'(Q-V)$，$\beta'=1/\beta$），正是在从 $\pi^*$ 采样[^10]。
 
 ```mermaid 同一个闭式解，四种落地方式
 flowchart LR
@@ -218,7 +226,7 @@ flowchart LR
   STAR --> AWR["AWR 与 IQL<br/>按 exp(A/β) 加权模仿数据"]
   STAR --> DPO["DPO<br/>反解隐式奖励，代入 Bradley–Terry"]
   STAR --> RFT["拒绝采样微调<br/>β→0：只模仿答对的样本"]
-  STAR --> ILQL["ILQL<br/>解码时 logits 加上 β·(Q−V)"]
+  STAR --> ILQL["ILQL<br/>解码时 logits 加上 (Q−V)/β"]
 ```
 
 ### 离线 RL 的教训如何映射到 LLM
@@ -245,7 +253,7 @@ $$\tau=\big(\hat R_1,s_1,a_1,\ \hat R_2,s_2,a_2,\ \dots,\ \hat R_T,s_T,a_T\big),
 
 **它没说对什么。**
 
-- **拼接**：把多条次优轨迹的好片段拼成更好的策略，是基于价值的动态规划天然具备的能力。DT 论文唯一的拼接证据来自一个图最短路径的玩具实验，而且用了其他实验都没用的回报先验（约 15.8% 的生成路径由次优片段拼成）[^15]。Brandfonbrener 等人（NeurIPS 2022）证明，以回报为条件的监督学习要找到最优策略，需要比动态规划强得多的假设：环境（近似）确定，且数据覆盖所要求的回报[^16]；Elastic DT、Q-learning DT 等后续工作正是为补上拼接能力而提出的[^17]。
+- **拼接**：把多条次优轨迹的好片段拼成更好的策略，是基于价值的动态规划天然具备的能力。DT 论文里直接展示拼接的只有一个图最短路径的玩具实验，而且那个实验用了其他实验都没用的回报先验[^15]。Brandfonbrener 等人（NeurIPS 2022）证明，以回报为条件的监督学习要找到最优策略，需要比动态规划强得多的假设：环境（近似）确定，且数据覆盖所要求的回报[^16]；Elastic DT、Q-learning DT 等后续工作正是为补上拼接能力而提出的[^17]。
 - **随机性**：随机环境里高回报可能只是运气好，按回报做条件会学到“靠运气”的动作[^18]。
 - **架构不是关键**：RvS（ICLR 2022）表明，以目标或回报为条件的简单 MLP 只要设计得当，就能达到很多同类结果[^19]。
 
@@ -320,7 +328,7 @@ o1、DeepSeek-R1 之后，<Term t="test-time-scaling">测试时计算</Term>常�
 
 BBF（ICML 2023）回答了一个反直觉的问题：数据极少时能不能把价值网络做大？直接做大会过拟合早期数据、越学越僵，也就是失去“可塑性”。BBF 的配方是[^29]：
 
-1. 编码器加宽到 4 倍，回放比（每步环境交互对应的梯度步数）拉到 8；
+1. 编码器加宽到 4 倍，同时提高回放比（每步环境交互对应的梯度步数）；
 2. 周期性 shrink-and-perturb 重置：输出头重新初始化，编码器向随机权重插值一半；
 3. 每次重置后，$n$ 步回报从 10 退火到 3，折扣从 0.97 升到 0.997；
 4. 权重衰减、数据增强、自预测辅助损失等正则一起上。
@@ -432,10 +440,10 @@ BBF（ICML 2023）回答了一个反直觉的问题：数据极少时能不能�
 [^12]: Xu et al., [Is DPO Superior to PPO for LLM Alignment? A Comprehensive Study](https://arxiv.org/abs/2404.10719)，ICML 2024。
 [^13]: Tajwar et al., [Preference Fine-Tuning of LLMs Should Leverage Suboptimal, On-Policy Data](https://arxiv.org/abs/2404.14367)，ICML 2024。
 [^14]: Kumar et al., [When Should We Prefer Offline Reinforcement Learning Over Behavioral Cloning?](https://arxiv.org/abs/2204.05618)，ICLR 2022。
-[^15]: Chen et al., [Decision Transformer: Reinforcement Learning via Sequence Modeling](https://arxiv.org/abs/2106.01345)，NeurIPS 2021：%BC 对照见第 5.1 节与表 3、表 4；图最短路径实验中约 15.8% 的生成路径由次优片段拼成，该实验使用了其他实验未用的回报先验（附录）。
+[^15]: Chen et al., [Decision Transformer: Reinforcement Learning via Sequence Modeling](https://arxiv.org/abs/2106.01345)，NeurIPS 2021：%BC 对照见第 5.1 节与表 3、表 4；图最短路径实验及其回报先验的设置见附录。
 [^16]: Brandfonbrener et al., [When does return-conditioned supervised learning work for offline reinforcement learning?](https://arxiv.org/abs/2206.01079)，NeurIPS 2022。
 [^17]: Wu et al., [Elastic Decision Transformer](https://arxiv.org/abs/2307.02484)，NeurIPS 2023；Yamagata et al., [Q-learning Decision Transformer](https://arxiv.org/abs/2209.03993)，ICML 2023。
-[^18]: Paster, McIlraith, Ba, [You Can't Count on Luck: Why Decision Transformers Fail in Stochastic Environments](https://arxiv.org/abs/2205.15967)，2022。
+[^18]: Paster, McIlraith, Ba, [You Can't Count on Luck: Why Decision Transformers and RvS Fail in Stochastic Environments](https://arxiv.org/abs/2205.15967)，2022。
 [^19]: Emmons et al., [RvS: What is Essential for Offline RL via Supervised Learning?](https://arxiv.org/abs/2112.10751)，ICLR 2022。
 [^20]: Hubert et al., [Learning and Planning in Complex Action Spaces](https://arxiv.org/abs/2104.06303)（Sampled MuZero），2021。
 [^21]: Danihelka et al., [Policy Improvement by Planning with Gumbel](https://openreview.net/forum?id=bERaNdoegnO)，ICLR 2022；实现见 [google-deepmind/mctx](https://github.com/google-deepmind/mctx)。
@@ -446,7 +454,7 @@ BBF（ICML 2023）回答了一个反直觉的问题：数据极少时能不能�
 [^26]: Feng et al., [AlphaZero-like Tree-Search can Guide Large Language Model Decoding and Training](https://arxiv.org/abs/2309.17179)，2023。
 [^27]: DeepSeek-AI, [DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning](https://arxiv.org/abs/2501.12948)，2025，“Unsuccessful Attempts”一节中关于 MCTS 的讨论。
 [^28]: Snell et al., [Scaling LLM Test-Time Compute Optimally can be More Effective than Scaling Model Parameters](https://arxiv.org/abs/2408.03314)，2024。
-[^29]: Schwarzer et al., [Bigger, Better, Faster: Human-level Atari with Human-level Efficiency](https://arxiv.org/abs/2305.19452)，ICML 2023；代码见 [google-research/bigger_better_faster](https://github.com/google-research/google-research/tree/master/bigger_better_faster)。
+[^29]: Schwarzer et al., [Bigger, Better, Faster: Human-level Atari with Human-level Efficiency](https://arxiv.org/abs/2305.19452)，ICML 2023；代码见 [google-research/bigger_better_faster](https://github.com/google-research/google-research/tree/master/bigger_better_faster)。开源配置 `bbf/configs/BBF.gin` 中：宽度倍数 4；编码器与转移模型的 shrink、perturb 系数各 0.5；$n$ 从 10 退火到 3、$\gamma$ 从 0.97 升到 0.997；权重衰减 0.1，开启数据增强与自预测（SPR）损失。
 [^30]: D'Oro et al., [Sample-Efficient Reinforcement Learning by Breaking the Replay Ratio Barrier](https://openreview.net/forum?id=OpC-9aBBVJe)，ICLR 2023；Dohare et al., [Loss of plasticity in deep continual learning](https://www.nature.com/articles/s41586-024-07711-7)，Nature 2024。
 [^31]: Agarwal et al., [Deep Reinforcement Learning at the Edge of the Statistical Precipice](https://arxiv.org/abs/2108.13264)，NeurIPS 2021（杰出论文奖）；工具库 [google-research/rliable](https://github.com/google-research/rliable)。
 [^32]: Fawzi et al., [Discovering faster matrix multiplication algorithms with reinforcement learning](https://www.nature.com/articles/s41586-022-05172-4)，Nature 610（2022）；发现的算法与测速脚本见 [google-deepmind/alphatensor](https://github.com/google-deepmind/alphatensor)。

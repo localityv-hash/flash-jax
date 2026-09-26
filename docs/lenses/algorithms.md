@@ -8,7 +8,15 @@ prereq:
 
 # 算法谱系与推导
 
-这一页是全站的推导中枢。从一条公式——策略梯度——出发，把 PPO、GRPO、DAPO、GSPO、CISPO、DPO 和 On-Policy 蒸馏放进同一个框架：**它们估计的是同一类梯度，区别只在样本从哪来、每个 token 乘多大的权重，以及为了稳定牺牲了多少无偏性。** 历史脉络与工业背景见 [LLM 强化学习](/topics/rl-for-llm)，这里只回答“为什么这样算”。
+::: tldr
+- PPO、GRPO、DAPO、GSPO、CISPO、DPO 与 On-Policy 蒸馏估计的是同一类梯度 $\E_q\big[\sum_t w_t\nabla_\theta\log\pi_\theta(y_t\mid s_t)\big]$，区别只在样本分布 $q$ 和逐 token 权重 $w_t$。
+- 基线只降方差、不改方向；按回答长度平均和除以组内标准差却会悄悄改写优化目标，这就是 Dr. GRPO 指出的长度偏置与难度偏置。
+- 数值无偏不等于梯度正确：直接对 k3 求导，正则的是正向 KL；要反向 KL，就把 k2 当损失、给 k3 乘上重要性比率，或把 k1 放进奖励。
+- PPO 的裁剪只拦“朝优势方向走过头”的 token；DAPO、GSPO、CISPO 和各种 IS 修正，改的都是“比率怎么算、越界了怎么办”。
+- 如果只读一节：读 [统一视角](#unified-view)。
+:::
+
+这一页是全站的推导中枢。从一条公式——策略梯度——出发，把 PPO、GRPO、DAPO、GSPO、CISPO、DPO 和 On-Policy 蒸馏放进同一个框架：**它们估计的是同一类梯度，区别只在样本从哪来、每个 token 乘多大的权重，以及为了稳定牺牲了多少无偏性。** 历史脉络与工业背景见 [LLM 强化学习](/topics/rl-for-llm)，这里只回答“为什么这样算”。推导都收在默认折叠的“推导”框里，只看正文也能读完每一节的结论。
 
 ::: human
 这些算法都在做同一件事：把“好回答”里的词说得更频繁一点，把“差回答”里的词说得少一点。PPO、GRPO、DAPO 们争论的，只是“好坏怎么打分”和“一次改多少才不会改坏”。
@@ -18,7 +26,7 @@ prereq:
 
 <LineageGraph graph="policy-gradient" />
 
-读图时抓住一条主线：左边两列是“怎样估计优势”的演化，中间一列是去掉价值网络的无 Critic 家族，第四列是 2025 年以来围绕“比率、裁剪与离策略”的稳定性修正，最右列的偏好学习与蒸馏会在[统一视角](#unified-view)里重新汇合。
+读图时抓住一条主线：左边两列是经典策略梯度与带价值网络（critic）的 LLM RL，中间一列是去掉价值网络的无 Critic 家族，第四列是 2025 年以来围绕“比率、裁剪、KL 与离策略”的稳定性修正，最右列的偏好学习与蒸馏会在[统一视角](#unified-view)里重新汇合。
 
 ## 策略梯度：一切的起点 {#policy-gradient}
 
@@ -51,7 +59,7 @@ $$
 $$
 
 ::: derive 基线为什么不引入偏差，最优基线是什么
-- **无偏**：只要 $b$ 不依赖被求导的 $y_t$（可以依赖 $x$、前缀 $s_t$，也可以依赖其他独立样本），就有 $\E_{y_t\sim\pi_\theta(\cdot\mid s_t)}\big[b\,\nabla\log\pi_\theta(y_t\mid s_t)\big]=b\,\nabla_\theta\sum_{y_t}\pi_\theta(y_t\mid s_t)=b\,\nabla_\theta 1=0$。
+- **无偏**：只要 $b$ 不依赖 $y_t$ 及其之后的 token（可以依赖 $x$、前缀 $s_t$，也可以依赖其他独立样本），就有 $\E_{y_t\sim\pi_\theta(\cdot\mid s_t)}\big[b\,\nabla\log\pi_\theta(y_t\mid s_t)\big]=b\,\nabla_\theta\sum_{y_t}\pi_\theta(y_t\mid s_t)=b\,\nabla_\theta 1=0$。
 - **反例**：若基线用到了样本自身的奖励（例如包含自己的组均值），上式不再严格成立。后文会看到：组均值只让梯度缩小一个常数倍，而除以组内标准差会真正改变优化目标。
 - **最优常数基线**：取梯度的某一维 $g$，$\operatorname{Var}[(r-b)g]=\E[(r-b)^2g^2]-\big(\E[rg]\big)^2$，第二项与 $b$ 无关；对 $b$ 求导令其为零，得 $b^{\star}=\E[r\,g^2]/\E[g^2]$。实践中取 $b\approx\E[r\mid x]$（价值函数或组内均值）已足够接近。
 :::
@@ -115,6 +123,8 @@ $$
 \eta(\tilde\pi)\ \ge\ L_\pi(\tilde\pi)-\frac{4\epsilon\gamma}{(1-\gamma)^2}\max_s\KL\big(\pi(\cdot\mid s)\,\Vert\,\tilde\pi(\cdot\mid s)\big),\qquad \epsilon=\max_{s,a}\lvert A_\pi(s,a)\rvert
 $$
 
+这里 $\eta$ 是折扣回报，$L_\pi(\tilde\pi)=\eta(\pi)+\E_{s\sim\rho_\pi,\,a\sim\pi}\big[\frac{\tilde\pi(a\mid s)}{\pi(a\mid s)}A_\pi(s,a)\big]$（$\rho_\pi$ 为 $\pi$ 的折扣状态访问分布），比上文的代理目标多一个与 $\tilde\pi$ 无关的常数 $\eta(\pi)$。
+
 - 右边在 $\tilde\pi=\pi$ 处与真实回报 $\eta$ 相切，每次最大化右边（minorize-maximize）就能保证 $\eta$ 单调不降。
 - 惩罚系数在实践中过于保守，TRPO 改为硬约束“平均 KL ≤ δ”，用共轭梯度求自然梯度方向 $F^{-1}g$（$F$ 为 Fisher 信息矩阵），再做线搜索。
 - 对 LLM（$\gamma=1$、状态空间巨大）这个界没有数值意义，但“在旧策略附近用代理目标、并控制偏离程度”的结构被 PPO、GRPO 全盘继承。
@@ -156,7 +166,7 @@ flowchart TD
   D -->|"否"| G2["梯度 = Â_t·ρ_t·∇log π<br/>继续下压"]
 ```
 
-**clip fraction 在量什么。** 它是一个小批量里梯度被裁剪置零的 token 占比，只统计上表第 2、4 行（verl 记为 `actor/pg_clipfrac`，dual-clip 生效的比例另记 `actor/pg_clipfrac_lower`）[^clipfrac]。如果 $\pi_{\theta_\text{old}}$ 由训练引擎重算，第一个小批量上 $\rho\equiv1$，clip fraction 必为 0——严格 on-policy 时 PPO 退化为普通策略梯度。它持续偏高，往往意味着学习率太大、同一批数据复用的轮数（`ppo_epochs`、小批量个数）太多，或者训推不一致严重；长期接近 0，则说明裁剪形同虚设。不同比率定义下的 clip fraction 不能横向比较：GSPO 的序列级裁剪比例比 GRPO 高两个数量级，训练效率反而更高。
+**clip fraction 在量什么。** 它是一个小批量里梯度被裁剪置零的 token 占比，只统计上表第 2、4 行（verl 记为 `actor/pg_clipfrac`，dual-clip 生效的比例另记 `actor/pg_clipfrac_lower`）[^clipfrac]。如果 $\pi_{\theta_\text{old}}$ 由训练引擎重算，第一个小批量上 $\rho\equiv1$，clip fraction 应为 0——严格 on-policy 时 PPO 退化为普通策略梯度。它持续偏高，往往意味着学习率太大、同一批数据复用的轮数（`ppo_epochs`、小批量个数）太多；如果直接拿推理引擎返回的 logprob 充当 $\pi_{\theta_\text{old}}$，训推不一致也会把它推高。长期接近 0，则说明裁剪形同虚设。不同比率定义下的 clip fraction 不能横向比较：GSPO 的序列级裁剪让被裁掉的 token 比例比 GRPO 高两个数量级，训练效率反而更高。
 
 ::: human
 PPO 给每个词的调整幅度装了“限位器”：往对的方向调，调过头就停；往错的方向调，永远允许拉回来。clip fraction 就是这一轮有多少个词撞上了限位器。
@@ -173,7 +183,7 @@ $$
 序列级<Term t="reverse-kl">反向 KL</Term> 可以拆成逐 token 求和 $\E_{y\sim\pi_\theta}\big[\sum_t\log\frac{\pi_\theta(y_t\mid s_t)}{\pi_\text{ref}(y_t\mid s_t)}\big]$，由此有两种实现：
 
 - **KL 放进奖励**（InstructGPT、PPO 式）：逐 token 奖励 $r_t=-\beta\log\frac{\pi_{\theta_\text{old}}(y_t\mid s_t)}{\pi_\text{ref}(y_t\mid s_t)}+\mathbb 1[t=T]\,r(x,y)$，作为常数参与回报和优势的计算。[InstructGPT](/library/?id=instructgpt) 在每个 token 上加这一惩罚，以抑制对奖励模型的过度优化。
-- **KL 放进损失**（GRPO 式）：在每个 token 的损失里直接减去 $\beta\hat D_\text{KL}$，$\hat D_\text{KL}$ 是一个可求导的估计量，GRPO 用的是 k3。
+- **KL 放进损失**（GRPO 式）：在每个 token 的目标里直接减去 $\beta\hat D_\text{KL}$（损失里则是加上），$\hat D_\text{KL}$ 是一个对 $\theta$ 求导的估计量，GRPO 用的是 k3。
 
 逐位置的精确 KL 要对整个词表求和，需要保留参考模型的完整 logits，显存开销很大，所以实践中只用采样 token 的对数概率来估计。John Schulman 的博客 [Approximating KL Divergence](/library/?id=kl-approx) 比较了三个<Term t="kl-estimator">估计量</Term>。记 $y_t\sim\pi_\theta$，$r=\pi_\text{ref}(y_t\mid s_t)/\pi_\theta(y_t\mid s_t)$：
 
@@ -209,11 +219,13 @@ $$
 
 所以 GRPO 的“k3 当损失”在期望上正则的是每个位置的正向 KL。两分布接近时，$1-\pi_\text{ref}/\pi_\theta=1-e^{-\text{k1}}\approx\text{k1}$，与 k2 的梯度一阶一致，这也是它在实践中能用的原因。但它有两个隐患：一是 $\pi_\theta(y_t)\ll\pi_\text{ref}(y_t)$ 时权重 $1-\pi_\text{ref}/\pi_\theta$ 没有下界，个别 token 会给出很大的梯度；二是同一批样本多步更新后样本来自 $\pi_{\theta_\text{old}}$，k3 的数值本身也不再无偏。2025 年有多篇工作系统讨论了这一点[^kl-papers]。
 
-DeepSeek-V3.2 的修正是给 k3 乘上当前策略与采样策略的比率[^dsv32]：
+DeepSeek-V3.2 的修正是给 k3 乘上当前策略与旧策略的比率[^dsv32]：
 
 $$
 \hat D_\text{KL}=\frac{\pi_\theta(y_t\mid s_t)}{\pi_{\theta_\text{old}}(y_t\mid s_t)}\Big(\frac{\pi_\text{ref}(y_t\mid s_t)}{\pi_\theta(y_t\mid s_t)}-\log\frac{\pi_\text{ref}(y_t\mid s_t)}{\pi_\theta(y_t\mid s_t)}-1\Big)
 $$
+
+乘上 $\rho$ 之后，单个 token 的梯度变成 $\rho\cdot\text{k1}\cdot\nabla\log\pi_\theta$：期望恰好是逐位置反向 KL 的梯度，数值估计也保持无偏；$\pi_\theta\ll\pi_\text{ref}$ 时权重趋于 0，不再像 k3 那样趋于负无穷。
 
 ::: derive 乘上 ρ 之后梯度为什么对了
 记 $\rho=\pi_\theta/\pi_{\theta_\text{old}}$（对 θ 可导），$y_t\sim\pi_{\theta_\text{old}}$。展开 $\rho\cdot\text{k3}=\frac{\pi_\text{ref}}{\pi_{\theta_\text{old}}}-\rho+\rho\log\frac{\pi_\theta}{\pi_\text{ref}}$，第一项与 θ 无关。利用 $\nabla\rho=\rho\nabla\log\pi_\theta$：
@@ -222,10 +234,10 @@ $$
 \nabla(\rho\cdot\text{k3})=-\rho\nabla\log\pi_\theta+\rho\log\frac{\pi_\theta}{\pi_\text{ref}}\nabla\log\pi_\theta+\rho\nabla\log\pi_\theta=\rho\cdot\text{k1}\cdot\nabla\log\pi_\theta
 $$
 
-于是 $\E_{\pi_{\theta_\text{old}}}\big[\nabla(\rho\cdot\text{k3})\big]=\E_{\pi_\theta}\big[\text{k1}\,\nabla\log\pi_\theta\big]=\nabla_\theta\KL(\pi_\theta\Vert\pi_\text{ref})$（逐位置），数值上 $\E_{\pi_{\theta_\text{old}}}[\rho\cdot\text{k3}]=\E_{\pi_\theta}[\text{k3}]$ 也无偏。梯度权重从可能无界的 $1-\pi_\text{ref}/\pi_\theta$ 变成只按对数增长的 $\rho\log\frac{\pi_\theta}{\pi_\text{ref}}$。
+于是 $\E_{\pi_{\theta_\text{old}}}\big[\nabla(\rho\cdot\text{k3})\big]=\E_{\pi_\theta}\big[\text{k1}\,\nabla\log\pi_\theta\big]=\nabla_\theta\KL(\pi_\theta\Vert\pi_\text{ref})$（逐位置），数值上 $\E_{\pi_{\theta_\text{old}}}[\rho\cdot\text{k3}]=\E_{\pi_\theta}[\text{k3}]$ 也无偏。梯度权重从 $1-\pi_\text{ref}/\pi_\theta$（$\pi_\theta\ll\pi_\text{ref}$ 时趋于 $-\infty$）变成 $\rho\log\frac{\pi_\theta}{\pi_\text{ref}}$（此时因 $\rho\to0$ 而趋于 0）。注意即使 on-policy（$\rho$ 的数值恰为 1），$\rho$ 对 $\theta$ 的导数也不为零，所以这个修正在第一个小批量上同样改变梯度。
 :::
 
-主流框架都已提供修正开关[^kl-impl]：verl 的 `kl_loss_type` 取 `k1+`、`k3+` 等带“+”的值时，前向保留原估计值、反向改用 k2 的梯度（直通技巧）；OpenRLHF 的 `--algo.kl.unbiased_gradient` 保留所选估计量的数值、反向用带 IS 权重的反向 KL 梯度；TRL 的 `use_bias_correction_kl` 实现了 DeepSeek-V3.2 的写法。另一方面，许多 RLVR 配方干脆去掉 KL：DAPO 认为长 CoT 训练中模型本就应该远离初始分布，Dr. GRPO 的示例命令也取 $\beta=0$[^no-kl]。有学习型奖励模型时，KL 仍是防[奖励作弊](/topics/rl-for-llm#reward-hacking)的重要手段。
+主流框架都已提供修正开关[^kl-impl]：verl 的 `kl_loss_type` 取 `k1+`、`k3+` 等带“+”的值时，前向保留原估计值、反向改用 k2 的梯度（直通技巧）；OpenRLHF 的 `--algo.kl.unbiased_gradient` 保留所选估计量的数值、反向用带 IS 权重的反向 KL 梯度；TRL 的 `use_bias_correction_kl` 实现了 DeepSeek-V3.2 的写法。另一方面，许多 RLVR 配方干脆去掉 KL：DAPO 认为长 CoT 训练中模型本就应该远离初始分布，Dr. GRPO 的示例命令也取 $\beta=0$[^no-kl]；保留 KL 的 DeepSeek-V3.2 也报告，数学等领域用很弱的 KL 甚至不用，效果反而更好[^dsv32]。有学习型奖励模型时，KL 仍是防[奖励作弊](/topics/rl-for-llm#reward-hacking)的重要手段。
 
 ::: human
 KL 惩罚是一根“拴绳”，防止模型为了刷分跑得离原模型太远。麻烦在于：尺子量得准（估计量无偏），不代表按这把尺子去拉模型的方向也对——直接对 k3 求导，拉的其实是另一根绳子（正向 KL）。
@@ -263,7 +275,7 @@ DPO 的洞见是：奖励模型和“最优策略”其实是同一件事的两�
 
 ## 无 Critic 家族：基线从哪来
 
-价值网络和策略一样大，显存翻倍；回答级奖励只在最后一个 token 出现，逐 token 的价值又很难学准。2023 年以后的主流做法是去掉 critic，用蒙特卡洛奖励配上不同的基线。它们的更新都可以写成
+价值网络通常与策略同规模，显存和计算接近翻倍；回答级奖励只在最后一个 token 出现，逐 token 的价值又很难学准。2023 年以后的主流做法是去掉 critic，用蒙特卡洛奖励配上不同的基线。它们的更新都可以写成
 
 $$
 g\approx\frac1N\sum_{i}\hat A_i\sum_{t}\nabla\log\pi_\theta(y_{i,t}\mid s_{i,t})
@@ -321,13 +333,13 @@ $$
 \nabla J_\text{GRPO}=\frac1G\sum_i\frac{r_i-\bar r}{\sigma_x}\cdot\frac{1}{\lvert y_i\rvert}\sum_t\nabla\log\pi_\theta(y_{i,t}\mid s_{i,t})
 $$
 
-与无偏形式 $\frac1G\sum_i(r_i-\bar r)\sum_t\nabla\log\pi_\theta(y_{i,t}\mid s_{i,t})$ 相比，多出两个与样本相关的因子：
+与 $\frac1G\sum_i(r_i-\bar r)\sum_t\nabla\log\pi_\theta(y_{i,t}\mid s_{i,t})$（它与真实梯度只差常数倍 $\frac{G-1}{G}$，见 [RLOO](#rloo)）相比，多出两个与样本相关的因子：
 
 - **<Term t="length-bias">长度偏置</Term>**：回答 $i$ 中每个 token 的权重是 $\hat A_i/\lvert y_i\rvert$。正确回答（$\hat A_i>0$）越短，每个 token 被推得越多，于是偏好简短的正确答案；错误回答（$\hat A_i<0$）越长，每个 token 挨的罚越轻，长的错误回答被“惩罚不足”，训练中越来越长。
 - **难度偏置**：除以 $\sigma_x$ 等于给每道题乘上权重 $1/\sigma_x$。对 0/1 奖励，正确率为 $p$ 时 $\sigma_x=\sqrt{p(1-p)}$，接近全对或全错的题权重被放大。
 
 ::: derive 难度偏置的精确形式
-对 0/1 奖励、组足够大时，$\E\big[(r-p_x)\nabla\log\pi_\theta(y\mid x)\big]=\nabla_\theta p_x$，$p_x$ 为这道题的正确率。于是 GRPO 的期望更新方向是
+先忽略 $1/\lvert y_i\rvert$ 与裁剪。对 0/1 奖励、组足够大时，组均值与组内标准差分别趋于 $p_x$ 与 $\sqrt{p_x(1-p_x)}$，且 $\E\big[(r-p_x)\nabla\log\pi_\theta(y\mid x)\big]=\nabla_\theta p_x$，$p_x$ 为这道题的正确率。于是 GRPO 的期望更新方向是
 
 $$
 \E_x\Big[\frac{\nabla_\theta p_x}{\sqrt{p_x(1-p_x)}}\Big]=\E_x\big[\nabla_\theta\,2\arcsin\sqrt{p_x}\big]
@@ -354,7 +366,7 @@ $$
 
 四项修正各自对应一个问题：
 
-1. **Clip-Higher**（$\varepsilon_\text{low}=0.2$，$\varepsilon_\text{high}=0.28$）。上界裁剪对低概率 token 更苛刻：$\varepsilon=0.2$ 时，旧概率 0.01 的 token 一轮最多涨到 0.012，旧概率 0.9 的 token 却可以涨到 1.08（等于不设限）。探索性的低概率 token 最需要上涨空间，于是单独放宽上界；下界保持 0.2，因为放宽下界会把 token 概率压向 0、使采样空间坍缩。论文观察到被上界裁剪的 token 概率几乎都低于 0.2，放宽之后熵不再快速塌缩（见 [熵与熵塌缩](/lenses/principles#entropy)）。同一个不对称还是“随机奖励也涨分”的一种机制解释：期望优势为零时，裁剪仍会系统性地抬高模型原本就高概率的行为（见 [伪奖励与数据污染](/lenses/principles#spurious-rewards)）。
+1. **Clip-Higher**（$\varepsilon_\text{low}=0.2$，$\varepsilon_\text{high}=0.28$）。上界裁剪对低概率 token 更苛刻：$\varepsilon=0.2$ 时，旧概率 0.01 的 token 一轮最多涨到 0.012，旧概率 0.9 的 token 却可以涨到 1.08（等于不设限）。探索性的低概率 token 最需要上涨空间，于是单独放宽上界；下界保持 0.2，因为放宽下界会把这些 token 的概率压向 0、使采样空间塌缩。论文观察到，被上界裁剪的 token 概率最高也只在 0.2 左右；放宽之后熵不再快速塌缩（见 [熵与熵塌缩](/lenses/principles#entropy)）。这种不对称也被用来解释“随机奖励也涨分”：期望优势为零时，裁剪仍会系统性地抬高模型原本就高概率的行为（见 [伪奖励与数据污染](/lenses/principles#spurious-rewards)）。
 2. **<Term t="dynamic-sampling">动态采样</Term>**。组内全对或全错时优势全为 0，这些提示只占位置、不贡献梯度，而且随训练推进越来越多（全对的比例持续上升）。DAPO 过采样并过滤掉它们，直到批次填满。在同步系统里生成时间主要被长尾样本决定，多采的这部分并不显著拖慢训练。
 3. **<Term t="token-level-loss">token 级损失</Term>**。分母换成组内总 token 数 $\sum_i\lvert y_i\rvert$，长回答里的每个 token 与短回答里的 token 权重相同：好的长推理能被充分学习，冗长重复的坏模式也能被充分惩罚。它消除了上面的长度偏置（但保留了 std 归一化）；归一化常数随批次里的总长度变化，严格说只是把偏置从“每条回答”挪到了“每个批次”。
 4. **<Term t="overlong-shaping">超长奖励塑形</Term>**。被截断的回答直接判错，会误伤“思路对但没写完”的样本，给奖励引入噪声。先是 Overlong Filtering（截断样本不计损失），再是软超长惩罚：
@@ -382,9 +394,9 @@ token 级损失的分数提升最小，但论文强调它让训练更稳、长�
 [REINFORCE++](/library/?id=reinforce-pp)（OpenRLHF 团队）走的是另一条路：不在小组内做归一化，而在整个批次上做。
 
 - **REINFORCE++**：逐 token 的 KL 惩罚（k1）放进奖励，回报 $G_{i,t}=\sum_{t'\ge t}r_{i,t'}$（$\gamma=1$），然后在全局批次 $\mathcal B$ 的所有 token 上标准化：$\hat A_{i,t}=\big(G_{i,t}-\operatorname{mean}_\mathcal B(G)\big)/\operatorname{std}_\mathcal B(G)$。
-- **REINFORCE++-baseline**（面向 RLVR）：先减去组均值 $r_i-\bar r$ 去掉题目难度，再除以全局标准差。
+- **REINFORCE++-baseline**（面向 RLVR）：先减去组均值 $r_i-\bar r$ 去掉题目难度，再在全局批次上做同样的标准化（减均值、除以标准差）。
 
-理由正是 Dr. GRPO 那条推导：组内 std 是依赖样本自身的小样本统计量，会改写优化目标；全局均值和标准差是整个批次的统计量，单个样本对它们的影响随批次增大而消失，偏差趋于零，主要起稳定步长的作用。verl 中是 `adv_estimator=reinforce_plus_plus` 与 `reinforce_plus_plus_baseline`；OpenRLHF 把后者推荐为 RLVR 的默认选择，其说明中提到 ProRL V2 使用了它、ScaleRL 的大规模实验验证了它的有效性[^rpp]。
+用 Dr. GRPO 的推导来看这样做的好处：组内 std 是依赖样本自身的小样本统计量，会改写优化目标；全局均值和标准差是整个批次的统计量，单个样本对它们的影响随批次增大而消失，偏差趋于零，主要起稳定步长的作用。verl 中是 `adv_estimator=reinforce_plus_plus` 与 `reinforce_plus_plus_baseline`；OpenRLHF 把后者推荐为 RLVR 的默认选择，其 README 提到 ProRL V2 用它训练、ScaleRL 的大规模实验验证了它的有效性[^rpp]。
 
 ### GSPO：把比率提到序列级 {#gspo}
 
@@ -409,9 +421,9 @@ $$
 两个容易忽略的细节：严格的序列级 IS 权重是不开方的连乘 $\prod_t\rho_{i,t}$，开 $\lvert y_i\rvert$ 次方是为了把数值统一到 1 附近、降低方差，代价是它不再是无偏的 IS 修正；也正因为这个开方，梯度里仍带着 $1/\lvert y_i\rvert$，Dr. GRPO 指出的长度偏置在 GSPO 中同样存在。
 :::
 
-GSPO 对 MoE 的意义最大。每次梯度更新后，同一个 token 激活的专家可能变化，逐 token 比率随之剧烈波动；用 GRPO 训练 MoE 时，Qwen 不得不用 Routing Replay（缓存旧策略的路由、算比率时回放）才能正常收敛，这会增加显存与通信开销，也限制了模型容量。GSPO 只依赖整条回答的似然，而 MoE 模型的整体语言建模能力并不会因路由变化而剧烈波动，所以不再需要 Routing Replay；它对训推数值差异也更宽容，甚至可以直接用推理引擎返回的似然。GSPO 已用于 Qwen3 系列的大规模 RL[^gspo]。
+GSPO 对 MoE 的意义最大。每次梯度更新后，同一个 token 激活的专家可能变化，逐 token 比率随之剧烈波动；用 GRPO 训练 MoE 时，Qwen 不得不用 Routing Replay（缓存旧策略的路由、算比率时回放）才能正常收敛，这会增加显存与通信开销，也限制了模型容量。GSPO 只依赖整条回答的似然，而 MoE 模型的整体语言建模能力并不会因路由变化而剧烈波动，所以不再需要 Routing Replay；它对训推数值差异也更宽容，甚至可以直接用推理引擎返回的似然。GSPO 已用于 Qwen3 系列的大规模 RL[^gspo]。代价有两点（见上面的推导）：开方后的序列比率不再是无偏的 IS 修正；梯度里仍带着 $1/\lvert y_i\rvert$，长度偏置并没有消失。
 
-因为比率定义不同，GSPO 的裁剪范围与 GRPO 差几个数量级：论文中 GSPO 取左右 3e-4、4e-4，对照的 GRPO 取 0.2、0.27；GSPO 被裁剪的 token 比例高两个数量级，训练效率反而更高。verl 实现的是 GSPO-token 形式 $s_{i,t}=\sg[s_i]\cdot\pi_\theta(y_{i,t}\mid s_{i,t})/\sg[\pi_\theta(y_{i,t}\mid s_{i,t})]$，数值等于 $s_i$、允许逐 token 的优势，梯度与 GSPO 相同；同一代码库里还有几何平均（GMPO）、软门控（SAPO）等相关变体。
+比率定义不同，裁剪范围也差几个数量级：论文中 GSPO 取左右 3e-4、4e-4，对照的 GRPO 取 0.2、0.27，GSPO 被裁掉的 token 比例因此高出两个数量级。verl 实现的是 GSPO-token 形式 $s_{i,t}=\sg[s_i]\cdot\pi_\theta(y_{i,t}\mid s_{i,t})/\sg[\pi_\theta(y_{i,t}\mid s_{i,t})]$：数值等于 $s_i$，允许逐 token 的优势，配合 `seq-mean-token-mean` 聚合时梯度与 GSPO 相同（verl 的 GSPO 示例脚本就是这样配的；框架默认的 `token-mean` 会改变各回答之间的权重）。同一代码库里还有几何平均（GMPO）、软门控（SAPO）等相关变体。
 
 ### CISPO：裁剪权重，而不是丢梯度 {#cispo}
 
@@ -427,19 +439,19 @@ $$
 
 每个 token 的梯度是 $\hat\rho_{i,t}\hat A_i\nabla\log\pi_\theta$，只要优势不为零就不会被置零；PPO 则是比率越界即归零。不裁剪时，CISPO 退化为带逐 token IS 修正的 REINFORCE，也就是下文“离策略修正”一节里的 token 级代理目标；裁剪权重再引入少量偏差，换来有界的方差。MiniMax 实际上不设下界（把 $\varepsilon^\text{IS}_\text{low}$ 设得很大），只调 $\varepsilon^\text{IS}_\text{high}$；同时沿用 DAPO 的动态采样与长度惩罚，不加 KL。在 Qwen2.5-32B 的 zero-RL 对比中，CISPO 用一半的训练步数追平了 DAPO。
 
-论文还给出一个统一写法：在 CISPO 目标里乘上 token 掩码 $M_{i,t}$，令 $\hat A_{i}>0$ 且 $\rho_{i,t}>1+\varepsilon_\text{high}$、或 $\hat A_{i}<0$ 且 $\rho_{i,t}<1-\varepsilon_\text{low}$ 时 $M_{i,t}=0$，其余为 1，并去掉权重裁剪，就恰好复现了 PPO 信任域隐含的那个掩码。这说明 **PPO 与 CISPO 的差别只在“越界 token 的梯度是丢掉，还是封顶保留”**。Meta 的 [ScaleRL](/library/?id=scale-rl) 等后续工作也采用了 CISPO 损失。
+论文还给出一个统一写法：在 CISPO 目标里再乘一个 token 掩码 $M_{i,t}$，$\hat A_{i}>0$ 且 $\rho_{i,t}>1+\varepsilon_\text{high}$、或 $\hat A_{i}<0$ 且 $\rho_{i,t}<1-\varepsilon_\text{low}$ 时 $M_{i,t}=0$，其余为 1——这正是 PPO 信任域隐含的掩码。若同时去掉权重裁剪，得到的梯度与 PPO 完全相同。这说明 **PPO 与 CISPO 的差别只在“越界 token 的梯度是丢掉，还是封顶保留”**。Meta 等机构的 [ScaleRL](/library/?id=scale-rl) 也采用了 CISPO 损失。
 
 ### 小结：无 Critic 家族对照
 
 | 算法 | 优势 / 基线 | 优势归一化 | 损失聚合 | 比率与裁剪 |
 |---|---|---|---|---|
-| ReMax | $r-r(x,\bar y)$，贪心回答 | 无 | 整条回答 | 原文为 REINFORCE 式 |
-| RLOO | $r_i-$ 其余样本均值 | 无 | 整条回答 | 原文为 REINFORCE 式 |
+| ReMax | $r-r(x,\bar y)$，贪心回答 | 无 | 回答内按 token 求和 | 原文为 REINFORCE 式 |
+| RLOO | $r_i-$ 其余样本均值 | 无 | 回答内按 token 求和 | 原文为 REINFORCE 式 |
 | GRPO | $r_i-\bar r$ | 除以组内 std | 序列均值再批均值 | token 级，$\varepsilon=0.2$ |
-| Dr. GRPO | $r_i-\bar r$ | 无 | 除以固定常数 | token 级 |
+| Dr. GRPO | $r_i-\bar r$ | 无 | token 求和再除以固定常数 | token 级 |
 | DAPO | $r_i-\bar r$ | 除以组内 std | token 级 | token 级，$0.2/0.28$ |
 | REINFORCE++ | 回报（含逐 token KL） | 全局均值与 std | token 级 | token 级 PPO 裁剪 |
-| GSPO | 组相对，同 GRPO | 同 GRPO | 整条回答 | 序列级几何平均比率 |
+| GSPO | 组相对，同 GRPO | 同 GRPO | 序列级（梯度含 $1/\lvert y_i\rvert$） | 序列级几何平均比率 |
 | CISPO | 组相对，同 GRPO | 同 GRPO | token 级 | 裁剪 IS 权重并停止梯度 |
 
 ## 离策略修正：训推不一致与异步 {#off-policy}
@@ -470,15 +482,26 @@ $$
 \mathcal L(\theta)=-\hat{\E}_{t}\Big[\,w_t\cdot\min\big(r_t\hat A_t,\ \clip(r_t,1-\varepsilon,1+\varepsilon)\hat A_t\big)\Big]
 $$
 
-$\hat{\E}_t$ 表示对从 μ 采样的 token 求经验平均（聚合方式见上文）；$\pi_{\theta_\text{old}}$ 在整批训练中固定，$w_t$ 是常数，天然不回传梯度。最常见的实现错误，是把 $\pi_{\theta_\text{old}}$ 当成行为策略、忽略 μ（相当于默认 $w_t\equiv1$）：训推差异被当作“策略没变”，裁剪的锚点也跟着错了[^mis]。AReaL 的消融很直观：最大陈旧度为 4 个版本时，朴素 PPO 的 AIME 2024 从 42.0 掉到 23.3，换成解耦目标后是 42.2。
+$\hat{\E}_t$ 表示对从 μ 采样的 token 求经验平均（聚合方式见上文）；$\pi_{\theta_\text{old}}$ 在整批训练中固定，$w_t$ 是常数，天然不回传梯度。最常见的实现错误是忽略 μ、把 $\pi_{\theta_\text{old}}$ 当成行为策略（相当于默认 $w_t\equiv1$）：训推差异被当作“策略没变”，梯度因此有偏[^mis]。另一种合法做法是直接拿推理引擎的 logprob 充当 $\pi_{\theta_\text{old}}$（verl 称为 bypass 模式），这时裁剪的锚点就是 μ 本身。AReaL 的消融很直观：最大陈旧度为 4 个版本时，朴素 PPO 的 AIME 2024 从 42.0 掉到 23.3，换成解耦目标后是 42.2[^decoupled]。
 
-对 $w_t$ 的处理方式，就是近一年各种方法的分野：
+对 $w_t$ 的处理方式，就是近一年各种方法的分野（系统侧细节见 [Infra：训推不一致](/lenses/infra#mismatch)）：
 
-- **TIS**：[Feng Yao 等人的博客](/library/?id=tis-offpolicy)提出<Term t="truncated-is">截断重要性采样</Term>，$w_t\leftarrow\min(w_t,C)$，常用 $C=2$，以少量偏差换有界方差[^tis]。
-- **序列级 IS**：$w=\min\big(\prod_t w_t,\,C\big)$ 广播到整条回答，没有逐 token 近似带来的偏差（截断本身仍有偏差），但方差随长度指数增长。
-- **掩码 IS（MIS）**：比率越界的整条序列直接丢弃而不是截断，$M=\mathbb 1\big[C_\text{low}\le\prod_tw_t\le C_\text{high}\big]$；几何平均版本 $\big(\prod_tw_t\big)^{1/T}$ 与长度无关，阈值要设得很紧（verl 文档的典型值是 0.999 到 1.001）[^mis]。
-- **token 级区间掩码**（IcePop）：比率落在 $[C_\text{low},C_\text{high}]$ 之外的 token 权重置零，GLM-5 的训练中使用过[^skyrl]。
-- **DeepSeek-V3.2 的离策略序列掩码**：只对负优势且偏离过大的序列置零，即 $\hat A_i<0$ 且 $\frac1{\lvert y_i\rvert}\sum_t\log\frac{\pi_{\theta_\text{old}}(y_{i,t}\mid s_{i,t})}{\pi_\theta(y_{i,t}\mid s_{i,t})}>\delta$ 时 $M_i=0$[^dsv32]。直觉上，去压低一条当前策略本来就不太会生成的回答，信息量小而方差大。
+| 做法 | 权重或掩码 | 取舍 |
+|---|---|---|
+| [TIS](/library/?id=tis-offpolicy)（<Term t="truncated-is">截断重要性采样</Term>） | $\min(w_t,C)$，常用 $C=2$ | 少量偏差换有界方差[^tis] |
+| 序列级 IS | $\min\big(\prod_t w_t,\,C\big)$，广播到整条回答 | 没有逐 token 近似误差（截断仍有偏），方差随长度指数增长 |
+| [序列级掩码（MIS）](/library/?id=rl-collapse-mismatch)与几何平均过滤（Geo-RS） | 序列比率越界就整条丢弃；Geo-RS 改用 $\big(\prod_tw_t\big)^{1/T}$ 判断 | 丢掉“有毒”的长尾；Geo-RS 与长度无关，阈值要很紧（verl 文档的典型值是 0.999 到 1.001）[^mis] |
+| token 级区间掩码（IcePop） | $w_t\notin[C_\text{low},C_\text{high}]$ 的 token 权重置零 | 蚂蚁 Ling 团队提出，GLM-5 的训练中使用过[^skyrl] |
+
+**DeepSeek-V3.2 的离策略序列掩码**只丢负样本：当 $\hat A_i<0$ 且
+
+$$
+\frac{1}{\lvert y_i\rvert}\sum_{t}\log\frac{\mu(y_{i,t}\mid s_{i,t})}{\pi_\theta(y_{i,t}\mid s_{i,t})}>\delta
+$$
+
+时，整条回答的掩码 $M_i=0$[^dsv32]。报告里的“旧策略”直接取推理框架返回的采样概率，也就是本页的 μ，所以这个 KL 同时计入了批内多步更新与训推差异两种偏移。报告给出的理由是：模型最该从自己会犯的错里学，偏离过大的负样本反而可能误导甚至扰乱优化。
+
+为什么逐 token 的修正“够用”，又在什么时候失效？把整条回答的 IS 权重 $\prod_t\pi_\theta(y_t\mid s_t)/\mu(y_t\mid s_t)$ 在 1 附近展开，逐 token 的代理目标恰好是它的一阶近似：训推差异和策略陈旧都很小时近似可靠，回答越长、偏移越大，近似越差。
 
 ::: derive token 级代理目标为什么只是一阶近似
 设样本来自 μ，序列级目标为 $J(\theta)=\E_{y\sim\mu}\Big[\frac{\pi_\theta(y\mid x)}{\mu(y\mid x)}A(x,y)\Big]$。记 $\delta_t=\frac{\pi_\theta(y_t\mid s_t)}{\mu(y_t\mid s_t)}-1$，则 $\frac{\pi_\theta(y\mid x)}{\mu(y\mid x)}=\prod_t(1+\delta_t)=1+\sum_t\delta_t+\sum_{t<t'}\delta_t\delta_{t'}+\cdots$。
@@ -486,7 +509,7 @@ $\hat{\E}_t$ 表示对从 μ 采样的 token 求经验平均（聚合方式见�
 只保留一阶项：$J(\theta)\approx\E_\mu[A]+\E_\mu\Big[\sum_t\Big(\frac{\pi_\theta(y_t\mid s_t)}{\mu(y_t\mid s_t)}-1\Big)A\Big]$，它的梯度恰好就是逐 token 代理目标 $\E_\mu\Big[\sum_t\frac{\pi_\theta(y_t\mid s_t)}{\mu(y_t\mid s_t)}A\Big]$ 的梯度。
 
 - 丢掉的高阶项中，二阶项的绝对值不超过 $\frac12\big(\sum_t\lvert\delta_t\rvert\big)^2$：回答越长，要求每个 token 的偏差越小。
-- $\delta_t$ 同时包含两部分：μ 与 $\pi_{\theta_\text{old}}$ 之间的训推差异，$\pi_{\theta_\text{old}}$ 与 $\pi_\theta$ 之间的策略陈旧。裁剪压住后者，IS 修正与 Routing Replay 压住前者。
+- $1+\delta_t=\frac{\pi_{\theta_\text{old}}(y_t\mid s_t)}{\mu(y_t\mid s_t)}\cdot\frac{\pi_\theta(y_t\mid s_t)}{\pi_{\theta_\text{old}}(y_t\mid s_t)}$ 同时包含两段偏移：μ 到 $\pi_{\theta_\text{old}}$ 的训推差异（异步训练时还包括权重版本的滞后），$\pi_{\theta_\text{old}}$ 到 $\pi_\theta$ 的批内策略陈旧。IS 修正压住前者，裁剪压住后者；MoE 的路由漂移会同时放大两者，Routing Replay 回放旧策略的路由（R2）或推理引擎的路由（R3），分别对应后者与前者。
 - 严格的序列级 IS 没有这个近似误差，但权重是 T 个比率的连乘，方差随长度指数增长。token 级、序列级与几何平均三种修正之间，就是这个偏差-方差取舍。
 :::
 
@@ -516,7 +539,7 @@ $$
 g=\E_{x\sim\mathcal D,\;y\sim q(\cdot\mid x)}\Big[\sum_t w_t\,\nabla_\theta\log\pi_\theta(y_t\mid x,y_{<t})\Big],\qquad \nabla_\theta\mathcal L=-g
 $$
 
-区别只在两件事：**样本从哪个分布 $q$ 来**，以及**每个 token 的权重 $w_t$ 是什么**。DeepSeekMath 最早用这种“梯度系数”视角并列比较了 SFT、RFT、在线 RFT、DPO、PPO 与 GRPO[^dsmath]，这里再补上 On-Policy 蒸馏与稳定化项：
+区别只在两件事：**样本从哪个分布 $q$ 来**，以及**每个 token 的权重 $w_t$ 是什么**。DeepSeekMath 用这种“梯度系数”视角并列比较了 SFT、RFT、在线 RFT、DPO、PPO 与 GRPO[^dsmath]，这里再补上 On-Policy 蒸馏与稳定化项：
 
 | 方法 | 样本来源 $q$ | 权重 $w_t$ | 信号粒度 |
 |---|---|---|---|
@@ -574,14 +597,14 @@ flowchart LR
 
 ::: takeaway
 - 读任何一个算法，先确认三件事：样本来自哪个分布、每个 token 的权重是什么、哪些量要停止梯度。多数难以复现的问题出在这里。
-- KL 当损失时不要直接对 k1 求导；直接对 k3 求导正则的是正向 KL。需要反向 KL，就用 k2 当损失、给 k3 乘上 ρ（DeepSeek-V3.2），或把 k1 放进奖励。
+- KL 当损失时不要直接对 k1 求导；直接对 k3 求导正则的是正向 KL。需要反向 KL，就把 k2 当损失或给 k3 乘上 ρ（DeepSeek-V3.2），两者给出逐位置的梯度；把 k1 放进奖励，才得到含未来位置的序列级梯度。
 - 损失聚合方式会改变优化目标：按序列平均带来长度偏置，token 级平均让每个 token 同等对待，按 token 求和再除以固定常数才与真实梯度严格成正比。
 - 数学 RLVR 的起步配置：组相对优势、token 级损失、Clip-Higher（0.2/0.28）、动态采样、软超长惩罚，$\beta=0$；MoE 或训推差异明显时，再加序列级比率或 IS 修正。
-- clip fraction、新旧策略 KL、训推 logprob 差要分开监控：它们分别对应信任域、策略陈旧与训推不一致三种不同病因。
+- 分开监控两类偏移：clip fraction 与新旧策略 KL 反映批内多步更新走了多远，训推 logprob 差反映推理与训练两套引擎的数值偏差；前者靠调学习率、复用轮数与裁剪，后者靠 IS 修正或系统侧对齐。
 :::
 
 ::: pitfall
-- **把 $\pi_{\theta_\text{old}}$ 当成行为策略**：忽略推理引擎的实际采样分布 μ，训推差异会被当成“策略没变”，裁剪锚点也跟着错。
+- **把 $\pi_{\theta_\text{old}}$ 当成行为策略**：忽略推理引擎的实际采样分布 μ，训推差异会被当成“策略没变”，梯度因此有偏。
 - **重要性权重忘了停止梯度**：$\nabla[w(\theta)\log\pi_\theta]$ 会多出 $\log\pi_\theta\cdot\nabla w$ 这一项，优化的就不再是原目标。
 - **去掉 std 归一化后沿用原学习率**：优势尺度随奖励尺度变化，±1 奖励与 0/1 奖励差一倍。
 - **跨算法比较 ε 与 clip fraction**：GSPO 的 ε 在 1e-4 量级，GRPO 在 0.2 量级；比率定义不同，数字没有可比性。
@@ -603,7 +626,7 @@ flowchart LR
 [^dualclip]: Dual-clip PPO 出自 "Mastering Complex Control in MOBA Games with Deep Reinforcement Learning"（arXiv 1912.09729）。verl 默认值见 `verl/trainer/config/actor/actor.yaml`；DAPO 复现脚本：<https://github.com/verl-project/verl-recipe/tree/main/dapo>。
 [^clipfrac]: verl `compute_policy_loss_vanilla`：<https://github.com/verl-project/verl/blob/main/verl/trainer/ppo/core_algos.py>；GSPO 的裁剪比例对比见 Qwen 博客 "GSPO: Towards Scalable Reinforcement Learning for Language Models"：<https://qwenlm.github.io/blog/gspo/>。
 [^kl-papers]: "Rethinking KL Regularization in RLHF: From Value Estimation to Gradient Optimization"（arXiv 2510.01555，指出“k3 当损失”只是有偏的一阶近似）：<https://arxiv.org/abs/2510.01555>；"On a few pitfalls in KL divergence gradient estimation for RL"（arXiv 2506.09477）：<https://arxiv.org/abs/2506.09477>；"A Comedy of Estimators: On KL Regularization in RL Training of LLMs"（arXiv 2512.21852）：<https://arxiv.org/abs/2512.21852>；Xihuai Wang 的博客 "Choosing KL Estimators in RL: From Value Unbiasedness to Gradient Correctness"：<https://xihuai18.github.io/reinforcement-learning/2025/12/01/kl-estimators-en.html>。
-[^dsv32]: DeepSeek-V3.2 技术报告（arXiv 2512.02556）中的 Unbiased KL Estimate 与 Off-Policy Sequence Masking，见 [DeepSeek-V3.2 条目](/library/?id=deepseek-v3-2)；公式对照 TRL 文档的实现说明：<https://github.com/huggingface/trl/blob/main/docs/source/paper_index.md>。
+[^dsv32]: DeepSeek-V3.2 技术报告（arXiv 2512.02556）第 3.1 节 "Scaling GRPO" 中的 Unbiased KL Estimate 与 Off-Policy Sequence Masking（含“数学等领域弱 KL 或不加 KL 更好”“π_old 取推理框架返回的采样概率”两处说明），见 [DeepSeek-V3.2 条目](/library/?id=deepseek-v3-2)；公式对照 TRL 文档的实现说明：<https://github.com/huggingface/trl/blob/main/docs/source/paper_index.md>。
 [^kl-impl]: verl `kl_penalty()`：<https://github.com/verl-project/verl/blob/main/verl/trainer/ppo/core_algos.py>；OpenRLHF `compute_approx_kl(..., unbiased_gradient)`：<https://github.com/OpenRLHF/OpenRLHF/blob/main/openrlhf/models/utils.py>；TRL `use_bias_correction_kl` 见上一条的 TRL 文档。
 [^no-kl]: DAPO 论文第 2.3 节 "Removing KL Divergence"（arXiv 2503.14476）；Dr. GRPO 官方仓库 README 中的训练命令（`--beta 0`）：<https://github.com/sail-sg/understand-r1-zero>。
 [^drgrpo]: 官方实现 `train_zero_math.py`（`masked_sum` 以 `generate_max_length` 为常数归一化，`critic_type=drgrpo` 时不除以 std）：<https://github.com/sail-sg/understand-r1-zero/blob/main/train_zero_math.py>；verl 配置说明：<https://github.com/verl-project/verl/blob/main/docs/algo/grpo.md>。
@@ -612,10 +635,10 @@ flowchart LR
 [^rpp]: REINFORCE++ 论文（arXiv 2501.03262）；OpenRLHF README 中关于 REINFORCE++-baseline 的推荐与采用说明：<https://github.com/OpenRLHF/OpenRLHF>。
 [^gspo]: GSPO 论文（arXiv 2507.18071）与 Qwen 博客：<https://qwenlm.github.io/blog/gspo/>。裁剪范围 3e-4/4e-4 与对照 GRPO 的 0.2/0.27 见论文实验设置。
 [^cispo]: MiniMax-M1 技术报告第 3.1、3.2 节（arXiv 2506.13585），仓库内有 PDF：<https://github.com/MiniMax-AI/MiniMax-M1>。
-[^decoupled]: 解耦 PPO：Hilton et al., "Batch size-invariance for policy optimization"（arXiv 2110.00641）。AReaL 的陈旧度消融（DeepSeek-R1-Distill-Qwen-1.5B）见其 v0.3 博客：<https://github.com/inclusionAI/AReaL/blob/main/blog/AReaL_v0_3.md>。
+[^decoupled]: 解耦 PPO：Hilton et al., "Batch size-invariance for policy optimization"（arXiv 2110.00641）。AReaL 的陈旧度消融（DeepSeek-R1-Distill-Qwen-1.5B，AIME 2024）见其 v0.3 博客表 3：<https://github.com/areal-project/AReaL/blob/main/blog/AReaL_v0_3.md>。
 [^mis]: Jiacai Liu、Yingru Li 等，"When Speed Kills Stability: Demystifying RL Collapse from the Training-Inference Mismatch"（2025 年 9 月）：<https://richardli.xyz/rl-collapse>；verl 的数学说明与配置：<https://github.com/verl-project/verl/blob/main/docs/algo/rollout_corr_math.md>。
 [^tis]: Feng Yao 等，"Your Efficient RL Framework Secretly Brings You Off-Policy RL Training"（2025 年 8 月）：<https://fengyao.notion.site/off-policy-rl>。
-[^skyrl]: SkyRL 文档对 TIS、序列掩码与 IcePop 的整理：<https://github.com/NovaSky-AI/SkyRL/blob/main/docs/content/docs/algorithms/off_policy_correction.mdx>。
+[^skyrl]: SkyRL 文档对 TIS、序列掩码与 IcePop 的整理，其中注明 IcePop 由 Zhou 等在 Ring 团队博客中提出、后用于 GLM-5 的训练（引 GLM-5 报告 arXiv 2602.15763）：<https://github.com/NovaSky-AI/SkyRL/blob/main/docs/content/docs/algorithms/off_policy_correction.mdx>。
 [^formulation]: "Stabilizing Reinforcement Learning with LLMs: Formulation and Practices"（arXiv 2512.01374）。
 [^dsmath]: DeepSeekMath 论文第 5.2 节 "Towards to a Unified Paradigm"（arXiv 2402.03300），见 [GRPO 条目](/library/?id=grpo)。
 [^opd]: Thinking Machines，"On-Policy Distillation"（2025 年 10 月）：<https://thinkingmachines.ai/blog/on-policy-distillation/>。

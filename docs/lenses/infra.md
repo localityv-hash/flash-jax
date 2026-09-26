@@ -9,6 +9,14 @@ prereq:
 
 # 训练系统：RL 的瓶颈在工程
 
+::: tldr
+- 一步 RL 的墙钟时间大头通常在生成，生成的大头又在最长的那几条回答：先按阶段测出时间分解，再决定优化哪一段。
+- 异步是用策略陈旧度换 GPU 利用率：从一步重叠起步，用陈旧度上限加解耦 PPO（或 IS 修正）守住算法正确性。
+- 推理引擎和训练引擎算出的概率本就不同，名义上的 on-policy 其实是 off-policy：默认监控训推差异并开启 token 级 TIS，长序列上差异放大时改用序列级掩码。
+- MoE 的路由会把微小的数值差异放大成离散跳变，R3 路由回放已是大 MoE RL 的常用配置。
+- 如果只读一节：读[训推不一致](#mismatch)。
+:::
+
 大模型 RL 的训练系统，要把两种性格相反的负载缝进同一个闭环：**自回归生成**（逐 token 解码、访存受限、长度不可预测）和**反向传播训练**（计算密集、要大批次、对数值稳定性敏感）。2025 年以来，决定一次 RL 跑多快、能不能跑稳的，越来越不是损失函数里的某个系数，而是这道缝：整个集群在等最长的那条回答，几百 GB 的权重要在几秒内送到推理端，推理引擎算出的概率和训练引擎对不上，MoE 的路由在两边选了不同的专家。
 
 ::: human
@@ -40,7 +48,7 @@ flowchart LR
 
 ### 时间花在哪 {#time-breakdown}
 
-公开数据一致指向：**生成是大头**。OpenRLHF 的文档估计 RLHF 训练约 80% 的时间花在样本生成上[^openrlhf]；verl 的异步训练器文档给出，DAPO 32B 训练中 rollout 约占 70%，而且加卡并不能缩短 rollout[^verl-1step]。同一文档里有一组 7B 模型的实测拆分：
+公开数据一致指向：**生成是大头**。OpenRLHF 的文档估计 RLHF 训练约 80% 的时间花在样本生成上[^openrlhf]；verl 的 one-step-off 训练器文档给出，DAPO 32B 训练中 rollout 约占 70%，而且加卡并不能缩短 rollout[^verl-1step]。同一文档里有一组 7B 模型的实测拆分：
 
 | 设置（共置同步，最长 20K token） | 单步总时长 | 生成 | 重算 logprob | 训练更新 |
 |---|---|---|---|---|
@@ -53,7 +61,7 @@ flowchart LR
 生成阶段的墙钟时间不由平均长度决定，而由**最长的那条**决定。Decode 每一步都要把整份权重和 KV cache 从显存读一遍，是访存受限的；批里的短回答陆续结束后，剩下几条长回答独占整组 GPU，算力大量闲置，这就是<Term t="long-tail-rollout">长尾 rollout</Term>。设一批共 $N$ 条回答、长度为 $L_1,\dots,L_N$，在“每个 decode 步耗时近似恒定”的粗略假设下，生成阶段的有效利用率约为
 
 $$
-\eta_\text{gen}\approx\frac{\frac1N\sum_{i=1}^{N}L_i}{\max_i L_i}
+U_\text{gen}\approx\frac{\frac1N\sum_{i=1}^{N}L_i}{\max_i L_i}
 $$
 
 长 CoT 的长度分布往往重尾：假如平均 8K、最长 32K，这个比值只有约 25%。AReaL 团队还指出了另一面：同步系统把生成摊到所有卡上，每张卡的 decode 批次变小，更深地陷入访存受限区，**再加卡也几乎不提升生成吞吐**[^areal-blog]。
@@ -171,7 +179,7 @@ $$
 | LlamaRL | 8B / 70B / 405B | 405B 上相对 DeepSpeed-Chat 类系统最高 10.7×[^llamarl] |
 :::
 
-同一框架内的消融比跨框架对比更可信。verl 在 128 卡上把陈旧度阈值从 0 调到 0.3，单步时间从约 231 s 降到约 146 s；再调到 0.5 却几乎不再变快，原因是回答长度在训练中剧烈变化、训练变得不稳定[^verl-async]。
+同一框架内的消融比跨框架对比更可信。verl 在 128 卡上把陈旧度阈值从 0 调到 0.3，单步时间从约 231 s 降到约 146 s；再调到 0.5 却几乎不再变快（约 151 s），文档把原因归于训练中回答长度变化剧烈、训练不够稳定[^verl-async]。
 
 ::: insight 异步不是免费午餐
 吞吐的提升要用样本效率来还：陈旧度越大，重要性权重的方差越大，每个样本携带的有效信息越少。评估异步收益要看“达到同一验证分数的墙钟时间”，而不是每秒生成多少 token。
@@ -197,7 +205,7 @@ AReaL 的贡献不只在系统：它把“陈旧度上限 + 解耦目标”这�
 
 ### 为什么小差异会拖垮训练
 
-2025 年 8 月，Feng Yao、Liyuan Liu 等人（UCSD 与微软研究院）在博客 *Your Efficient RL Framework Secretly Brings You Off-Policy RL Training* 中把问题点破[^tis]；同一团队的 FlashRL 用 INT8/FP8 量化 rollout 提速，而量化只会把训推差异进一步放大。核心论点是：在“vLLM 生成 + FSDP 训练”的混合系统里，样本来自 $\mu$，PPO 却以训练端重算的 $\pi_{\theta_\text{old}}$ 为基准，同一组权重下两者的 token 概率可以差得很远；标准 PPO 对这段差异不做任何修正。他们给出的截断重要性采样（TIS）只在原目标前乘一个有上限的权重：
+2025 年 8 月，Feng Yao、Liyuan Liu 等人（UCSD 与微软研究院）在博客 *Your Efficient RL Framework Secretly Brings You Off-Policy RL Training* 中把问题点破[^tis]；同一团队的 FlashRL 用 INT8/FP8 量化 rollout 提速，而量化只会把训推差异进一步放大。核心论点是：在“vLLM 生成 + FSDP 训练”的混合系统里，样本来自 $\mu$，PPO 却以训练端重算的 $\pi_{\theta_\text{old}}$ 为基准，同一组权重下两者的 token 概率可以差得很远；标准 PPO 对这段差异不做任何修正。他们给出的<Term t="truncated-is">截断重要性采样</Term>（Truncated Importance Sampling，TIS）只在原目标前乘一个有上限的权重：
 
 $$
 \mathcal L_\text{TIS}(\theta)=-\E_{y\sim\mu}\Big[\frac{1}{\lvert y\rvert}\sum_t\min\Big(\frac{\pi_{\theta_\text{old}}(y_t\mid s_t)}{\mu(y_t\mid s_t)},\,C\Big)\min\Big(\rho_t(\theta)\hat A_t,\ \clip\big(\rho_t(\theta),1-\varepsilon,1+\varepsilon\big)\hat A_t\Big)\Big]
@@ -221,9 +229,9 @@ TIS 用每个 token 自己的比率代替整条序列的比率，本身仍有近
 
 TIS 之后的改进，都在回答同一个问题：修正权重在哪个粒度上算、越界了怎么办。
 
-- **序列级掩码（MIS）与几何平均过滤（Geo-RS）**：Jiacai Liu、Yingru Li 等人的三篇系列博客 *When Speed Kills Stability*（2025 年 9 月）用 TV 距离刻画偏差、$\chi^2$ 散度刻画方差，论证训推差异不小时 token 级修正的偏差随长度增长，并给出“比率越界就整条丢弃”的 MIS，以及按几何平均比率过滤、与长度无关的 Geo-RS[^rlcollapse]。verl 的 rollout correction 以它为理论文档，内置了相应预设[^verl-rollcorr]。
-- **token 级区间掩码（IcePop）**：蚂蚁 Ling 团队为 MoE 提出，比率落在 $[\alpha,\beta]$ 之外的 token 直接不参与梯度，prime-rl、AReaL、OpenRLHF 都提供了现成配置[^icepop]。
-- **离策略序列掩码**：[DeepSeek-V3.2](/library/?id=deepseek-v3-2) 只屏蔽“优势为负且偏离过大”的序列，公式见算法页。
+- **序列级掩码重要性采样（Masked IS，MIS）与几何平均过滤（Geo-RS）**：Jiacai Liu、Yingru Li 等人的三篇系列博客 *When Speed Kills Stability*（2025 年 9 月）用 TV 距离刻画偏差、$\chi^2$ 散度刻画方差，论证训推差异不小时 token 级修正的偏差随长度增长，并给出“比率越界就整条丢弃”的 MIS，以及按几何平均比率过滤、与长度无关的 Geo-RS[^rlcollapse]。verl 的 rollout correction 以它为理论文档，内置了相应预设[^verl-rollcorr]。
+- **token 级区间掩码（IcePop）**：蚂蚁 Ling 团队为 MoE 提出，比率落在 $[C_\text{low},C_\text{high}]$ 之外的 token 直接不参与梯度，prime-rl、AReaL、OpenRLHF 都提供了现成配置[^icepop]。
+- **离策略序列掩码**：[DeepSeek-V3.2](/library/?id=deepseek-v3-2) 只屏蔽“优势为负且偏离过大”的序列，公式见[算法谱系 · 离策略修正](/lenses/algorithms#off-policy)。
 - **统一解释**：Qwen 团队的[稳定性公式化工作](/library/?id=stabilizing-rl-llm)说明，token 级代理目标只在训推差异与策略陈旧度都很小时才是序列级目标的好近似，IS 修正、裁剪与路由回放各自压住其中一部分误差[^qwen]。
 
 几种权重的写法对比如下（设 $w_t=\pi_{\theta_\text{old}}(y_t\mid s_t)/\mu(y_t\mid s_t)$，$\rho(y)=\prod_t w_t$）：
@@ -247,7 +255,7 @@ flowchart TD
   D --> O
 ```
 
-Miles 团队的大量实验给了一个务实的参照：在不崩溃的常规训练里，打开 TIS / MIS 不损害效果；在他们刻意找到的一个 MoE 崩溃案例里，MIS / TIS 能把训练救回来。因此他们建议把 IS 修正当作默认开启的保险[^miles-mismatch]。
+Miles 团队的大量实验给了一个务实的参照：在不崩溃的常规训练里，打开 TIS / MIS 不损害效果；在他们跑了数百次才复现出的一个 MoE 崩溃案例里，收紧上限的 token 级 TIS 加几何平均 MIS 压住了崩溃，只开 token 级 TIS 仍然崩溃。因此他们建议把 IS 修正当作默认开启的保险，训推差异大时再加上序列级掩码[^miles-mismatch]。
 
 ### 系统消除：精度、批不变与比特一致
 
@@ -290,11 +298,11 @@ $$
 MoE 像一家有几十个专科的医院，分诊台（router）决定每个病人（token）去看哪两个科。推理时和训练时的分诊台因为一点点数值误差，把同一个病人分到了不同科室，后面的诊断自然对不上。R3 就是让训练时照抄推理时的分诊单。
 :::
 
-工业上，路由回放已从论文技巧变成默认配置：[DeepSeek-V3.2](/library/?id=deepseek-v3-2) 的 Keep Routing 在训练中强制沿用推理框架采样时的专家路由[^dsv32]；verl 的文档称 DeepSeek-V3.2、GLM-5、MiMo-V2 等都采用了 R3 式路由回放[^verl-r3]；prime-rl 的文档称它能把训推差异降低一个数量级[^prime-inference]。落地时注意三点工程代价：
+工业上，路由回放已从论文技巧变成大 MoE RL 的常用配置：[DeepSeek-V3.2](/library/?id=deepseek-v3-2) 的 Keep Routing 在训练中强制沿用推理框架采样时的专家路由[^dsv32]；verl 的文档称 DeepSeek-V3.2、GLM-5、MiMo-V2 等都采用了 R3 式路由回放[^verl-r3]；prime-rl 的文档称它能把训推差异降低一个数量级[^prime-inference]。落地时注意三点工程代价：
 
 1. 每个 token × 每层 × top-k 的专家索引要随样本从推理端传到训练端（ROLL 会按专家数自动选 uint8 / int16 以节省带宽）；
 2. 推理与训练两侧必须同时开启，只开一侧没有效果，参考模型的前向则不应回放；
-3. 反向传播若启用激活重算，重算时也要回放同一组路由；部分框架暂不支持 R3 与 sequence packing 或 P/D 分离同时使用[^roll-rr]。
+3. 反向传播若启用激活重算，重算时也要回放同一组路由；ROLL 暂不支持 R3 与 sequence packing 同时开启[^roll-rr]，prime-rl 在 P/D 分离部署下也有兼容限制（如 llm-d 路由器不支持返回路由专家）[^prime-inference]，上线前先查所用框架的兼容表。
 
 <EntryGrid :ids="['rollout-routing-replay', 'gspo', 'deepseek-v3-2']" />
 
@@ -320,20 +328,20 @@ Agent RL 的 rollout 不是一次 `generate`，而是“生成 → 解析工具�
 
 ## 框架地图 {#frameworks}
 
-选框架时，比功能列表更重要的是三个问题：训练后端能否撑住你的模型规模（<Term t="fsdp">FSDP</Term> 还是 <Term t="megatron">Megatron</Term>），rollout 引擎是否支持你需要的推理特性，异步与 agent 是一等公民还是外挂。下表只填公开文档可以核实的信息，拿不准的格子用“—”。
+选框架时，比功能列表更重要的是三个问题：训练后端能否撑住你的模型规模（<Term t="fsdp">FSDP</Term> 还是 <Term t="megatron">Megatron</Term>），rollout 引擎是否支持你需要的推理特性，异步与 agent 是一等公民还是外挂。下表只填公开文档可以核实的信息（按 2026 年 9 月各仓库的 README 与文档核对），拿不准的格子用“—”；框架迭代很快，落地前请以最新文档为准。
 
 | 框架 | 训练后端 | Rollout 引擎 | 异步 | Agent / 多轮 | 公开的工业落地 |
 |---|---|---|---|---|---|
 | [verl](/library/?id=verl) | FSDP/FSDP2、Megatron | vLLM、SGLang | one-step-off；全异步（含部分 rollout） | AgentLoop 多轮工具调用 | 字节 Seed（Seed-Thinking-v1.5 等）；Skywork-OR1 |
 | [OpenRLHF](/library/?id=openrlhf) | DeepSpeed ZeRO-3 | vLLM | 异步队列；可选部分 rollout | 单轮 / 多轮 agent 执行器 | Open-Reasoner-Zero（阶跃星辰 · 清华） |
-| [TRL](/library/?id=trl) | Accelerate（DDP / DeepSpeed / FSDP） | vLLM（共置或 server） | — | — | Hugging Face Open-R1 |
+| [TRL](/library/?id=trl) | Accelerate（DDP / DeepSpeed / FSDP） | vLLM（共置或 server） | 实验性 AsyncGRPOTrainer（`max_staleness` 上限） | 工具调用与环境接口（`environment_factory`，可接 OpenEnv） | Hugging Face Open-R1 |
 | [NeMo-RL](/library/?id=nemo-rl) | DTensor（FSDP2）、Megatron | vLLM、Megatron 推理、SGLang | Async GRPO（轨迹年龄上限） | NeMo-Gym 集成 | NVIDIA Nemotron 3 系列 |
 | [slime](/library/?id=slime) | Megatron | SGLang | 全异步 rollout | 自定义生成函数、多轮与 SWE 示例 | 智谱 GLM-4.5 至 GLM-5 系列 |
-| [AReaL](/library/?id=areal) | Megatron、FSDP2、Archon | SGLang、vLLM | 全异步（η + 解耦 PPO） | 多轮 agentic RL、黑盒 agent 接入 | 蚂蚁 ASearcher、AReaL-SEA |
-| [ROLL](/library/?id=roll) | Megatron-Core、DeepSpeed、FSDP2 | vLLM、SGLang | ROLL Flash | agentic 流水线、ROCK 环境套件 | 阿里 ROME |
-| [SkyRL](/library/?id=skyrl) | FSDP、Megatron | vLLM、SGLang | 全异步 + 飞行中更新 | SkyRL-Agent、SkyRL-Gym | Mercor 的 397B 训练指南 |
+| [AReaL](/library/?id=areal) | Megatron、FSDP2、Archon | SGLang、vLLM | 全异步（陈旧度上限 $\eta$ + 解耦 PPO） | 多轮 agentic RL、黑盒 agent 接入 | 蚂蚁 ASearcher、AReaL-SEA |
+| [ROLL](/library/?id=roll) | Megatron-Core、FSDP2 | vLLM、SGLang | ROLL Flash | agentic 流水线、ROCK 环境套件 | 阿里 ROME |
+| [SkyRL](/library/?id=skyrl) | FSDP、Megatron、JAX | vLLM | 全异步 + 飞行中更新 | SkyRL-Agent、SkyRL-Gym | Mercor 的 397B 训练指南 |
 | [prime-rl](/library/?id=prime-rl) | FSDP2（EP / CP） | vLLM | 默认一步重叠 | verifiers 环境、Environments Hub | INTELLECT-2、INTELLECT-3.x |
-| [rLLM](/library/?id=rllm) | 经 verl；或 Tinker、Fireworks | 经 verl（vLLM / SGLang） | — | 包装现成 agent harness、多种沙箱 | DeepSWE（与 Together AI 合作） |
+| [rLLM](/library/?id=rllm) | 经 verl；或 Tinker、Fireworks | 经 verl（vLLM / SGLang） | 可选全异步训练 | 包装现成 agent harness、多种沙箱 | DeepSWE（与 Together AI 合作） |
 | [Tinker](/library/?id=tinker) | 托管服务（LoRA） | 托管采样 | cookbook 支持有界 off-policy | cookbook 多轮 / 工具示例 | Thinking Machines 自有产品 |
 
 推理引擎一侧，[vLLM](/library/?id=vllm) 与 [SGLang](/library/?id=sglang) 是事实上的两个选择：vLLM 覆盖面最广，为 RL 提供了 sleep mode、在线权重更新与批不变模式；SGLang 的前缀复用对同题多采样和多轮 agent 格外友好，slime 与 AReaL 默认用它。历史上的 [DeepSpeed-Chat](/library/?id=deepspeed-chat) 已很少被新项目直接采用，但它的 Hybrid Engine 仍是理解共置设计的最佳起点。
@@ -350,7 +358,7 @@ Agent RL 的 rollout 不是一次 `generate`，而是“生成 → 解析工具�
 
 ::: takeaway
 1. **先测时间分解再动手**：按阶段记录生成、logprob 重算、训练、同步的耗时，以及回答长度分布；生成占比过半且长尾明显时，异步才值得做。
-2. **默认开启训推差异监控与 IS 修正**：每步记录 μ 与 π_old 的 K3 KL 与 logprob 差；token 级 TIS 作为兜底，长序列上差异放大时升级到序列级 MIS 或 Geo-RS。
+2. **默认开启训推差异监控与 IS 修正**：每步记录 $\mu$ 与 $\pi_{\theta_\text{old}}$ 之间的 K3 KL 与 logprob 差；token 级 TIS 作为兜底，长序列上差异放大时升级到序列级 MIS 或 Geo-RS。
 3. **异步从一步重叠开始**：陈旧度上限从 1 起步、逐步放大，配合解耦 PPO 或 IS 修正，并始终以“达到同一验证分数的墙钟时间”对照同步基线。
 4. **MoE 默认开启 R3 路由回放**：或者至少使用 GSPO 这类序列级比率；同时监控路由一致率与训推 KL。
 5. **共置用于研究，分离 + 异步用于生产**：研究与复现选共置（严格 on-policy、最稳），长 CoT 与 agent 的生产训练选分离 + 异步；权重同步用分桶流水，按两侧 idle 比例调卡的配比。
@@ -361,7 +369,7 @@ Agent RL 的 rollout 不是一次 `generate`，而是“生成 → 解析工具�
 - **把训练端重算的 logprob 当成行为策略**：推理引擎和训练引擎并不是同一个分布，这等于默认 IS 权重恒为 1，训推差异被悄悄当成了“策略没变”。
 - **引擎返回的是处理前的 logprob**：用了温度或 top-p/top-k，却拿原始 logits 算出的概率做分母，修正越修越偏；截断采样时还要把采样掩码带回训练端。
 - **对输出做后处理再重新分词**：截掉标签、补全格式之后重新分词，token 与 logprob 就对不上了；多轮 agent 尤其容易踩这个坑。
-- **只看吞吐调陈旧度**：陈旧度调大、每秒 token 变多，样本效率却在下降；verl 的消融显示陈旧度阈值超过一定值后几乎不再提速，训练反而更不稳。
+- **只看吞吐调陈旧度**：陈旧度调大、每秒 token 变多，样本效率却可能在下降；verl 的消融里，陈旧度阈值从 0.3 调到 0.5 已几乎不再提速。
 - **睡眠级别与更新范围不匹配**：vLLM 的 sleep level 2 会丢弃全部权重，只同步 LoRA 适配器或部分权重时必须用 level 1，否则未被覆盖的权重就丢了。
 - **R3 只开了一半**：路由回放要推理与训练两侧同时开启，激活重算时也要回放；和 sequence packing、P/D 分离一起用之前，先确认框架是否支持。
 :::
@@ -378,7 +386,7 @@ Agent RL 的 rollout 不是一次 `generate`，而是“生成 → 解析工具�
 [^verl-1step]: verl 文档 *Recipe: One Step Off Policy Async Trainer*（美团搜索团队）：<https://github.com/verl-project/verl/blob/main/docs/advance/one_step_off.md>
 [^verl-async]: verl 文档 *Recipe: Fully Async Policy Trainer*（含 7B 128 卡实验与陈旧度消融）：<https://github.com/verl-project/verl/blob/main/docs/advance/fully_async.md>
 [^areal-blog]: AReaL v0.3 技术博客（异步动机、可中断 rollout、陈旧度 η 与解耦 PPO）：<https://github.com/areal-project/AReaL/blob/main/blog/AReaL_v0_3.md>
-[^areal]: Fu et al., *AReaL: A Large-Scale Asynchronous Reinforcement Learning System for Language Reasoning*，arXiv:2505.24298
+[^areal]: Fu et al., *AReaL: A Large-Scale Asynchronous Reinforcement Learning System for Language Reasoning*，arXiv:2505.24298（NeurIPS 2025）；“训练吞吐最高 2.57 倍、线性扩展到 512 卡”见引言，端到端训练时间最多缩短 2.77 倍见摘要与主实验
 [^dschat]: Yao et al., *DeepSpeed-Chat: Easy, Fast and Affordable RLHF Training of ChatGPT-like Models at All Scales*，arXiv:2308.01320
 [^hybridflow]: Sheng et al., *HybridFlow: A Flexible and Efficient RLHF Framework*，arXiv:2409.19256（EuroSys 2025）；代码 <https://github.com/verl-project/verl>
 [^vllm-sleep]: vLLM 文档 Sleep Mode：<https://github.com/vllm-project/vllm/blob/main/docs/features/sleep_mode.md>

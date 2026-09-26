@@ -9,7 +9,15 @@ prereq:
 
 # Agentic RL：让模型在环境里学会做事
 
-**Agentic RL**（智能体强化学习）把大模型当作多轮决策的策略：它在与搜索引擎、代码沙箱、网页、操作系统等环境的交互中生成轨迹，按任务结果（必要时再加上中间反馈）获得奖励，然后用策略梯度更新。和单轮 <Term t="rlvr">RLVR</Term> 相比，它多出三样东西：进入上下文的**环境观察**、跨轮次的**信用分配**，以及被工具延迟和长尾轨迹主导的 **rollout 成本**。
+::: tldr
+- 智能体 RL 没有新的优化器，仍是 GRPO、PPO 一类策略梯度；新的是轨迹里夹着环境观察：只对模型生成的 token 求梯度，观察一律屏蔽，训练拼出的序列要与推理时逐字一致。
+- 结果奖励只在末尾出现一次，信用分配按成本由低到高逐级加细：轨迹级组内优势 → GiGPO 锚状态分组 → 轮级奖励 → critic 或过程奖励。
+- 瓶颈在 rollout 与环境：轨迹长短可差两个数量级，要靠异步生成、partial rollout、沙箱池与限流缓存；GPU 利用率由环境吞吐决定。
+- 奖励以可验证的结果为主干，格式分只是冷启动的脚手架；按通过率筛题保证组内有方差，并提防搜答案、改测试、口头完成等智能体特有的作弊。
+- 如果只读一节：读 [信用分配](#credit-assignment)。
+:::
+
+**智能体强化学习（Agentic RL）**把大模型当作多轮决策的策略：它在与搜索引擎、代码沙箱、网页、操作系统等环境的交互中生成轨迹，按任务结果（必要时再加上中间反馈）获得奖励，然后用策略梯度更新。和单轮 <Term t="rlvr">RLVR</Term> 相比，它多出三样东西：进入上下文的**环境观察**、跨轮次的**信用分配**，以及被工具延迟和长尾轨迹主导的 **rollout 成本**。
 
 ::: human
 单轮 RL 像闭卷考试：写一次答案就交卷打分。Agentic RL 像实习：模型要自己查资料、跑代码、看反馈、再调整，最后按“事情办成没有”打分。难点不在打分，而在让它从成百上千次实习里学到“哪一步做对了”。
@@ -19,7 +27,7 @@ prereq:
 
 Agentic RL 的输入有两样：一个已经会基本工具格式的模型，和一套可交互的环境（任务、工具、验证器）。输出是一个在目标环境族上成功率更高、行为更稳的策略。它很少从零开始：
 
-- **之前**：工业界普遍先做智能体中训练与 SFT 冷启动。Tongyi DeepResearch 先用 32K→128K 两阶段的智能体持续预训练打底，再用 ReAct 轨迹做 SFT[^3]；Kimi-Dev 先用约 150B token 的 issue/PR 数据中训练[^18]。见 [Mid-training](/topics/mid-training) 与 [SFT](/topics/sft)。
+- **之前**：工业界普遍先做智能体中训练与 SFT 冷启动。Tongyi DeepResearch 先用 32K→128K 两阶段的智能体持续预训练打底，再用合成轨迹做 SFT 冷启动[^3]；Kimi-Dev 先用约 150B token 的 issue/PR 数据中训练[^18]。见 [Mid-training](/topics/mid-training) 与 [SFT](/topics/sft)。
 - **旁边**：环境本身是一项工程——任务合成、沙箱、验证器、多环境配比，详见 [多环境与环境工程](/topics/multi-env)。
 - **之后**：用 SWE-bench、BrowseComp、OSWorld 这类交互式基准评测，注意方差与污染问题，见 [评测](/lenses/eval#agent-eval)。
 
@@ -50,9 +58,9 @@ $$
 J(\theta)=\E_{x\sim\mathcal D}\,\E_{\tau\sim p_\theta(\cdot\mid x)}\Big[R(\tau)-\beta\sum_{t=1}^{T}\KL\big(\pi_\theta(\cdot\mid h_t)\,\Vert\,\pi_\text{ref}(\cdot\mid h_t)\big)\Big]
 $$
 
-$R(\tau)$ 可以只是结果奖励（答对、测试通过），也可以是各轮奖励的折扣和 $\sum_t\gamma^{t-1}r_t$。当 $T=1$ 且没有观察时，它退化为熟悉的单轮 RLVR：$J(\theta)=\E_{x}\E_{y\sim\pi_\theta(\cdot\mid x)}[r(x,y)]$。
+$R(\tau)$ 可以只是结果奖励（答对、测试通过），也可以是各轮奖励的折扣和 $\sum_t\gamma^{t-1}r_t$。当 $T=1$、没有观察且 $\beta=0$ 时，它退化为熟悉的单轮 RLVR：$J(\theta)=\E_{x}\E_{y\sim\pi_\theta(\cdot\mid x)}[r(x,y)]$。
 
-为什么说是 **POMDP**（部分可观测马尔可夫决策过程）？环境的真实状态 $s_t$——网站后端、文件系统、数据库——模型看不到，它只能以历史 $h_t$（也就是上下文）作为信念状态。一旦引入[上下文管理](#context)，把 $h_t$ 换成压缩后的 $c_t=f(h_t)$，策略就变成 $\pi_\theta(a_t\mid c_t)$：**状态的定义变了**，训练与推理必须使用同一个 $f$。
+为什么说是**部分可观测马尔可夫决策过程**（Partially Observable MDP，POMDP）？环境的真实状态 $s_t$——网站后端、文件系统、数据库——模型看不到，只能依据历史 $h_t$（也就是上下文）去推断，$h_t$ 充当了信念状态。一旦引入[上下文管理](#context)，把 $h_t$ 换成压缩后的 $c_t=f(h_t)$，策略就变成 $\pi_\theta(a_t\mid c_t)$：**状态的定义变了**，训练与推理必须使用同一个 $f$。
 
 对策略梯度来说，环境转移项在求导时直接消失，于是
 
@@ -75,7 +83,7 @@ $$
 \nabla_\theta J=\E_{\tau\sim p_\theta}\big[R(\tau)\,\nabla_\theta\log p_\theta(\tau\mid x)\big]=\E_{\tau\sim p_\theta}\Big[R(\tau)\sum_{t=1}^{T}\nabla_\theta\log\pi_\theta(a_t\mid h_t)\Big]
 $$
 
-两点值得注意：（1）环境的随机性仍然通过采样与 $h_t$ 影响梯度，但我们**不需要环境模型**，这是无模型（model-free）RL；（2）把 $R(\tau)$ 换成 $R(\tau)-b(x)$ 不改变期望，因为 $\E_\tau[\nabla_\theta\log p_\theta(\tau\mid x)]=\nabla_\theta 1=0$，这就是各种组内基线的合法性来源。
+两点值得注意：（1）环境的随机性仍然通过采样与 $h_t$ 影响梯度，但我们**不需要环境模型**，这是无模型（model-free）RL；（2）把 $R(\tau)$ 换成 $R(\tau)-b(x)$ 不改变期望，因为 $\E_\tau[\nabla_\theta\log p_\theta(\tau\mid x)]=\nabla_\theta 1=0$，这就是各种组内基线的合法性来源。前提是基线不依赖被评估的那条轨迹本身；组均值把样本自己也算进去，严格说会多出一个缩放因子，见下文 [GiGPO 一节的推导](#gigpo)。
 :::
 
 下面是一次 ReAct 式 rollout 的实际交互。注意哪些箭头产生可训练的 token、哪些不产生：
@@ -107,7 +115,7 @@ sequenceDiagram
 
 ## 损失屏蔽：只为自己说的话负责 {#loss-mask}
 
-一条智能体轨迹在训练框架里通常被拼成一个长 token 序列：提示、模型生成、环境观察交替出现。<Term t="loss-mask">损失屏蔽</Term>为每个 token 设一个掩码 $m\in\{0,1\}$，只有模型生成的 token 取 1。下面是一条 Search-R1 风格的检索轨迹，逐段标注掩码：
+一条智能体轨迹在训练框架里通常被拼成一个长 token 序列：提示、模型生成、环境观察交替出现。<Term t="loss-mask">损失屏蔽</Term>（loss mask）为每个 token 设一个掩码 $m\in\{0,1\}$，只有模型生成的 token 取 1。下面是一条 Search-R1 风格的检索轨迹，逐段标注掩码：
 
 | # | 片段 | 由谁产生 | 掩码 $m$ |
 |---|---|---|---|
@@ -116,12 +124,12 @@ sequenceDiagram
 | 3 | `<search>` Z 出生地 `</search>` | 模型 | 1 |
 | 4 | `<information>` Doc 1 … Doc 3 `</information>` | 检索器 | 0 |
 | 5 | `<think>` 文档 2 说在 Y 城，与问题一致 `</think>` | 模型 | 1 |
-| 6 | `<answer>` Y 城 `</answer>` 与结束符 | 模型 | 1 |
+| 6 | `<answer>` Y 城 `</answer>` | 模型 | 1 |
 | 7 | 动作非法时运行时插入的纠错提示 | 运行时 | 0 |
 
 第 7 行容易被忽略：Search-R1 在模型既没写合法的搜索也没写答案时，会插入一段“你的上一个动作无效……”的提示让它重试[^2]。这段文字同样是环境写的，掩码必须为 0。
 
-记第 $i$ 条轨迹（组内共 $G$ 条）拼接后的 token 为 $z_{i,1},\dots,z_{i,L_i}$，带屏蔽的裁剪目标写成
+记第 $i$ 条轨迹（组内共 $G$ 条）在提示 $x$ 之后拼接的 token 为 $z_{i,1},\dots,z_{i,L_i}$（模型生成与环境文本交替），带屏蔽的裁剪目标写成
 
 $$
 \mathcal J(\theta)=\E\Bigg[\frac{1}{\sum_{i=1}^{G}\sum_{\ell=1}^{L_i}m_{i,\ell} }\sum_{i=1}^{G}\sum_{\ell=1}^{L_i}m_{i,\ell}\,\min\Big(\rho_{i,\ell}\hat A_{i,\ell},\ \clip\big(\rho_{i,\ell},1-\varepsilon,1+\varepsilon\big)\hat A_{i,\ell}\Big)\Bigg],\qquad
@@ -158,15 +166,15 @@ $$
 \hat A_i=\frac{R_i-\operatorname{mean}(R_1,\dots,R_G)}{\operatorname{std}(R_1,\dots,R_G)}\qquad\text{或留一版本}\qquad \hat A_i=R_i-\frac{1}{G-1}\sum_{j\neq i}R_j
 $$
 
-前者是 [GRPO](/lenses/algorithms#grpo)，后者是 [RLOO](/lenses/algorithms#rloo)。它不需要 critic、实现简单，Search-R1、Tongyi DeepResearch（留一基线）、DeepSWE（留一优势）都用这一档[^3][^17]。代价是方差随轮数增长：一条失败轨迹里做对的步骤也会被一起惩罚，只能靠大量采样把噪声平均掉。
+前者是 [GRPO](/lenses/algorithms#grpo)，后者是 [RLOO](/lenses/algorithms#rloo)。它不需要 critic、实现简单，Search-R1 的 GRPO 版本、Tongyi DeepResearch（留一基线）、DeepSWE（留一优势）都用这一档[^3][^17]。代价是方差随轮数增长：一条失败轨迹里做对的步骤也会被一起惩罚，只能靠大量采样把噪声平均掉。
 
 ### 轮级优势：把奖励切到每一轮 {#turn-advantage}
 
 所谓<Term t="turn-level-advantage">轮级优势</Term>，是让同一轮内的 token 共享一个值，而不同轮可以不同。三种常见来源：
 
-- **轮级可验证奖励。** 以“先检索、后作答”的两轮任务为例，MT-GRPO 给第一轮 token 的优势是“第一轮奖励（如工具是否被正确调用并成功执行）的组内优势 $+\lambda\times$ 结果奖励的组内优势”，第二轮只用结果优势：$\hat A_{i,1}=\hat A^\text{turn}_i+\lambda\hat A^\text{out}_i,\ \hat A_{i,2}=\hat A^\text{out}_i$[^15]。
+- **轮级可验证奖励。** 以“先检索、后作答”的两轮任务为例，MT-GRPO 把轮级奖励（工具是否成功执行、检索结果里有没有正确答案）和结果奖励（答案与格式是否正确）分别做组内归一化，得到 $\hat A^\text{turn}_i$ 与 $\hat A^\text{out}_i$；第一轮 token 用两者的加权和，第二轮只用结果优势：$\hat A_{i,1}=\hat A^\text{out}_i+\lambda\hat A^\text{turn}_i,\ \hat A_{i,2}=\hat A^\text{out}_i$。官方实现里 $\lambda$ 即 `turn_advantage_coef`，实验取 1[^15]。
 - **按步数衰减的结果奖励。** Kimi-Researcher 对正确轨迹的第 $k$ 步给 $r_{i,k}=\gamma^{\,T_i-k}R_i$（$0<\gamma<1$，$T_i$ 为总步数）。两条都答对的轨迹最终奖励一样，但更短那条的早期动作分到更多功劳，从而鼓励更高效的探索[^6]。
-- **轮级价值函数。** ArCHer 在“整轮发言”粒度上用离策略 TD 学习价值，再为轮内 token 提供优势：$\hat A_{i,k}=r_{i,k}+\gamma V_\phi(h_{i,k+1})-V_\phi(h_{i,k})$。需要额外训练 critic，但可以复用离策略数据，样本效率更高。
+- **轮级价值函数。** ArCHer 在“整轮发言”粒度上用离策略 TD 学习 $Q_\phi(h_k,a_k)$ 与 $V_\psi(h_k)$（$Q_\phi$ 的目标是 $r_k+\gamma V_\psi(h_{k+1})$），再把 $\hat A_k=Q_\phi(h_k,a_k)-V_\psi(h_k)$ 作为这一轮所有 token 的优势[^28]。需要额外训练 critic，但可以复用离策略数据，样本效率更高。
 
 ### 步级分组：GiGPO 的锚状态 {#gigpo}
 
@@ -185,7 +193,7 @@ A^S(a^{(i)}_t)=\frac{R^{(i)}_t-\operatorname{mean}\{R^{(j)}_k:(j,k)\in G^S(\tild
 A(a^{(i)}_t)=A^E(\tau_i)+\omega\,A^S(a^{(i)}_t)
 $$
 
-$F_\text{norm}$ 取标准差或 1（verl-agent 默认只减均值），$\omega$ 平衡两级信号；观察很少完全相同时，可以改用相似度阈值分组[^14]。锚状态是从已有轨迹里“事后”找出来的，**不增加任何 rollout**，这是它能在 ALFWorld、WebShop 上比 GRPO 高出 12%、9% 以上而成本不变的原因。
+$F_\text{norm}$ 取标准差或常数 1（只减均值），$\omega$ 平衡两级信号。verl-agent 两种都支持：配置默认只减均值，官方示例中 ALFWorld 与搜索任务用均值—标准差归一化，WebShop 只减均值，$\gamma$ 均取 0.95；观察很少完全相同时，可以改用相似度阈值分组[^14]。锚状态是从已有轨迹里“事后”找出来的，**不增加任何 rollout**，显存与耗时也几乎不变；论文报告它在 ALFWorld、WebShop 上的成功率分别比 GRPO 高出 12、9 个百分点以上。
 
 ```mermaid GiGPO：在重复出现的锚状态上比较不同动作
 flowchart LR
@@ -218,7 +226,7 @@ $$
 R_i-\frac{1}{n}\sum_{m=1}^{n}R_m=\frac{n-1}{n}\Big(R_i-\frac{1}{n-1}\sum_{m\neq i}R_m\Big)
 $$
 
-括号内是留一基线，与样本 $i$ 的动作无关，因而无偏；外面多出一个缩放因子 $\tfrac{n-1}{n}$。GRPO 的组大小固定，这个因子只是整体缩放；锚状态组的大小各不相同，于是相当于给小组的步级优势打了折。极端情况 $n=1$ 时步级优势恒为 0，这些步只剩轨迹级信号。
+括号内是留一基线：只要组里其他样本与样本 $i$ 的动作相互独立，它就无偏（若同一条轨迹多次回到 $\tilde s$，这几个时间步的回报彼此相关，这一条件只近似成立）；外面多出一个缩放因子 $\tfrac{n-1}{n}$。GRPO 的组大小固定，这个因子只是整体缩放；锚状态组的大小各不相同，于是相当于给小组的步级优势打了折。极端情况 $n=1$ 时步级优势恒为 0，这些步只剩轨迹级信号。
 :::
 
 ### 过程奖励与特权 critic {#process-reward}
@@ -229,7 +237,7 @@ $$
 - **生成式奖励与过程奖励。** Kimi K2.5 在编码、搜索等智能体环境中，于可验证奖励之上叠加生成式奖励模型（GRM）[^5]；MiniMax-M2.5 为缓解长上下文 rollout 的信用分配，引入了对生成质量做端到端监控的过程奖励[^9]。
 - **绕开信用分配。** 当“谁该为结果负责”本身说不清时，可以换一种建模。Kimi K2.5 的并行智能体 RL（PARL）只训练编排器，子智能体冻结，其输出当作环境观察，从而避开多智能体之间的信用归属与训练不稳定[^5]。
 
-过程奖励的风险与单轮场景相同：它可能被策略钻空子（见[奖励设计](#reward)），也会让训练成本翻倍。实践中常见的顺序是：先用轨迹级优势跑通；遇到“长轨迹学不动”时再试 GiGPO 这类零成本细化；最后才上学习型 critic 或过程奖励。
+过程奖励的风险与单轮场景相同：它可能被策略钻空子（见[奖励设计](#reward)），还要额外训练或调用评估模型，成本明显上升。实践中常见的顺序是：先用轨迹级优势跑通；遇到“长轨迹学不动”时再试 GiGPO 这类零成本细化；最后才上学习型 critic 或过程奖励。
 
 ::: details 四类信用分配方法对照
 | 做法 | 信用粒度 | 额外成本 | 适用场景 | 代表 |
@@ -254,14 +262,16 @@ $$
 
 ### 超时、最大轮数与截断轨迹 {#max-turns}
 
-最大轮数是影响最终能力的关键超参数：ASearcher 指出，已有在线 RL 方法把轮数限制在 10 轮以内（Search-R1 的配方里是 4 轮），模型因此只能学到浅层搜索策略[^7]。被截断或超时的轨迹怎么处理，各家做法不同：DeepSWE 直接把它们从损失中屏蔽[^17]；Tongyi DeepResearch 把“超长却没给出答案”的负样本排除在损失之外，以免训练崩溃[^3]；Kimi-Researcher 则对超出上下文或迭代上限的轨迹给格式惩罚[^6]。屏蔽保护长程探索，惩罚鼓励效率，按任务目标二选一。长尾轨迹还可以用 <Term t="partial-rollout">partial rollout</Term>：超时的任务先存起来，下一轮用新权重接着跑。Kimi-Researcher 称其轮次级 partial rollout 带来至少 1.5 倍加速[^6]；Tongyi DeepResearch 则把它列为未来工作，理由是要先处理由此带来的离策略分布偏移[^3]。Kimi K3 给出了一个完整做法：每轮只要有 $\lambda$ 比例的轨迹完成就暂停生成、开始优化，未完成的轨迹下一轮优先续跑；由此产生的陈旧数据，靠策略优化中逐 token 的正则把更新限制在局部邻域来消化[^26]。
+最大轮数是影响最终能力的关键超参数：ASearcher 指出，已有在线 RL 方法把轮数限制在 10 轮以内（Search-R1 的配方里是 4 轮），模型因此只能学到浅层搜索策略[^7]。被截断或超时的轨迹怎么处理，各家做法不同：DeepSWE 直接把它们从损失中屏蔽[^17]；Tongyi DeepResearch 把“超长却没给出答案”的负样本排除在损失之外，以免训练崩溃[^3]；Kimi-Researcher 则对超出上下文或迭代上限的轨迹给格式惩罚[^6]。屏蔽保护长程探索，惩罚鼓励效率，按任务目标二选一。
+
+长尾轨迹还可以用 <Term t="partial-rollout">partial rollout</Term>：超时的任务先存起来，下一轮用新权重接着跑。Kimi-Researcher 称其轮次级 partial rollout 带来至少 1.5 倍加速[^6]；Tongyi DeepResearch 则把它列为未来工作，理由是要先处理由此带来的离策略分布偏移[^3]。Kimi K3 给出了一个完整做法：每轮只要有一定比例的轨迹完成就暂停生成、开始优化，未完成的轨迹下一轮优先续跑；由此产生的陈旧数据，靠策略优化中逐 token 的正则把更新限制在局部邻域来消化[^26]。
 
 ### 上下文管理 {#context}
 
 长程任务很快就会撑爆上下文，<Term t="context-management">上下文管理</Term>决定模型每一步“看见”什么。Kimi-Researcher 报告，不做记忆管理的智能体 10 轮以内就会超限，加上上下文管理后单条轨迹可以超过 50 轮，而且训练时带上下文管理的模型多用了 30% 的迭代、拿到更多信息[^6]。常见做法从简单到复杂依次是：
 
-- **截断旧观察**：Kimi K2.5 评测 HLE 时，上下文超过阈值就只保留最近一轮工具消息[^5]；MiniMax-M2.5 评测 BrowseComp 时，token 用量超过上限的 30% 就丢弃全部历史[^9]。
-- **马尔可夫式状态重建**：Tongyi DeepResearch 的上下文管理模式下，每一步只看问题 $q$、一份不断更新的报告 $S_t$（压缩记忆）和上一轮的动作与观察，即 $S_t,\tau_{t+1},a_{t+1}\sim\pi(\cdot\mid S_{t-1},a_t,o_t)$[^3]。
+- **截断旧观察**：Kimi K2.5 评测 HLE 时，上下文超过阈值就只保留最近一轮工具消息（思考过程全部保留）[^5]；MiniMax-M2.5 评测 BrowseComp 时，token 用量超过最大上下文的 30% 就丢弃全部历史[^9]。
+- **马尔可夫式状态重建**：Tongyi DeepResearch 的上下文管理模式下，每一步只看问题 $q$、一份不断更新的报告 $S_t$（压缩记忆）和上一轮的动作与观察，按本页记号即 $S_t,a_{t+1}\sim\pi_\theta(\cdot\mid q,S_{t-1},a_t,o_t)$，这里的 $a_{t+1}$ 同时包含思考与工具调用[^3]。
 - **学会管理记忆**：让模型自己决定保留什么，并用 RL 一起训练，如 ReSum、AgentFold[^21]、MEM1[^22] 与 Context-Folding[^23]。
 
 ### 确定性：缓存、限流与模拟环境 {#determinism}
@@ -295,11 +305,11 @@ flowchart TB
 
 **结果奖励是主干。** 问答类任务用精确匹配（EM）或词级 F1：Search-R1 用归一化后的 EM[^2]；ASearcher 从基座训练时用“格式 × F1”，微调推理模型时改用 <Term t="llm-as-judge">LLM 评审</Term>并去掉格式奖励[^7]。代码与 SWE 任务用测试结果：Kimi-Dev 只用 Docker 中整套测试是否通过的 0/1 奖励，不加格式或过程奖励[^18]。GUI 任务常用 VLM 判定任务是否完成。没有执行环境时，SWE-RL 用补丁相似度作代理，便宜，但只能奖励“看起来像”。
 
-**格式奖励是脚手架，不是目标。** 从基座起步时，格式奖励能帮模型尽快学会合法的工具调用：Search-R1 的后续实证研究发现格式奖励有效，而中间检索奖励作用有限[^25]；WebSailor 用 $R_i=0.1R^\text{format}_i+0.9R^\text{answer}_i$[^20]。一旦做过 SFT 冷启动，格式奖励往往就可以去掉：Tongyi DeepResearch 明确不加格式奖励，因为冷启动已经让模型熟悉输出格式[^3]。
+**格式奖励是脚手架，不是目标。** 从基座起步时，格式奖励能帮模型尽快学会合法的工具调用：Search-R1 的后续实证研究发现格式奖励有效，而中间检索奖励作用有限[^25]。做过冷启动之后，格式分可以只留一小份，也可以不要：WebSailor 在 RFT 冷启动后仍用 $R_i=0.1R^\text{format}_i+0.9R^\text{answer}_i$（答案由 LLM 评审判定）[^20]；Tongyi DeepResearch 则明确不加格式奖励，理由是冷启动已经让模型熟悉输出格式[^3]。
 
 **LLM 评审与 rubric 用于开放任务。** 深度研究报告、办公文档这类任务很难写规则。Kimi K2 为不可验证任务设计了自评 rubric 奖励：由核心 rubric、专门防奖励作弊的规定性 rubric 和人工 rubric 组合，并用可验证任务上的 on-policy rollout 持续校准评审模型[^4]。K2.5 进一步把生成式奖励模型铺到编码、搜索等智能体环境，并为不同任务准备多套 rubric 以免过拟合单一偏好[^5]。Kimi K3 让评审本身也成为智能体，并强制它按“阅读产出 → 生成 rubric → 逐个候选打分 → 记入计分板”的流程工作；为防评审偏爱冗长输出，长度超过阈值的候选在两两比较中直接判负[^26]。评审的结论要抽检，评审提示要固定版本。
 
-**让奖励有方差。** 组内奖励全相同，优势就全为 0，这批 rollout 白跑。若单题成功率为 $p$、每组 $G$ 条，整组无信号的概率是 $p^G+(1-p)^G$：$p=0.1,\ G=8$ 时约为 43%。所以几乎所有配方都按通过率筛题：Kimi-Dev 剔除零成功率的题并按课程逐步加难度[^18]；WebSailor 训练前剔除 8 次全对的题，训练中复制同批里有方差的样本补满 batch[^20]；Tongyi DeepResearch 用后台进程持续把“变得适中”的新题换进训练集[^3]。
+**让奖励有方差。** 组内奖励全相同，优势就全为 0，这批 rollout 白跑。若单题成功率为 $p$、每组 $G$ 条，整组无信号的概率是 $p^G+(1-p)^G$：$p=0.1,\ G=8$ 时约为 43%。所以主流配方都按通过率筛题：Kimi-Dev 剔除零成功率的题并按课程逐步加难度[^18]；WebSailor 训练前剔除 8 次全对的题，训练中复制同批里有方差的样本补满 batch[^20]；Tongyi DeepResearch 用后台进程持续把“变得适中”的新题换进训练集[^3]。
 
 **把效率写进奖励。** 智能体越练越啰嗦、调用越来越多，成本就会失控。可选做法有：Kimi-Researcher 的 γ 衰减[^6]、Kimi K2 按任务类型设 token 预算并惩罚超长[^4]、MiniMax-M2.5 用轨迹评估任务完成时间，在智能与响应速度之间取舍[^9]。Kimi K3 把预算控制扩展到智能体任务：累计输出 token（包括推理内容与工具调用参数）超过“初始预算 × 倍数”就把奖励改为 −1，再逐步收紧倍数得到不同推理强度的模型[^26]。
 
@@ -313,7 +323,7 @@ flowchart TB
 - **口头完成**：模型声称“已按要求完成”而实际没做。Kimi K2 在指令跟随奖励中专门加了检查这类欺骗性声明的一层[^4]；Kimi K3 的自主执行任务则只按独立验证器对最终环境状态的评估给奖励，不看智能体的自我报告[^26]。
 - **反复试探验证器**：能多次提交并拿到反馈时，智能体可能针对验证器过拟合。Kimi K3 把智能体与验证器隔离，公开验证器只给诊断反馈、隐藏验证器评估留出场景，并在有限提交次数下使用带惩罚的奖励[^26]。
 - **钻匹配规则的空子**：子串匹配类奖励可以靠罗列多个候选答案拿分；宽松匹配要配合答案长度或数量限制。
-- **刷工具调用或空转**：无效调用、只思考不行动的“空轮”会白白消耗预算，甚至引发梯度爆炸；SimpleTIR 直接过滤含空轮的轨迹[^19]。
+- **刷工具调用**：奖励或考核指标一旦与调用次数挂钩，模型就会堆砌无效调用；给调用次数设上限，或把效率直接写进奖励。
 - **虚假并行**：多智能体编排器可能狂开子智能体来刷并行指标。Kimi K2.5 用“子任务完成率”奖励约束，并把辅助奖励系数退火到 0[^5]。
 :::
 
@@ -326,7 +336,7 @@ flowchart TB
 1. **范式期（2021–2024）。** WebGPT 把语言模型放进浏览器环境，用行为克隆 + 奖励模型解决长答案问答；ReAct 定下“思考—行动—观察”的轨迹格式；ArCHer 和 DigiRL 在学术环境与真实手机上验证了多轮 RL 的可行性。这一时期的智能体主要靠提示与模仿学习，RL 还不是主角。
 2. **R1 之后的迁移期（2025 上半年）。** DeepSeek-R1 证明只用结果奖励就能训出长推理（见 [LLM 强化学习](/topics/rl-for-llm#rlvr)）。Search-R1、R1-Searcher、ToRL、ReTool 几乎同时把这套配方搬到检索与代码解释器上，核心增量是**损失屏蔽**和**工具交错的 rollout**。与此同时，OpenAI Deep Research 给出了工业级标杆，SWE-RL 把 RL 带进真实软件工程，RAGEN 与 GiGPO 分别回答了“为什么会崩”和“功劳怎么分”。
 3. **规模化期（2025 年中）。** 问题从“能不能训”变成“能训多大”：Qwen3-Coder 并行运行 2 万个环境，Kimi K2 批量合成工具与任务并做跨环境联合 RL，GLM-4.5 用 slime 支撑智能体 RL；开源侧的 DeepSWE、WebSailor、ASearcher 分别给出 SWE、难题合成与全异步的完整配方。
-4. **系统化期（2025 下半年–2026）。** Tongyi DeepResearch 开源了从中训练到 RL 的全流程；UI-TARS-2 把多轮 RL 扩展到整台电脑；Kimi K2.5 训练编排器调度并行子智能体；GLM-5 与 MiniMax-M2.5 把环境规模推到数十万量级，并用异步、与脚手架解耦的 RL 框架训练跨脚手架泛化的模型；Kimi K3 则把单条轨迹推到数千次工具调用、数百万 token，并用多教师在线蒸馏把各领域的 RL 专家合并成一个模型。
+4. **系统化期（2025 下半年–2026）。** Tongyi DeepResearch 开源了从中训练到 RL 的全流程；UI-TARS-2 把多轮 RL 扩展到整台电脑；Kimi K2.5 训练编排器调度并行子智能体；GLM-5 依托异步 RL 基础设施 slime 转向长程“智能体工程”；MiniMax-M2.5 把真实环境扩到数十万个，并用与脚手架解耦的异步 RL 框架追求跨脚手架泛化；Kimi K3 则把单条轨迹推到数千次工具调用、数百万 token，并用多教师在线蒸馏把各领域的 RL 专家合并成一个模型。
 
 每一次跃迁都不是新的优化器，而是**环境、数据与系统**的升级。这与 Tongyi DeepResearch 的结论一致：智能体 RL 的成败更取决于数据质量与环境稳定性，而非具体算法[^3]。
 
@@ -338,14 +348,14 @@ flowchart TB
 
 - **ReAct** 没有训练，却定义了今天几乎所有智能体 RL 的轨迹格式；读它是为了理解观察为什么天然要被屏蔽。
 - **Search-R1** 是最值得亲手复现的起点：代码、索引、日志全公开，PPO 与 GRPO 的对比结论（GRPO 快但可能奖励崩塌、PPO 更稳）很有参考价值。动手版本见 [搜索智能体实践](/practice/search-agent)。
-- **RAGEN** 的价值在诊断：它描述的“回声陷阱”——奖励方差塌缩后出现梯度尖峰——在搜索、SWE 训练中都会遇到，监控组内奖励方差是最便宜的预警。
+- **RAGEN** 的价值在诊断：它描述的“回声陷阱”（奖励方差塌缩、随后出现梯度尖峰）是多轮 RL 的典型失稳模式，监控组内奖励方差是最便宜的预警。
 - **GiGPO** 给出了零额外成本的步级信用分配，已被阿里 ROLL 等框架原生支持；环境状态会重复的任务应当优先尝试。
 
 ### 深度研究 {#papers-research}
 
 <EntryGrid :ids="['tongyi-deepresearch', 'kimi-researcher', 'websailor', 'asearcher']" />
 
-- **Tongyi DeepResearch** 是目前最完整的开源全流程报告，环境三分法（先验世界、模拟、真实）与“先风洞、后实战”的做法可以直接照搬。
+- **Tongyi DeepResearch** 是披露最完整的开源深度研究全流程报告之一，环境三分法（先验世界、模拟、真实）与“先风洞、后实战”的做法可以直接照搬。
 - **Kimi-Researcher** 篇幅不长，但严格 on-policy（连工具调用格式强制器都关掉）、负样本控制、γ 衰减与轮次级 partial rollout 都是一线踩坑后的结论。
 - **WebSailor** 回答的是“难题从哪来”：用信息混淆造出高不确定性问题，并用 DUPO 降低补批开销。
 - **ASearcher** 用直接的实验说明轮数上限与全异步的重要性，适合做 Infra 选型时参考。
@@ -354,9 +364,9 @@ flowchart TB
 
 <EntryGrid :ids="['retool', 'simpletir', 'kimi-dev', 'ui-tars-2']" />
 
-- **ReTool** 与 **SimpleTIR** 分别代表工具集成推理的“冷启动 + RL”配方和多轮训练的稳定性修复；后者“过滤空轮轨迹”的做法对任何多轮工具训练都适用。
+- **ReTool** 与 **SimpleTIR** 分别代表工具集成推理的“冷启动 + RL”配方和多轮训练的稳定性修复；后者“过滤空轮轨迹”的做法成本极低，其他多轮工具训练也值得先试。
 - **Kimi-Dev** 说明 SWE 场景下“中训练 + 仅结果奖励 RL + 测试时自博弈”就足够强；SWE 的完整动手流程见 [SWE 智能体实践](/practice/swe-agent)。
-- **UI-TARS-2** 是 GUI 方向披露最完整的多轮 RL 工程实践，重点看混合环境与统一沙箱平台。
+- **UI-TARS-2** 是 GUI 方向披露最完整的多轮 RL 工程实践之一，重点看混合环境与统一沙箱平台。
 
 ## 工业实践：一线团队公开了什么 {#industry}
 
@@ -364,13 +374,13 @@ flowchart TB
 
 <EntryGrid :ids="['kimi-k2', 'glm-4-5', 'qwen3-coder', 'kimi-k2-5', 'minimax-m2-5', 'kimi-k3']" />
 
-**1. 环境规模是第一增长曲线。** 并行环境数一路攀升：Kimi K2 的 SWE 环境支持 1 万以上并发沙箱[^4]，Qwen3-Coder 并行运行 2 万个独立环境[^8]，Kimi K2.5 的 Rollout Manager 可同时编排 10 万个智能体任务[^5]，MiniMax-M2.5 在数十万个真实环境中做 RL、其中编码类超过 20 万个[^9]。Qwen3.5 的官方说明则称其 RL 扩展到了“百万级智能体环境”，任务分布逐步变复杂[^13]；DeepSeek-V3.2 也为智能体 RL 合成了 1800 多个环境[^27]。单条轨迹同样在变长：Kimi K3 的训练环境里，一条轨迹常常包含数百到数千次工具调用、累计数百万 token 的上下文，并且随着 RL 算力增加，工具调用步数持续上升[^26]。环境从哪里来、如何配比，见 [多环境与环境工程](/topics/multi-env)。
+**1. 环境规模是第一增长曲线。** 要区分两个数。一是**并发**，即同时跑多少条轨迹：Kimi K2 的 SWE 环境支持 1 万以上并发沙箱[^4]，Qwen3-Coder 并行运行 2 万个独立环境[^8]，Kimi K2.5 的 Rollout Manager 可同时编排 10 万个智能体任务[^5]。二是**环境的种类与数量**：DeepSeek-V3.2 为智能体 RL 合成了 1,800 多个环境[^27]，MiniMax-M2.5 在数十万个真实环境中做 RL、其中编码类超过 20 万个[^9]，Qwen3.5 的官方说明则称其 RL 扩展到“百万级智能体环境”（million-agent environments），任务分布逐步变复杂[^13]。单条轨迹同样在变长：Kimi K3 的训练环境里，一条轨迹常常包含数百到数千次工具调用、累计数百万 token 的上下文，并且随着 RL 算力增加，工具调用步数持续上升[^26]。环境从哪里来、如何配比，见 [多环境与环境工程](/topics/multi-env)。
 
-**2. 合成优先，真实兜底。** Kimi K2 从 GitHub 抓取 3000 多个真实 MCP 工具，再按“类别 → 领域 → 工具”演化出 2 万多个合成工具；配上用户模拟、带状态的工具模拟器和按 rubric 评判的过滤，批量生成工具使用轨迹，而在编码与 SWE 这类对保真度敏感的场景改用真实沙箱[^4]。Tongyi DeepResearch 把环境分成三类：先验世界环境零成本但没有真实反馈，模拟环境稳定便宜，真实环境保真但昂贵；中训练多用前两者，后训练先在模拟环境验证、再到真实环境训练[^3]。
+**2. 合成优先，真实兜底。** Kimi K2 从 GitHub 抓取 3000 多个真实 MCP 工具，再按“类别 → 领域 → 工具”演化出 2 万多个合成工具；配上用户模拟、带状态的工具模拟器和按 rubric 评判的过滤，批量生成用于 SFT 的工具使用轨迹，而在编码与 SWE 这类对保真度敏感的场景改用真实沙箱[^4]。Tongyi DeepResearch 把环境分成三类：先验世界环境零成本但没有真实反馈，模拟环境稳定便宜，真实环境保真但昂贵；中训练多用前两者，后训练先在模拟环境验证、再到真实环境训练[^3]。
 
 **3. 算法保守，工程激进。** 各家的策略优化都很朴素：Kimi-Researcher 用 REINFORCE[^6]，Tongyi DeepResearch 用 token 级 GRPO 变体加留一基线[^3]，Kimi-Dev 沿用 K1.5 的策略优化[^18]，MiniMax-M2.5 沿用 CISPO[^9]。真正下功夫的是稳定性：严格 on-policy、筛除部分负样本以免熵塌缩或策略崩溃[^3][^6]，以及 Kimi K2.5 按对数比率区间做 token 级梯度屏蔽来约束训推不一致——报告称这对长程多步工具调用的稳定性“至关重要”[^5]。
 
-**4. 训推解耦、异步化成为标配。** slime 是 GLM-4.5 到 GLM-5.3 的 RL 框架[^12]，GLM-5 的说明把它定位为提升训练吞吐的异步 RL 基础设施[^11]；MiniMax 自研的 Forge 用一个中间层把训推引擎与智能体完全解耦，异步调度在吞吐与样本离策略程度之间折中，并把共享前缀的训练样本树状合并，约有 40 倍加速[^9]；Kimi-Researcher 采用全异步 rollout 加轮次级 partial rollout[^6]；Kimi K3 为百万 token 级的智能体轨迹组合了 partial rollout、外置 KV cache 保留、自适应限流与可恢复的 microVM 沙箱，让长时间存活的模型状态与环境状态都能跨迭代保留[^26]。
+**4. 训推解耦、异步化成为标配。** slime 是 GLM-4.5 到 GLM-5.3 的 RL 框架[^12]，GLM-5 的说明把它定位为提升训练吞吐的异步 RL 基础设施[^11]；MiniMax 自研的 Forge 用一个中间层把训推引擎与智能体完全解耦，异步调度在吞吐与样本离策略程度之间折中，再配合训练样本的树状合并策略，官方称训练加速约 40 倍[^9]；Kimi-Researcher 采用全异步 rollout 加轮次级 partial rollout[^6]；Kimi K3 为百万 token 级的智能体轨迹组合了 partial rollout、外置 KV cache 保留、自适应限流与可恢复的 microVM 沙箱，让长时间存活的模型状态与环境状态都能跨迭代保留[^26]。
 
 **5. 目标是跨脚手架泛化。** 用户会把模型接进各种智能体框架。MiniMax 的 Forge 支持接入任意智能体脚手架，专门优化模型在不同脚手架与工具间的泛化[^9]；Kimi K2.5 为只支持标准 API 的黑盒环境做了 LLM Gateway 代理来记录 rollout[^5]。Kimi K3 做得更彻底：把智能体脚手架拆成工具接口、系统提示、上下文管理策略、技能、记忆、子智能体等可组合模块，训练时按任务组动态拼出 Kimi Code、Claude Code、Codex 等主流脚手架乃至全新组合，避免模型过拟合某一种工具格式或交互协议[^26]。与之配套的是“交错思考”这类跨轮一致性：MiniMax-M2 要求在历史中原样保留思考内容[^10]，训练拼接必须与之一致。
 
@@ -378,7 +388,7 @@ flowchart TB
 | 团队 / 模型 | 数据与环境 | 算法与奖励 | 基础设施与规模 |
 |---|---|---|---|
 | Kimi-Researcher（2025-06） | 自动合成并校验的工具依赖型与推理密集型题目 | REINFORCE、严格 on-policy、负样本控制、γ 衰减 | 全异步 rollout，轮次级 partial rollout，Kubernetes 混合云沙箱与 MCP[^6] |
-| Kimi K2（2025-07） | 3000+ 真实 MCP 工具、2 万+ 合成工具、工具模拟器、rubric 过滤 | K1.5 式优化，可验证奖励 + 自评 rubric 奖励，预算控制 | 1 万+ 并发 SWE 沙箱，重环境服务化，partial rollout[^4] |
+| Kimi K2（2025-07） | SFT 数据：3000+ 真实 MCP 工具、2 万+ 合成工具、工具模拟器、rubric 过滤；RL：可验证奖励环境与真实 SWE 沙箱 | K1.5 式优化，可验证奖励 + 自评 rubric 奖励，预算控制 | 1 万+ 并发 SWE 沙箱，重环境服务化，partial rollout[^4] |
 | Qwen3-Coder（2025-07） | 真实软件工程任务 | 长程 Agent RL | 2 万个独立环境并行[^8] |
 | Tongyi DeepResearch（2025-09） | 先验世界、离线维基模拟、真实网页三类环境 | GRPO 变体、token 级损失、留一基线、筛负样本、无格式奖励 | rLLM 上的步级异步，统一工具沙箱[^3] |
 | Kimi K2.5（2026-01） | 宽搜索与深搜索等合成提示 | PARL、token 级对数比率屏蔽、GRM | 最多 10 万并发智能体任务，token-in-token-out[^5] |
@@ -405,6 +415,7 @@ flowchart TB
 - **截断轨迹一律记 0 分**：这会惩罚长程探索，模型学会“少干活”；要么屏蔽，要么显式设计效率奖励。
 - **推理引擎开了工具调用格式强制器**：输出看似更规范，但样本已不来自模型自己的分布，破坏了 on-policy 假设。
 - **组内奖励方差持续下降却没有报警**：这往往是回声陷阱或熵塌缩的前兆，应同时监控奖励方差、熵与梯度范数。
+- **没有过滤“空轮”**：既不调用工具也不给答案的轮次会引入低概率 token，在多轮工具推理里累积成梯度爆炸；SimpleTIR 直接丢弃含空轮的轨迹[^19]。
 - **评测时开放了训练时没有的工具或更长的上下文**：分数不可比，也掩盖了训练的真实效果。
 :::
 
@@ -429,8 +440,8 @@ flowchart TB
 [^11]: GLM-5 官方仓库 README 与技术报告 *GLM-5: from Vibe Coding to Agentic Engineering*, arXiv:2602.15763：<https://github.com/zai-org/GLM-5>
 [^12]: slime 官方仓库 README（GLM-4.5 至 GLM-5.3 的 RL 框架）：<https://github.com/THUDM/slime>
 [^13]: Qwen3.5 系列官方仓库 README（Qwen3.5 小节：Scalable RL Generalization 与异步 RL 框架）：<https://github.com/QwenLM/Qwen3.5>
-[^14]: Feng et al., *Group-in-Group Policy Optimization for LLM Agent Training*, arXiv:2505.10978；实现见 verl-agent `gigpo/core_gigpo.py`：<https://github.com/langfengQ/verl-agent>
-[^15]: Zeng et al., *Reinforcing Multi-Turn Reasoning in LLM Agents via Turn-Level Credit Assignment*, arXiv:2505.11821：<https://arxiv.org/abs/2505.11821>
+[^14]: Feng et al., *Group-in-Group Policy Optimization for LLM Agent Training*, arXiv:2505.10978；实现见 verl-agent `gigpo/core_gigpo.py`，默认配置见 `verl/trainer/config/ppo_trainer.yaml`（`algorithm.gigpo`），各环境设置见 `examples/gigpo_trainer/`：<https://github.com/langfengQ/verl-agent>
+[^15]: Zeng et al., *Reinforcing Multi-Turn Reasoning in LLM Agents via Turn-Level Credit Assignment*, arXiv:2505.11821：<https://arxiv.org/abs/2505.11821>；优势分配见官方实现 `verifiers/trainers/mt_grpo_env_trainer.py`（`_assign_advantages`），轮级与结果奖励函数见 `verifiers/examples/triviaqa_search.py`：<https://github.com/SiliangZeng/Multi-Turn-RL-Agent>
 [^16]: Zhou et al., *SWEET-RL: Training Multi-Turn LLM Agents on Collaborative Reasoning Tasks*, arXiv:2503.15478：<https://arxiv.org/abs/2503.15478>
 [^17]: Agentica & Together AI, DeepSWE 训练脚本与说明（rLLM `examples/swe`，留一优势、compact filtering）：<https://github.com/agentica-project/rllm/tree/main/examples/swe>
 [^18]: Moonshot AI, *Introducing Kimi-Dev*（2025-06-16），中训练、RL 设计与测试时自博弈：<https://moonshotai.github.io/Kimi-Dev/>
@@ -441,5 +452,6 @@ flowchart TB
 [^23]: *Scaling Long-Horizon LLM Agent via Context-Folding*, arXiv:2510.11967：<https://arxiv.org/abs/2510.11967>
 [^24]: SkyRL-v0 复现脚本（`examples/sky/run_skyrl_agent_qwen14b_t.sh`，commit a0d50c4）：<https://github.com/NovaSky-AI/SkyRL/tree/a0d50c482436af7fac8caffa4533616a78431d66/examples/sky>
 [^25]: Jin et al., *An Empirical Study on Reinforcement Learning for Reasoning-Search Interleaved LLM Agents*, arXiv:2505.15117：<https://arxiv.org/abs/2505.15117>
-[^26]: Kimi Team, *Kimi K3: Open Frontier Intelligence* 技术报告（§1 概述；§4.1 RL 算法、推理强度控制与智能体 GRM；§4.2 统一白盒 RL 环境、个人助理任务、自主执行任务与网页开发任务）：<https://github.com/MoonshotAI/Kimi-K3>
+[^26]: Kimi Team, *Kimi K3: Open Frontier Intelligence* 技术报告（§1 概述；§4.1 RL 算法、推理强度控制与智能体 GRM；§4.2 统一白盒 RL 环境、个人助理任务、自主执行任务与网页开发任务；§5.3 百万 token 智能体 RL 的训练与沙箱基础设施）：<https://github.com/MoonshotAI/Kimi-K3>
 [^27]: DeepSeek-AI, *DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models*, arXiv:2512.02556：<https://arxiv.org/abs/2512.02556>
+[^28]: Zhou et al., *ArCHer: Training Language Model Agents via Hierarchical Multi-Turn RL*, arXiv:2402.19446；优势计算见官方实现 `archer/algorithms/archer/trainer.py`：<https://github.com/YifeiZhou02/ArCHer>

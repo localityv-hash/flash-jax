@@ -69,7 +69,7 @@
   zh: 训推不一致（rollout-training mismatch）
   area: rl-llm
   plain: "同一个模型，推理引擎和训练引擎算出来的概率不一样，于是“自己出的题”其实成了“别人出的题”。"
-  definition: "同一组权重下，推理引擎采样时的概率 μ 与训练引擎重算的概率 π 不相等，来源包括 kernel 与归约顺序、数值精度（如 BF16）、批大小依赖、并行布局、采样截断处理以及 MoE 路由差异。它让名义上的 on-policy 训练变成 off-policy，需要重要性采样修正或从系统上消除。"
+  definition: "同一组权重下，推理引擎采样时的概率 $\\mu$ 与训练引擎重算的概率 $\\pi_{\\theta_\\text{old}}$ 不相等，来源包括 kernel 与归约顺序、数值精度（如 BF16）、批大小依赖、并行布局、采样截断处理以及 MoE 路由差异。它让名义上的 on-policy 训练变成 off-policy，需要重要性采样修正或从系统上消除。"
   see: [/lenses/infra#mismatch, /lenses/algorithms#off-policy]
 
 - id: routing-replay
@@ -132,5 +132,5 @@
   zh: 数据陈旧度
   area: rl-llm
   plain: "拿来训练的样本，是几个版本之前的模型生成的。越旧越便宜，但越不准。"
-  definition: "训练样本的生成策略版本落后于当前训练策略的步数；异步系统用上限（如 AReaL 的 η）控制它。陈旧度越大吞吐越高，但重要性权重方差与目标函数近似误差也越大，需要 decoupled PPO 或 IS 修正配合。"
+  definition: "训练样本的生成策略版本落后于当前训练策略的步数；异步系统用上限（如 AReaL 的 $\\eta$）控制它。陈旧度越大吞吐越高，但重要性权重方差与目标函数近似误差也越大，需要 decoupled PPO 或 IS 修正配合。"
   see: [/lenses/infra#async]

@@ -9,6 +9,14 @@ prereq:
 
 # 搜索智能体 RL：Search-R1 式最小闭环
 
+::: tldr
+- 最小闭环：Qwen2.5-3B/7B + 本地 wiki-18 检索（e5 + Flat 索引，top-3）+ EM 奖励 + PPO 或 GRPO，单机 8 卡跑约 1000 步，测试 EM 就能明显超过同检索器下的 RAG 基线。
+- 检索结果和运行时插入的纠错提示都不是模型写的，必须从策略损失、熵和 KL 中屏蔽；Search-R1 修复这个 bug 后训练稳定性大幅提升。
+- PPO 起步慢但稳，GRPO 收敛快但可能奖励崩塌；用 GRPO 要确认同一道题的样本真的分在同一组。
+- 先在确定性的本地索引上调通，再考虑在线搜索：API 配额、费用和结果漂移都会污染奖励。
+- 如果只读一节：读 [第四步：屏蔽检索 token](#masking)。
+:::
+
 这个实践单元的目标，是用一台 8 卡机器训练一个会“边想边搜”的问答模型：它自己决定什么时候检索、检索什么，读完结果再作答，只凭答案是否正确拿奖励。配方以 [Search-R1](/library/?id=search-r1) 的开源实现为准，文中的超参数与代码细节都来自其仓库，并在脚注里给出文件位置。
 
 ::: human
@@ -19,7 +27,7 @@ prereq:
 
 - **任务**：开放域问答，训练集为 NQ 与 HotpotQA 的训练集合并，测试覆盖 7 个数据集：NQ、TriviaQA、PopQA 三个单跳，HotpotQA、2WikiMultiHopQA、Musique、Bamboogle 四个多跳。
 - **模型**：Qwen2.5-3B 或 7B，基座版与指令版都可以。
-- **成功标准**：在同一检索器下，测试 EM 明显超过“先检索后生成”的 RAG 基线。论文报告的相对提升约为 24%（7B）与 20%（3B）[^1]；行为上，合法动作比例接近 100%，多跳题会主动发起多次搜索。
+- **成功标准**：在同一检索器下，测试 EM 明显超过“先检索后生成”的 RAG 基线。论文报告的平均相对提升在 20% 以上（3B 约 20%，7B 更高；具体数字随 arXiv 版本更新有变化）[^1]；行为上，合法动作比例接近 100%，多跳题会主动发起多次搜索。
 
 整个闭环如下：
 
@@ -41,8 +49,8 @@ flowchart LR
 
 | 检索后端 | 硬件 | 准确度 | 确定性 | 成本与限制 |
 |---|---|---|---|---|
-| BM25 稀疏检索 | 只需 CPU | 通用领域偏弱 | 完全确定 | 几乎免费 |
-| e5 稠密检索 + Flat 索引 | 需要 GPU（faiss-gpu） | 精确匹配，最准 | 完全确定 | 占用显存 |
+| BM25 稀疏检索 | 只需 CPU | 通常不如稠密检索 | 完全确定 | 几乎免费 |
+| e5 稠密检索 + Flat 索引 | 建议 GPU（faiss-gpu，可多卡分片） | 精确匹配，最准 | 完全确定 | 占用显存 |
 | e5 稠密检索 + HNSW 索引 | 只需 CPU | 近似检索，top-k 较小时掉点 | 完全确定 | 便宜 |
 | 在线搜索 API | 无 | 最接近真实使用 | 结果随时间变化 | 按次计费、有配额 |
 
@@ -56,7 +64,7 @@ flowchart LR
 
 ## 第二步：提示模板与动作格式 {#template}
 
-Search-R1 对基座模型使用下面这段提示（原文），问题拼在最后[^4]：
+Search-R1 的数据处理脚本默认（`template_type=base`）使用下面这段提示，基座与指令模型共用；原文照录，问题拼在最后，训练时再套上模型的聊天模板[^4]：
 
 ```text
 Answer the given question. You must conduct reasoning inside <think> and </think> first every time you get new information. After reasoning, if you find you lack some knowledge, you can call a search engine by <search> query </search> and it will return the top searched results between <information> and </information>. You can search as many times as your want. If you find no further external knowledge needed, you can directly provide the answer inside <answer> and </answer>, without detailed illustrations. For example, <answer> Beijing </answer>. Question: ...
@@ -64,7 +72,7 @@ Answer the given question. You must conduct reasoning inside <think> and </think
 
 四种标签分工明确：`<think>` 里是推理，`<search>` 里是检索词，`<information>` 由环境填入检索结果，`<answer>` 里是最终答案。一轮 rollout 的执行逻辑是[^6]：
 
-1. 模型生成，遇到 `</search>` 或 `</answer>` 就截停，后面的内容丢弃。
+1. 模型每轮最多生成 500 个 token；输出里有 `</search>` 就截到第一个 `</search>`，否则截到第一个 `</answer>`，后面的内容丢弃。解码时并不设停止符，是事后截断，截掉的部分既不进上下文也不参与训练。
 2. 用正则取出第一个 `<search>` 或 `<answer>` 标签里的内容。
 3. 如果是搜索，就批量调用检索服务，把 top-3 文档格式化为 `Doc 1(Title: …) …`，包进 `<information>` 追加到上下文；观察最多保留 500 个 token，超出部分截断。
 4. 如果是答案，这条轨迹结束。
@@ -87,6 +95,7 @@ Answer the given question. You must conduct reasoning inside <think> and </think
 | 答对但格式不合法 | 0.8 |
 | 答错但格式合法 | 0.2 |
 | 答错且格式不合法 | 0.1 |
+| 没有作答（抽不出答案） | 0 |
 
 研究结论是：格式奖励能提升最终效果，尤其是从基座模型起步时；而“检索结果里是否出现了标准答案”这类中间检索奖励作用有限，默认配置里它的权重就是 0[^8]。
 
@@ -130,11 +139,11 @@ pg_loss = (per_token_loss * mask).sum() / mask.sum()                 # 只在模
 
 论文对比得出三条可以直接用的结论[^1]：
 
-1. **GRPO 收敛更快，PPO 更稳。** PPO 的 critic 需要预热，所以起步慢；但 GRPO 在部分设置下长时间训练后会出现奖励崩塌（例如 LLaMA3.2-3B-Instruct），PPO 在不同架构上都保持稳定。两者的最终训练奖励相当。
+1. **GRPO 收敛更快，PPO 更稳。** PPO 的 critic 需要预热，所以起步慢；GRPO 在部分设置下训练久了会出现奖励崩塌，PPO 则一直稳定。两者的最终训练奖励相当。
 2. **指令模型起步更快，最终与基座相当。** 指令模型的初始表现更高、收敛更快，但训练足够久之后，两者的训练奖励非常接近。
-3. **检索 token 屏蔽是稳定性的前提。** 不屏蔽时训练明显更不稳定。
+3. **检索 token 屏蔽是稳定性的前提。** 屏蔽后效果更好、训练更稳。
 
-还有一个容易被忽略的实现细节：GRPO 的优势要在“同一道题的 $G$ 条样本”之间比较。Search-R1 在 v0.2 除了修复屏蔽问题，还修复了 GRPO 的样本分组索引 bug[^7]——分组一旦错位，优势就变成了在不同题目之间比较，梯度方向毫无意义，曲线却可能看起来“还在涨”。自己实现时，务必对每组样本断言它们的题目 ID 相同。
+还有一个容易被忽略的实现细节：GRPO 的优势要在“同一道题的 $G$ 条样本”之间比较。Search-R1 在 v0.2 除了修复屏蔽问题，还修复了 GRPO 的样本分组 bug[^7]：修复前，样本先按每题 5 条复制、再逐条分配随机 ID，同一道题的 5 条样本落进了 5 个单样本组。而 verl 对单样本组把均值记 0、标准差记 1，优势就等于原始奖励，GRPO 悄悄退化成没有基线的 REINFORCE：答错的样本得不到负信号，曲线却照样在涨，很难察觉。修复后改用数据集里的题目编号做分组 ID。自己实现时，务必断言每组样本的题目 ID 相同、组大小等于每题采样数。
 
 实操建议：第一次跑用 PPO 或带 KL 的 GRPO；如果 GRPO 出现奖励骤降、梯度范数尖峰，先降学习率、加大每题采样数，或换回 PPO。组内采样数越小，组内全对或全错的比例越高，参见 [让奖励有方差](/topics/agentic-rl#reward)。
 
@@ -158,7 +167,7 @@ pg_loss = (per_token_loss * mask).sum() / mask.sum()                 # 只在模
 - **模型 token 占比**：即上一节的 `state_tokens/coverage`。
 - **验证集 EM**：每 50–100 步在留出集上评一次，与训练奖励对照，防止只在训练分布上涨分。
 
-正常的曲线大致是：训练奖励稳步上升；回答长度先降后升，论文将其解释为模型先去掉冗余内容，再学会通过更多检索与推理解题[^1]；合法动作比例很快饱和。危险信号是：奖励突然断崖式下跌并伴随梯度范数尖峰（奖励崩塌）；同一个检索词在一条轨迹里反复出现；回答长度爆涨却不再发起检索。
+正常的曲线大致是：训练奖励稳步上升；回答长度先降后升，论文的解释是模型先去掉冗余的填充内容，之后学会频繁调用搜索，检索回来的段落让回答变长[^1]；合法动作比例很快饱和。危险信号是：奖励突然断崖式下跌并伴随梯度范数尖峰（奖励崩塌）；同一个检索词在一条轨迹里反复出现；回答长度爆涨却不再发起检索。
 
 ## 第八步：评测 {#eval}
 
@@ -214,7 +223,7 @@ pg_loss = (per_token_loss * mask).sum() / mask.sum()                 # 只在模
 [^4]: Search-R1 数据处理脚本 `scripts/data_process/nq_search.py` 中的提示模板：<https://github.com/PeterGriffinJin/Search-R1/blob/main/scripts/data_process/nq_search.py>
 [^5]: Search-R1 奖励函数 `verl/utils/reward_score/qa_em.py`（EM 与子串匹配、答案抽取）与 `qa_em_format.py`（格式奖励），v0.3 脚本中 structure_format_score=0.2、final_format_score=0.1、retrieval_score=0：<https://github.com/PeterGriffinJin/Search-R1/tree/main/verl/utils/reward_score>
 [^6]: Search-R1 多轮生成循环 `search_r1/llm_agent/generation.py`（截停、动作解析、观察截断、纠错提示、屏蔽序列、多卡补齐、统计量）：<https://github.com/PeterGriffinJin/Search-R1/blob/main/search_r1/llm_agent/generation.py>
-[^7]: Search-R1 实验日志 `docs/experiment_log.md`：<https://github.com/PeterGriffinJin/Search-R1/blob/main/docs/experiment_log.md>
+[^7]: Search-R1 实验日志 `docs/experiment_log.md`：<https://github.com/PeterGriffinJin/Search-R1/blob/main/docs/experiment_log.md>；分组 bug 的修复见提交 `9ec2fa9`（“fix grpo id bug”，`verl/trainer/ppo/ray_trainer.py` 中的 `uid` 分配），单样本组的处理见 `verl/trainer/ppo/core_algos.py` 的 `compute_grpo_outcome_advantage`
 [^8]: Jin et al., *An Empirical Study on Reinforcement Learning for Reasoning-Search Interleaved LLM Agents*, arXiv:2505.15117：<https://arxiv.org/abs/2505.15117>
 [^9]: Sun et al., *ZeroSearch: Incentivize the Search Capability of LLMs without Searching*, arXiv:2505.04588：<https://arxiv.org/abs/2505.04588>
 [^10]: Gao et al., *Beyond Ten Turns: Unlocking Long-Horizon Agentic Search with Large-Scale Asynchronous RL*, arXiv:2508.07976（奖励函数、训练细节、数据合成与评测协议）：<https://arxiv.org/abs/2508.07976>

@@ -19,13 +19,13 @@
     - { label: "续作：The N+ Implementation Details of RLHF with PPO（COLM 2024）", url: https://openreview.net/forum?id=kHO2ZTa8e3 }
   areas: [classic-rl, rl-llm]
   facets: [algorithm, infra]
-  tier: must
-  evidence: [community, open-source, adopted]
-  evidence_note: "ICLR 2022 博客赛道文章：先考证 openai/baselines 的历史版本，再逐条给出 37 个细节的源码永久链接，并用单文件实现复现官方曲线。Hugging Face 的 Deep RL 课程把它列为 PPO 进阶必读；HF 的 RLHF 复现博客（2023）照搬其“逐条细节 + 对齐学习曲线”的方法，TRL 的 RLOO 博客（与 Cohere For AI 合写，2024）也以它说明 PPO 细节之难。"
-  summary: "逐条梳理 PPO 官方实现里论文没写的 37 个细节（13 条通用核心，其余针对 Atari、连续控制、LSTM 等）：正交初始化、Adam ε=1e-5、学习率退火、小批量级优势归一化、价值损失裁剪、全局梯度裁剪等，并附调试清单。"
+  tier: rec
+  evidence: [community, open-source]
+  evidence_note: "ICLR 2022 博客赛道文章：先考证 openai/baselines 的历史版本，再逐条给出 37 个细节的源码永久链接，并用单文件实现复现官方曲线，是复现 PPO 的常用参照，Hugging Face 的 Deep RL 课程把它列为 PPO 进阶必读。它对 LLM RL 的影响主要经由同一作者在 Hugging Face 的 RLHF 复现博客（2023）与 N+ 论文（COLM 2024）传开；TRL 的 RLOO 博客（与 Cohere For AI 合写，2024）也以它说明 PPO 细节之难。"
+  summary: '逐条梳理 PPO 官方实现里论文没写的 37 个细节（13 条通用核心，其余针对 Atari、连续控制、LSTM 等）：正交初始化、Adam $\epsilon=10^{-5}$、学习率退火、小批量级优势归一化、价值损失裁剪、梯度裁剪等，并附调试清单。'
   plain: "同一个 PPO，论文里是一页公式，代码里藏着几十个“小开关”。这篇把开关逐个找出来、标清出处、验证影响；照着核对，你的 PPO 才算真正复现了。"
   takeaways:
-    - "自己实现或改造 PPO/GRPO 时先做两项体检：第一个 epoch 的第一个 minibatch 里比率应恒为 1；approx_kl 按原文经验通常低于 0.02，持续偏高多半是 bug 或步子太大。"
+    - "自己实现或改造 PPO/GRPO 时先做两项体检：第一个 epoch 的第一个 minibatch 里比率应恒为 1；`approx_kl` 按原文经验通常低于 0.02，持续偏高多半是 bug 或步子太大。"
     - "发表对比实验时逐条列出所用的实现细节（优势归一化的粒度、是否裁剪价值损失、梯度裁剪阈值等），否则别人无法判断增益来自算法还是来自细节。"
     - "默认流程是“先对齐一个可信的参考实现、复现出曲线，再改算法”，而不是从零写一个新训练器直接比。"
   builds_on: [ppo, cleanrl]
@@ -47,11 +47,11 @@
   tier: rec
   evidence: [open-source, community, adopted]
   evidence_note: "最常被当作参考实现阅读的深度 RL 代码库之一，实验曲线在 Open RL Benchmark 上公开可查。PyTorch 团队的 LeanRL（pytorch-labs）在 CleanRL 实现上做 CUDA Graphs 等加速，CORL 按同样风格实现离线 RL，Hugging Face Deep RL 课程以 CleanRL 的 PPO 作为从零实现的范本。"
-  summary: "把每个算法变体的全部细节写进一个独立文件（如 ppo_atari.py 约 340 行），配套基准曲线、种子复现与实验追踪；牺牲代码复用，换取可逐行对照、可快速魔改的研究基线。"
+  summary: "把每个算法变体的全部细节写进一个独立文件（如 `ppo_atari.py` 约 330 行），配套基准曲线、种子复现与实验追踪；牺牲代码复用，换取可逐行对照、可快速魔改的研究基线。"
   plain: "不做“框架”，只做一份能从头读到尾的代码。想知道 PPO 到底怎么跑，读一个文件就够，不用在十几个抽象类之间来回跳。"
   takeaways:
     - "验证 LLM RL 的新想法时，先在单文件、小模型的最小实现上跑通，再搬进 verl、OpenRLHF 这类大框架。"
-    - "把 approx_kl、clipfrac 这类调试指标当作一等公民记录：CleanRL 的 ppo.py 同时记录 k1 与 k3 两种 KL 估计。"
+    - "把 `approx_kl`、`clipfrac` 这类调试指标当作一等公民记录：CleanRL 的 `ppo.py` 同时记录 k1 与 k3 两种 KL 估计。"
   tags: [单文件实现, 研究基线, 可复现性]
 
 - id: what-matters-on-policy
@@ -92,7 +92,7 @@
   facets: [algorithm, theory]
   tier: rec
   evidence: [open-source, community, ablation]
-  evidence_note: "离线 RL 的标志性基线，被引极高；在 D4RL 与 Atari 离线数据上系统对比，论文报告在复杂、多模态数据上常取得 2–5 倍的最终回报。ILQL 把它的保守正则搬到了 token 级语言生成。"
+  evidence_note: "离线 RL 的标志性基线，被引极高；在 D4RL 与 Atari 离线数据上系统对比，论文报告在复杂、多模态数据上最终回报常是已有离线方法的 2–5 倍。ILQL 把它的保守正则搬到了 token 级语言生成。"
   summary: "在 Bellman 误差之外加一个正则：压低策略偏好动作（对 Q 取 soft-max）的 Q 值、抬高数据中动作的 Q 值，使学到的 Q 在期望意义上成为策略真实价值的下界，避免离线训练对分布外动作的高估。"
   plain: "没见过的招式，一律先假设它不怎么样；只有数据里真出现过、效果也确实好的招式才给高分。这样模型就不会被“想象中的好招”带偏。"
   takeaways:
@@ -115,11 +115,11 @@
   tier: rec
   evidence: [open-source, community, ablation]
   evidence_note: "离线 RL 最常用的强基线之一，官方 JAX 代码与 rlkit 中的 PyTorch 复现均公开；在 D4RL（尤其稀疏奖励的 AntMaze）上系统评测，并展示了离线预训练后再在线微调的效果。"
-  summary: "训练中从不查询数据集外的动作：用 expectile 回归让 V(s) 逼近数据内动作 Q 值的上分位，Q 以 r+γV(s′) 为 TD 目标；最后用优势加权回归（AWR）从数据中抽取策略。"
+  summary: '训练中从不查询数据集外的动作：用 expectile 回归让 $V(s)$ 逼近数据内动作 Q 值的上分位，Q 以 $r+\gamma V(s'')$ 为 TD 目标；最后用优势加权回归（AWR）从数据中抽取策略。'
   plain: "只在“真实发生过的招式”里挑：估计每个局面下数据里较好的那些做法能拿多少分，再让策略多学那些比平均水平更好的做法。"
   takeaways:
     - "只有离线数据时，优先考虑“只在数据内做改进”的方法（IQL、加权 SFT），它们几乎不会因分布外动作而崩溃。"
-    - "expectile τ 是乐观程度的旋钮：官方配置在运动控制上取 0.7，在稀疏奖励的 AntMaze 上取 0.9；AWR 的权重还被截断在 100 以内防止爆炸。"
+    - 'expectile $\tau$ 是乐观程度的旋钮：官方配置在运动控制上取 0.7，在稀疏奖励的 AntMaze 上取 0.9；AWR 的权重还被截断在 100 以内防止爆炸。'
   tags: [离线 RL, expectile, AWR]
 
 - id: ilql
@@ -137,11 +137,11 @@
   tier: rec
   evidence: [open-source, community]
   evidence_note: "把 IQL 搬到 token 级文本生成的代表工作，官方代码公开；CarperAI 的 RLHF 库 trlX 曾把 ILQL 与 PPO 并列为两种内置训练算法。"
-  summary: "把每个 token 当作动作，在固定文本数据上用 IQL 式 expectile 回归学习 token 级 Q/V，并加 CQL 式正则压低未出现 token 的 Q；解码时把 β·(Q−V) 加到语言模型的 logits 上。"
+  summary: '把每个 token 当作动作，在固定文本数据上用 IQL 式 expectile 回归学习 token 级 $Q$ 与 $V$，并加 CQL 式正则压低未出现 token 的 Q；解码时把按系数放大的 $Q-V$ 加到语言模型的 logits 上。'
   plain: "不重新采样，只用现成的带分数文本，给每个词估一个“往后还能拿多少分”；生成时把高分的词往上推一点。"
   takeaways:
     - "只有一批带分数的历史文本、又不能在线采样时，token 级价值学习 + 解码时加权是可行路线；但工业界更常用拒绝采样微调或 DPO 这类更简单的离线做法。"
-    - "解码时的加权强度 β 就是“离数据多远”的旋钮：β 越大越偏离原模型，Q 值越可能落在没被校准过的区域。"
+    - '解码时 $Q-V$ 的放大系数（ILQL 论文记作 $\beta$）就是“离数据多远”的旋钮：系数越大越偏离原模型，Q 值越可能落在没被校准过的区域。'
   builds_on: [iql, cql]
   tags: [离线 RL, token 级价值, 文本生成]
 
@@ -236,7 +236,7 @@
   plain: "搜索预算很紧、只能试几步棋时，老办法可能白算一场。Gumbel MuZero 先有章法地随机挑几个候选，再逐轮淘汰差的，保证“搜完之后的选择不比搜之前差”。"
   takeaways:
     - "每步只能展开少数候选时，用无放回采样 + 逐轮淘汰来挑候选，比按访问次数挑更稳。"
-    - "把搜索产出的改进策略（mctx 的 action_weights）当作蒸馏目标训练策略网络，这就是 AlphaZero 家族里的专家迭代。"
+    - "把搜索产出的改进策略（mctx 的 `action_weights`）当作蒸馏目标训练策略网络，这就是 AlphaZero 家族里的专家迭代。"
   tags: [MCTS, MuZero, 策略改进, JAX]
 
 - id: dreamerv3
@@ -259,7 +259,7 @@
   summary: "学习一个世界模型，在想象出的轨迹上训练 actor-critic；靠 symlog 变换、free bits、按 5%–95% 分位数范围归一化回报等技巧，让一套超参数通用于 150 多个任务，并首次不借助人类数据从零在 Minecraft 挖到钻石。"
   plain: "先在脑子里学会“世界怎么运转”，再在脑内模拟里反复练习。最大的卖点是不用调参：一套设置从雅达利游戏、机器人控制一直用到 Minecraft。"
   takeaways:
-    - "奖励尺度差异大时，按分位数范围归一化回报、并且只缩小不放大（除以 max(1, S)），比除以标准差更稳：稀疏奖励下标准差接近 0，会把噪声放大。"
+    - '奖励尺度差异大时，按分位数范围 $S$ 归一化回报、并且只缩小不放大（除以 $\max(1,S)$），比除以标准差更稳：稀疏奖励下标准差接近 0，会把噪声放大。'
     - "想要一套超参数走天下，就在算法内部解决输入输出的尺度问题（symlog、回报归一化），而不是留给每个任务去调。"
   tags: [世界模型, 想象训练, 固定超参数]
 

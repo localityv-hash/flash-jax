@@ -1,4 +1,4 @@
-# SFT 专题（/topics/sft）的术语。字段均按纯文本渲染，公式用 Unicode 书写。
+# SFT 专题（/topics/sft）的术语。plain 与 definition 支持 $公式$ 与 `代码`（构建时渲染）；含反斜杠的字符串用单引号。
 
 - id: sft
   term: SFT
@@ -6,7 +6,7 @@
   zh: 监督微调
   area: sft
   plain: "拿“题目 + 标准答案”让模型逐字模仿，教它按要求的格式和口吻作答。"
-  definition: "在预训练（或中训练）模型上，用示范数据 (x, y*) 最小化回答部分的逐 token 交叉熵 −Σ_t log π_θ(y*_t ∣ x, y*_<t)（教师强制）。它等价于最小化数据分布到模型的前向 KL，是覆盖式（mass-covering）的离线模仿学习。"
+  definition: '在预训练（或中训练）模型上，用示范数据 $(x, y^\ast)$ 最小化回答部分的逐 token 交叉熵 $-\sum_t \log\pi_\theta(y^\ast_t\mid x, y^\ast_{<t})$（教师强制）。它等价于最小化前向 KL $\KL(p_\text{data}\Vert\pi_\theta)$，是覆盖式（mass-covering）的离线模仿学习。'
   see: [/topics/sft#objective]
 
 - id: instruction-tuning
@@ -33,7 +33,7 @@
   zh: 提示掩码
   area: sft
   plain: "只在模型该说的话（回答）上算损失；题目、系统提示、工具返回都只读不学。"
-  definition: "把提示部分 token 的 label 设为 −100（忽略），只对 assistant 回答及其轮次结束符计算交叉熵。多轮对话可对全部 assistant 轮或仅最后一轮计算；智能体轨迹中环境观测同样要掩掉。"
+  definition: "把提示部分 token 的 label 设为 `-100`（忽略），只对 assistant 回答及其轮次结束符计算交叉熵。多轮对话可对全部 assistant 轮或仅最后一轮计算；智能体轨迹中环境观测同样要掩掉。"
   see: [/topics/sft#masking]
 
 - id: packing
@@ -42,7 +42,7 @@
   zh: 序列打包
   area: sft
   plain: "把多条短样本拼进一个长序列，少做无用的补齐；但要让每条样本只“看见”它自己。"
-  definition: "把多条样本拼接成定长块以提升吞吐。SFT 中需配合块对角因果掩码（FlashAttention 变长接口或按样本重置 position_ids）避免跨样本注意力，并优先用 best-fit 装箱，避免“先拼接再切块”把样本拦腰截断。"
+  definition: "把多条样本拼接成定长块以提升吞吐。SFT 中需配合块对角因果掩码（FlashAttention 变长接口或按样本重置 `position_ids`）避免跨样本注意力，并优先用 best-fit 装箱，避免“先拼接再切块”把样本拦腰截断。"
   see: [/topics/sft#packing]
 
 - id: long-cot
@@ -55,8 +55,8 @@
   see: [/topics/sft#long-cot]
 
 - id: rejection-sampling
-  term: 拒绝采样微调
-  full: Rejection Sampling Fine-Tuning
+  term: 拒绝采样
+  full: Rejection Sampling (Fine-Tuning)
   zh: 拒绝采样
   area: sft
   plain: "让模型对同一题答很多遍，只留下答对（或得分高）的那些，再拿来训练自己。"
@@ -69,7 +69,7 @@
   zh: 低秩适配
   area: sft
   plain: "不动原权重，只在旁边挂两块很“瘦”的矩阵来学增量：省显存、好切换，设置对了效果不输全参。"
-  definition: "把权重更新写成 ΔW = (α/r)·BA，其中 B ∈ R^(d×r)、A ∈ R^(r×k)、r ≪ min(d, k)，冻结原权重只训练 A、B。Thinking Machines 的实验表明：挂到所有线性层、学习率约为全参 10 倍时，LoRA 在中小规模后训练数据与 RL 上可匹配全参微调。"
+  definition: '把权重更新写成 $\Delta W=\frac{\alpha}{r}BA$，其中 $B\in\mathbb R^{d\times r}$、$A\in\mathbb R^{r\times k}$、$r\ll\min(d,k)$，冻结原权重只训练 $A$、$B$。Thinking Machines 的实验表明：挂到所有线性层、学习率约为全参 10 倍时，LoRA 在中小规模后训练数据与 RL 上可匹配全参微调。'
   see: [/topics/sft#lora]
 
 - id: cold-start
@@ -114,5 +114,5 @@
   zh: 损失聚合
   area: sft
   plain: "一个批次里各 token 的损失怎么加起来：每条样本一票，还是每个 token 一票。长短样本混训时结果差很多。"
-  definition: "批内逐 token 损失的归一化方式：按序列平均（每条样本等权，长回答的 token 被稀释）、全局按 token 平均（每个 token 等权）或直接求和。梯度累积与数据并行下必须用全局 token 数归一化，否则会隐式改变样本权重。"
+  definition: "批内逐 token 损失的归一化方式：按序列平均（每条样本等权，长回答的 token 被稀释）、全局按 token 平均（每个 token 等权）或直接求和。梯度累积与数据并行下应按全局 token 数归一化，否则“每个微批先平均”会隐式放大 token 少的微批的权重。"
   see: [/topics/sft#loss-aggregation]

@@ -9,6 +9,14 @@ prereq:
 
 # 一次 On-Policy 蒸馏：最小可跑通配方
 
+::: tldr
+- 最小闭环只有四步：学生以温度 1 采样，教师做一次前向给每个回答 token 打 log 概率，以 $\log\pi_T-\log\pi_\theta$ 为逐 token 优势做策略梯度更新，再同步权重。
+- 唯一的硬约束是师生共享 tokenizer；开训前先跑“学生 = 教师”的自检，KL 压不到接近 0 就别往下走。
+- 学生没见过教师的格式时先离线蒸馏、再在线蒸馏；每题 1–4 个样本、折扣 0、KL 系数 1 是主流框架共同的起点。
+- 监控不能只看 KL：长度、截断率、单 token 最大 KL 和真实任务指标要一起看，长度突然暴涨是典型的崩溃信号。
+- 如果只读一节：读 [步骤](#steps)。
+:::
+
 这个单元的目标：用一个同 tokenizer 的强教师，把一个已经会按格式作答的小模型在数学推理上“拉”上去。跑通之后你会得到三样东西：一个分数明显提升的学生、一套判断训练是否健康的监控曲线，以及一份能迁移到其他任务（代码、对话、专家合并）的配方。
 
 ::: human
@@ -28,10 +36,10 @@ prereq:
 | 规模 | 学生 | 教师 | 提示数据 | 框架与入口 |
 |---|---|---|---|---|
 | 单卡试水 | Qwen2.5-0.5B-Instruct | Qwen2.5-1.5B-Instruct | UltraFeedback 提示 | TRL `DistillationTrainer`（文档快速上手） |
-| 单机 8 卡 | Qwen3-8B | Qwen3-32B | GSM8K + MATH | verl `examples/on_policy_distillation_trainer/run_qwen3_8b_fsdp.sh` |
+| 多卡（8 卡训练 + 4 卡教师） | Qwen3-8B | Qwen3-32B | GSM8K + MATH | verl `examples/on_policy_distillation_trainer/run_qwen3_8b_fsdp.sh` |
 | 托管 LoRA | Qwen3.5-9B-Base（先 SFT） | Qwen3.5-9B | DeepMath | tinker-cookbook `recipes.distillation.on_policy_distillation` |
 
-选模型时只有一条硬约束：**学生和教师必须共享 tokenizer 与词表**。slime、verl 和 TRL 的异步蒸馏都把学生的 token id 原样发给教师打分[^verl][^trl]，最省事的是同家族的大小模型。除此之外还要看“思维模式”是否兼容：用会长链思考的教师去教从没见过这种格式的学生，教师在学生前缀上的反馈会对不上，这时应先做一段离线蒸馏[^rethinking]。
+选模型时只有一条硬约束：**学生和教师必须共享 tokenizer 与词表**。slime、verl 和 TRL 的异步蒸馏都把学生的 token id 原样发给教师打分[^slime][^verl][^trl]，最省事的是同家族的大小模型。除此之外还要看“思维模式”是否兼容：用会长链思考的教师去教从没见过这种格式的学生，教师在学生前缀上的反馈会对不上，这时应先做一段离线蒸馏[^rethinking]。
 
 ## 步骤 {#steps}
 
@@ -60,7 +68,7 @@ flowchart TD
 
 ### 2. 准备提示 {#prompts}
 
-OPD 只需要提示。和 RL 不同，它不怕“全对”或“全错”的题——每个 token 都有信号，不存在组内优势全为 0 的问题；但提示最好落在**教师擅长**的分布里，否则教师自己的判断也不可靠[^rethinking]。数量上不必贪多：TM 的数学实验每步 512 条提示、每条 4 个样本，约 150 步用掉约 7.7 万条；他们还发现在同一条提示上反复训练仍然有效，因为目标是教师的整个分布而不是某个答案[^tm]。
+OPD 只需要提示。和 RL 不同，它不怕“全对”或“全错”的题——每个 token 都有信号，不存在组内优势全为 0 的问题；但提示最好落在**教师擅长**的分布里，否则教师自己的判断也不可靠[^rethinking]。数量上不必贪多：TM 的数学实验约 150 步用掉约 7.7 万条提示（相当于每步约 512 条），每条 4 个样本；他们还发现在同一条提示上反复训练仍然有效，因为目标是教师的整个分布而不是某个答案[^tm]。
 
 ### 3. 可选：离线蒸馏冷启动 {#cold-start}
 
@@ -68,7 +76,7 @@ OPD 只需要提示。和 RL 不同，它不怕“全对”或“全错”的题
 
 ### 4. 学生采样 {#rollout}
 
-温度设为 1.0，不加 top-p、top-k 截断。OPD 的梯度推导假设样本来自学生自己的分布，截断采样会改变这个分布；确实要用 top-p（Revisiting OPD 这样做以减少离谱前缀）时，要清楚这是有意引入的偏差[^revisiting]。每条提示采 1–4 个样本即可：优势来自教师，不需要组内基线，GLM-5 甚至把组大小设为 1[^glm5]。
+温度设为 1.0，不加 top-p、top-k 截断。OPD 的梯度推导假设样本来自学生自己的分布，截断采样会改变这个分布；确实要用 top-p（Revisiting OPD 这样做以减少离谱前缀）时，要清楚这是有意引入的偏差[^revisiting]。每条提示采 1–4 个样本即可：优势来自教师，不需要组内基线，GLM-5 与 verl 的官方示例都把组大小设为 1[^glm5][^verl]。
 
 ### 5. 教师打分 {#teacher}
 
@@ -96,20 +104,20 @@ loss = (loss * mask).sum() / mask.sum()                # 按 token 平均；mask
 loss.backward(); optimizer.step()
 ```
 
-说明：Tinker 在优势里用的是采样时的 log 概率而不是训练引擎重算的值，两种写法在同步训练时几乎一样[^tinker]；MiMo-V2-Flash 不做裁剪，而是把比值越界的 token 直接丢掉[^mimo]。想同时用结果奖励，就把任务优势加到 `adv` 上（MiMo 的做法），或在 verl 里打开 `use_task_rewards`，并记得关掉参考模型 KL[^verl]。
+说明：Tinker 在优势里用的是采样时的 log 概率而不是训练引擎重算的值，两种写法在同步训练时几乎一样[^tinker]；MiMo-V2-Flash 不做裁剪，而是把比值越界的 token 直接丢掉[^mimo]。想同时用结果奖励，就把任务优势加到 `adv` 上（MiMo 的做法），或在 verl 里把 `use_task_rewards` 设为 true（官方 OPD 示例设的是 false；打开后蒸馏损失按 `distillation_loss_coef` 加到 PPO/GRPO 损失上），并记得关掉参考模型 KL[^verl]。
 
 ### 7. 超参数起步值 {#hparams}
 
 | 超参数 | 起步值 | 依据 |
 |---|---|---|
 | 采样温度 | 1.0，不截断 | TM、TRL、verl 的默认设置；改采样分布就要做修正 |
-| 每条提示的样本数 | 1–4 | 不需要组内基线；GLM-5 用 1，Tinker 默认 4 |
-| 每步提示数 | 128–512 | verl 示例 128；TM 数学实验 512 |
+| 每条提示的样本数 | 1–4 | 不需要组内基线；GLM-5 与 verl 示例用 1，Tinker 默认 4 |
+| 每步提示数 | 64–512 | TM 博客的默认配置 64、数学实验约 512；verl 示例 128 |
 | 学习率 | 全参 1e-6 起；LoRA 1e-4 | verl 示例与 TRL 默认 1e-6；Tinker 的 LoRA 用 1e-4、全参 OPD 用 5e-5 |
 | KL 系数 | 1.0 | Tinker、slime、verl 的默认值 |
 | 折扣 γ | 0 | TM 试过大于 0，没有收益 |
 | 最大回答长度 | 按任务 2K–16K | verl 示例 2048；tinker-cookbook 的 AIME 配方 16K |
-| 裁剪范围 | 0.2 / 0.28 | verl 的 PG OPD 示例 |
+| 裁剪范围 | 0.2 / 0.28 | verl 文档的 PG OPD 配置（示例脚本用默认的 0.2 / 0.2） |
 
 不同框架的损失归一化方式不同（按 token 平均还是按序列求和、是否按长度归一化），学习率不能跨框架照搬，换框架时先用小学习率确认曲线方向。
 
@@ -125,7 +133,7 @@ loss.backward(); optimizer.step()
 | 重要性比值越界比例 | 很低 | 升高：推理引擎与训练引擎不一致，或样本太旧 |
 | 真实任务指标 | 上升 | 与 KL 背离：学生在拟合教师的偏差，或评测本身有问题 |
 
-框架里对应的日志项：Tinker 记录 `teacher_kl`；verl 在 `actor/distillation/*` 下记录损失、最大最小值以及 `overlap_ratio`、`teacher_mass`、`student_mass`；TRL 记录回答长度、截断比例 `completions/clipped_ratio` 和熵[^verl][^trl][^tinker]。注意单样本估计的 KL 可以是负数，看的是均值和趋势。
+框架里对应的日志项：Tinker 记录 `teacher_kl`；verl 在 `actor/distillation/*` 下记录损失及其最大最小值，用 top-k 损失时还记录 `overlap_ratio`、`teacher_mass`、`student_mass`；TRL 记录回答长度、截断比例 `completions/clipped_ratio` 和熵[^verl][^trl][^tinker]。注意单样本估计的 KL 可以是负数，看的是均值和趋势。
 
 ## 成本估算 {#cost}
 
@@ -138,9 +146,11 @@ loss.backward(); optimizer.step()
 | 学生重算 log 概率 | $2N_S$ | 约 16 G | 部分框架可省（直接用采样时的值） |
 | 学生训练 | $6N_S$ | 约 48 G | 与 RL 相同 |
 
-教师前向约占总 FLOPs 的四成，但它是效率最高的那种计算；墙钟时间的大头通常仍是学生的长链解码，这一点和 RL 一样。OPD 省钱的地方不在单步，而在**步数和样本数**：每条提示只要 1–4 个样本（GRPO 类 RL 往往每题要采 8 个以上来估计组内基线），达到同样水平所需的步数也少得多。按 TM 数学实验的规模粗算（每步 512 条提示 × 4 个样本，假设平均每个回答约 4K token，合计约 840 万 token），一步约 $1.2\times10^{18}$ FLOPs，150 步约 $2\times10^{20}$ FLOPs，按 H100 BF16 峰值的 40% 折合一两百个 GPU 时的纯计算量，再加上解码利用率低带来的额外开销。这只是量级估计，实际取决于回答长度和实现，但可以和 Qwen3 报告中 8B 模型 OPD 的 1,800 GPU 时、RL 的 17,920 GPU 时对照着看[^qwen3]。
+四项合计每 token 约 144 GFLOPs，教师前向占四成多，但它是效率最高的那种计算；墙钟时间的大头通常仍是学生的长链解码，这一点和 RL 一样。OPD 省钱的地方不在单步，而在**步数和样本数**：每条提示只要 1–4 个样本（GRPO 类 RL 往往每题要采 8 个以上来估计组内基线），达到同样水平所需的步数也少得多。
 
-显存方面，32B 教师的 BF16 权重约 64 GB，在 80 GB 卡上通常用张量并行 2 卡一份；verl 的 8B 示例给教师分配 4 张卡、张量并行 2[^verl]。
+按 TM 数学实验的规模粗算（每步约 512 条提示 × 4 个样本，假设平均每个回答约 4K token，合计约 840 万 token）：一步约 $1.2\times10^{18}$ FLOPs，150 步约 $1.8\times10^{20}$ FLOPs；不计重算那一项（Tinker 直接用采样时的值）约 $1.6\times10^{20}$，与 TM 表中 OPD 的 $8.4\times10^{19}$（教师，按 32B 计）加 $8.2\times10^{19}$（学生）基本吻合。按 H100 BF16 稠密峰值（约 989 TFLOPS）的 40% 折算，这相当于一百多个 GPU 时的纯计算，实际还要加上解码利用率低带来的开销。Qwen3 报告里 8B 的 OPD 用了 1,800 GPU 时（RL 为 17,920）[^qwen3]，它的教师更大、配置未公开，不能直接对比，只能帮助建立量级感。
+
+显存方面，32B 教师的 BF16 权重约 64 GB，在 80 GB 卡上通常用张量并行 2 卡一份。verl 的教师占用独立的资源池：8B 示例在 8 张训练卡之外另给教师 4 张卡（张量并行 2），共需 12 张卡，卡不够时可以用脚本里的环境变量把两边都调小[^verl]。
 
 ## 框架怎么选 {#frameworks}
 
@@ -148,7 +158,7 @@ loss.backward(); optimizer.step()
 
 | 框架 | 入口 | 关键开关 | 适合 |
 |---|---|---|---|
-| TRL（本文核对 v1.14.0） | `from trl import DistillationTrainer`；实验模块另有 `GKDTrainer`、`GOLDTrainer`、`MiniLLMTrainer`、`AsyncDistillationTrainer` | `beta`（0 为前向 KL，1 为反向 KL，默认 1）；`use_vllm`；GKD 的 `lmbda`、`seq_kd` | 单机起步、跨 tokenizer（GOLD）、复现 GKD 与 MiniLLM |
+| TRL（本文核对 v1.14.0） | `from trl import DistillationTrainer`；实验模块另有 `GKDTrainer`、`GOLDTrainer`、`MiniLLMTrainer`、`AsyncDistillationTrainer` | `beta`（0 为前向 KL，1 为反向 KL；默认 1，异步版默认 0）；`use_vllm`；GKD 的 `lmbda`、`seq_kd` | 单机起步、跨 tokenizer（GOLD）、复现 GKD 与 MiniLLM |
 | tinker-cookbook | `python -m tinker_cookbook.recipes.distillation.on_policy_distillation` | `kl_penalty_coef`、`kl_discount_factor`、`group_size`、`groups_per_batch`、`lora_rank` | 复现 TM 博客；多教师与多轮工具调用也有配方 |
 | verl | `distillation.enabled=true` 加教师资源池 | `loss_mode=k1` 配 `use_policy_gradient=true`（PG OPD），或 `forward_kl_topk`（GKD OPD）；`use_task_rewards`；按 `data_source` 路由多教师 | 已在用 verl 做 RL、要多教师或多模态 |
 | slime | `--use-opd --opd-type sglang` 或 `megatron` | `--opd-kl-coef`；SGLang 模式下教师是独立服务 | Megatron 大规模训练，GLM 系列使用的 RL 框架 |
@@ -206,7 +216,7 @@ loss.backward(); optimizer.step()
 - 相邻实践：[数学 RLVR：从 GRPO 到 DAPO](/practice/rlvr-math)，可以和本单元对照成本与曲线
 - 训练系统：[训推不一致](/lenses/infra#mismatch)、[异步训练](/lenses/infra#async)、[训练框架对比](/lenses/infra#frameworks)
 
-[^qwen3]: Qwen Team，*Qwen3 Technical Report*，§4.5 与 Table 21。https://arxiv.org/abs/2505.09388
+[^qwen3]: Qwen Team，*Qwen3 Technical Report*，§4.5，以及 §4.7 的 Table 21。https://arxiv.org/abs/2505.09388
 [^tm]: Kevin Lu 与 Thinking Machines Lab，*On-Policy Distillation*，2025-10-27。https://thinkingmachines.ai/blog/on-policy-distillation/
 [^tinker]: tinker-cookbook：`tinker_cookbook/distillation/train_on_policy.py` 与 `recipes/distillation`。https://github.com/thinking-machines-lab/tinker-cookbook
 [^verl]: verl 文档 *On-Policy Distillation (OPD)* 与示例 `examples/on_policy_distillation_trainer/`。https://github.com/verl-project/verl/blob/main/docs/algo/opd.md
@@ -215,7 +225,7 @@ loss.backward(); optimizer.step()
 [^nemo]: NeMo-RL 文档 *On-policy Distillation*。https://github.com/NVIDIA-NeMo/RL/blob/main/docs/about/algorithms/on-policy-distillation.md
 [^glm5]: Zeng et al.，*GLM-5: from Vibe Coding to Agentic Engineering*，On-Policy Cross-Stage Distillation 一节。https://arxiv.org/abs/2602.15763
 [^mimo]: Xiaomi LLM-Core，*MiMo-V2-Flash Technical Report*，§4.4。https://arxiv.org/abs/2601.02780
-[^rethinking]: Li et al.，*Rethinking On-Policy Distillation of Large Language Models*。https://arxiv.org/abs/2604.13016
+[^rethinking]: Li et al.，*Rethinking On-Policy Distillation of Large Language Models*，ICML 2026 FoGen Workshop。https://arxiv.org/abs/2604.13016
 [^revisiting]: Fu et al.，*Revisiting On-Policy Distillation: Empirical Failure Modes and Simple Fixes*，COLM 2026。https://arxiv.org/abs/2603.25562
 [^opsd]: Self-Distilled Reasoner（OPSD）代码仓库更新说明。https://github.com/siyan-zhao/OPSD
 [^stableopd]: Luo et al.，*Demystifying OPD: Length Inflation and Stabilization Strategies for Large Language Models*。https://arxiv.org/abs/2604.08527

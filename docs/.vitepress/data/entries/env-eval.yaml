@@ -39,11 +39,11 @@
   facets: [env, infra]
   tier: rec
   evidence: [industrial, adopted, open-source, community]
-  evidence_note: "Prime Intellect 用它和 Environments Hub 上的社区环境训练并评测了开源模型 INTELLECT-3（技术报告 arXiv 2512.16144）；NVIDIA NeMo Gym 把 verifiers 列为可直接接入的外部环境库，Reasoning Gym 官方推荐用它训练；是 GitHub 上使用最广的 LLM 环境库之一。2026 年重构为以 taskset、harness、trace 为核心的 v1。"
-  summary: "把 RL 环境做成可安装的 Python 模块：数据集、交互逻辑与 Rubric（加权奖励函数）三件套，同一环境可直接用于评测、合成数据与训练，并可发布到 Environments Hub 共享。"
+  evidence_note: "Prime Intellect 用它和 Environments Hub 上的社区环境训练并评测了开源模型 INTELLECT-3（技术报告 arXiv 2512.16144）；NVIDIA NeMo Gym 把 verifiers 列为可直接接入的外部环境库，Reasoning Gym 官方推荐用它训练；是 GitHub 上使用最广的 LLM 环境库之一。2026 年重构为以 taskset、harness、trace 为核心的 v1，旧的 v0 接口已移除。"
+  summary: "把 RL 环境做成可安装、可发布到 Environments Hub 的 Python 包，评测、合成数据与训练共用一份代码；早期由数据集、交互逻辑与 Rubric 组成，2026 年的 v1 改为 taskset、harness、trace。"
   plain: "给练习场定了统一的“插头”：谁写的练习场都能插进同一套评测和训练流程，写好的还能发到 Hub 上给别人直接用。"
   takeaways:
-    - "新写的环境先用少量样本跑评测入口（如 vf-eval），确认奖励分布不是全 0 或全 1，再接入训练。"
+    - "新写的环境先用少量样本跑一遍评测，确认奖励分布不是全 0 或全 1，再接入训练。"
     - "多轮环境要保证上下文只追加、不改写：删掉历史中的思考内容会让训练用的 token 序列和采样时对不上。"
   tags: [环境库, Environments Hub, Rubric, 多轮]
 
@@ -58,8 +58,8 @@
   areas: [agentic-rl]
   facets: [env, infra]
   tier: rec
-  evidence: [industrial, adopted, open-source]
-  evidence_note: "2025-10-23 由 Meta PyTorch 团队与 Hugging Face 联合发布，配套 Hugging Face 上的环境 Hub，并与 TRL、TorchForge 集成；NVIDIA NeMo Gym 把 OpenEnv 列为可直接接入的环境生态。仓库注明仍处实验阶段，API 可能变化，采用 RFC 流程演进（已包含 MCP 支持、延迟奖励、agent harness 集成等提案）。"
+  evidence: [adopted, open-source]
+  evidence_note: "2025-10-23 由 Meta PyTorch 团队与 Hugging Face 联合发布，配套 Hugging Face 上的环境 Hub，并与 TRL、torchforge 集成；NVIDIA NeMo Gym 把 OpenEnv 列为可直接接入的环境生态，SkyRL、Unsloth 等训练框架也给出接入示例，技术委员会包括 Meta PyTorch、Hugging Face、NVIDIA、Prime Intellect、Microsoft 等。仓库注明仍处实验阶段，API 可能变化，尚无用它训练正式发布模型的公开记录；采用 RFC 流程演进（已包含 MCP 支持、延迟奖励、agent harness 集成等提案）。"
   summary: "用 Gymnasium 式的 reset()/step()/state() 统一智能体执行环境：每个环境是 Docker 容器里的服务，经 WebSocket 调用，可部署到 Hugging Face Spaces，供任意 RL 框架接入。"
   plain: "把每个练习场装进一个标准集装箱，外面只留三个按钮：重新开始、走一步、看状态。谁的训练框架都能按这三个按钮来用。"
   takeaways:
@@ -92,7 +92,6 @@
   org: Axon RL · Sea AI Lab
   authors: "Zichen Liu et al."
   date: 2025-08
-  venue: ICLR 2026
   arxiv: "2510.01051"
   repo: axon-rl/gem
   links:
@@ -208,7 +207,7 @@
   facets: [env, data]
   tier: rec
   evidence: [industrial, open-source, ablation]
-  evidence_note: "README 说明它为上海 AI Lab 的 Intern-S1 提供训练支持；开源 1000 多个任务环境，其中 90% 以上由自动化智能体工作流合成并经质量过滤；报告给出任务数量扩展（Task Scaling）与多任务“涌现时刻”的实验。2026 年项目演进为面向多轮工具调用的 InternAgentHarness。"
+  evidence_note: "v1.0 版 README 说明它为上海 AI Lab 的 Intern-S1 提供训练支持（Intern-S1 团队也协助构建了部分科学任务）；开源 1000 多个任务环境，其中 90% 以上由自动化智能体工作流合成并经质量过滤；报告给出任务数量扩展（Task Scaling）与多任务“涌现时刻”的实验。2026 年项目演进为面向多轮工具调用的 InternAgentHarness。"
   summary: "覆盖 8 个领域、1000 多个可验证推理任务环境，每个环境按难度无限出题并自动判分，多数由 LLM 智能体从任务描述自动写成代码；实验显示训练任务种类越多，效果和训练效率都越好。"
   plain: "像一座有上千个“训练营”的大校区，每个营地都能自动出题判分；让模型在很多营地轮训，比在一个营地死磕进步更大。"
   takeaways:
@@ -369,11 +368,11 @@
   facets: [eval]
   tier: must
   evidence: [industrial, adopted, open-source, community]
-  evidence_note: "OpenAI Codex 的技术论文。HumanEval 与文中推导的 pass@k 无偏估计量（参考实现为 human-eval 仓库里的 estimate_pass_at_k）被几乎所有代码与推理评测沿用；引用量极高。"
-  summary: "发布 HumanEval（164 道手写编程题，单元测试判分），并给出 pass@k 的无偏估计：每题采样 n≥k 个、数出 c 个正确，用 1−C(n−c,k)/C(n,k) 估计 k 次机会至少对一次的概率。"
+  evidence_note: "OpenAI Codex 的技术论文。HumanEval 与文中推导的 pass@k 无偏估计量（参考实现为 human-eval 仓库里的 `estimate_pass_at_k`）被几乎所有代码与推理评测沿用：LiveCodeBench 的评测代码原样复用了这个函数，Llama 3、Qwen2.5-Coder 等技术报告都报告 HumanEval；引用量极高。"
+  summary: '发布 HumanEval（164 道手写编程题，单元测试判分），并给出 pass@k 的无偏估计：每题采样 $n\ge k$ 个、数出 $c$ 个正确，用 $1-\binom{n-c}{k}/\binom{n}{k}$ 估计 $k$ 次机会至少对一次的概率。'
   plain: "让模型对同一道题写很多份代码，数数有几份能过测试，再用一个组合公式换算成“给它 k 次机会至少对一次”的概率。"
   takeaways:
-    - "算 pass@k 时让采样数 n 明显大于 k，并用无偏估计量；不要用 1−(1−c/n)^k，它系统性偏低。"
+    - '算 pass@k 时让采样数 $n$ 明显大于 $k$，并用无偏估计量；不要直接代入 $1-(1-c/n)^k$，它系统性偏低。'
   tags: [pass@k, 代码评测, HumanEval]
 
 - id: livecodebench
@@ -432,7 +431,7 @@
   facets: [eval]
   tier: must
   evidence: [industrial, adopted, community]
-  evidence_note: "OpenAI Preparedness 团队与 SWE-bench 作者合作发布；2024 年下半年到 2026 年几乎所有前沿模型发布都报告它（如 Kimi K2、MiniMax-M1）。其后成绩逼近饱和，OpenAI 发文说明不再评测：对 GPT-5.2 多次运行都失败的 138 题审计后，约 59% 存在测试过窄或超出题面等缺陷（据媒体转述）。"
+  evidence_note: "OpenAI Preparedness 团队与 SWE-bench 作者合作发布；2024 年下半年到 2026 年几乎所有前沿模型发布都报告它（如 Kimi K2、MiniMax-M1）。2026 年初 OpenAI 发文说明不再评测：该基准已受训练数据泄漏污染、测试有缺陷，建议改用 SWE-Bench Pro；据媒体转述，对 GPT-5.2 多次运行都失败的 138 题审计后，约 59% 存在测试过窄或超出题面等缺陷。"
   summary: "职业工程师人工审核 SWE-bench 样本（共标注 1,699 条），剔除描述不清、测试不合理或无法解决的题，得到 500 道确认可解的子集，成为 2024–2026 年报告 SWE 能力的事实标准。"
   plain: "原来的 SWE-bench 里有些题本身有毛病：描述不清、测试过严。OpenAI 请工程师逐题把关，挑出 500 道“确定能做”的题，分数因此更可信。"
   takeaways:
@@ -476,7 +475,7 @@
   tier: rec
   evidence: [adopted, open-source]
   evidence_note: "Kimi K2.5、Seed2.0、Qwen3-Coder-Next 等 2026 年旗舰模型报告都采用它；公开集数据与评测脚本开源。仓库持续修订：删除过时单测、补充无步数上限的结果，2026-09 发布 V2（11 个仓库上 642 个复核任务，Harbor 格式，含 HARD-51 子集与“锁定协议”工具）。"
-  summary: "从 41 个活跃维护的仓库收集 1,865 个长程任务，常需跨多个文件的大幅修改；分为公开集、留出集与商业集（18 个初创公司的专有仓库），以降低训练数据污染。"
+  summary: "从 41 个活跃维护的仓库收集 1,865 个长程任务，常需跨多个文件的大幅修改；分为公开集、留出集与商业集（来自合作初创公司的 18 个专有仓库），以降低训练数据污染。"
   plain: "比 SWE-bench 难一截的“真项目”考题：很多题要改好几个文件，部分代码库根本不公开，模型想背也背不到。"
   takeaways:
     - "SWE-bench Verified 饱和后，可补报 SWE-Bench Pro，并写明脚手架、版本以及是否设了步数或成本上限。"
@@ -524,7 +523,7 @@
   summary: "模拟零售、航空客服：LLM 扮演的用户与被测智能体多轮对话，智能体须遵守领域政策并调用 API 改写数据库；以对话结束时数据库状态是否与目标一致判分，并提出衡量稳定性的 pass^k。"
   plain: "让一个 AI 扮顾客、一个 AI 当客服，客服得按公司规定查订单、退换货。最后只看数据库改得对不对；同一道题连做几次都对，才算真靠谱。"
   takeaways:
-    - "面向生产的智能体至少报告 pass^k（k≥4）：pass^1 看着不错的模型，连续做对 4 次的概率可能掉一半。"
+    - '面向生产的智能体至少报告 pass^k（$k\ge 4$）：pass^1 看着不错的模型，连续做对 4 次的概率可能掉一半。'
     - "用数据库终态而不是对话文本判分，能避开“话说得漂亮但事没办对”的误判。"
   tags: [工具使用, 用户模拟, pass^k]
 
@@ -544,7 +543,7 @@
   facets: [eval, env]
   tier: rec
   evidence: [adopted, open-source]
-  evidence_note: "Kimi K2（66.1）、Seed2.0 等技术报告以它为主力工具使用基准；仓库 2026 年升级为 τ³-bench，加入知识检索与全双工语音，并基于 SABER 的分析修正 75 处以上任务错误，同时声明 1.0.1 前后的成绩不可直接比较。"
+  evidence_note: "Kimi K2（66.1）、Seed2.0 等技术报告以它为主力工具使用基准；仓库 2026 年升级为 τ³-bench，加入知识检索与全双工语音，并依据 SABER 的分析修正 75 处以上任务错误；2026-07 的 v1.0.1 修正了 banking_knowledge 领域的判分，声明该领域 1.0.1 前后的成绩不可直接比较。"
   summary: "在 τ-bench 上引入“双控制”电信领域：用户也持有工具、会改变环境状态，智能体必须指导用户操作；配合组合式任务生成与受工具约束的用户模拟器，把推理失误与沟通协作失误分开诊断。"
   plain: "上一代只有客服能操作系统；这一代顾客手里也有手机要自己点，客服得一步步指导顾客操作，考的是“能不能带着人把事办成”。"
   takeaways:
@@ -651,9 +650,9 @@
     - { label: Gaia2 介绍（Hugging Face 博客）, url: "https://huggingface.co/blog/gaia2" }
   areas: [agentic-rl]
   facets: [env, eval]
-  tier: rec
-  evidence: [industrial, open-source]
-  evidence_note: "Meta 发布的智能体研究平台，开源环境框架、Gaia2 基准、Hugging Face 上的演示与排行榜，并在 2026 年扩展出多语言版 Omnilingual-Gaia2。"
+  tier: ref
+  evidence: [open-source]
+  evidence_note: "Meta 发布的智能体研究平台，开源环境框架、Gaia2 基准、Hugging Face 上的演示与排行榜，并在 2026 年扩展出多语言版 Omnilingual-Gaia2。目前未见用它训练正式发布模型、或被其他团队旗舰报告采用的公开记录，按证据标准列为参考；它的价值在于把“世界会异步变化”做进了评测。"
   summary: "ARE 把环境建模为随时间演化的“应用 + 事件 + 场景”，世界会在智能体行动时异步变化；其上的 Gaia2 含 800 个跨 10 个“宇宙”的动态场景，考察应变、时间约束与多智能体协作。"
   plain: "以前的考题是静止的，Gaia2 的世界会自己动：你还在处理邮件，新消息和日程变动就来了，智能体得边干边应变。"
   takeaways:
@@ -746,7 +745,7 @@
   summary: "发现数学推理基准对解码参数、随机种子、提示格式乃至硬件与软件版本高度敏感，不少提升来自不透明的比较；按统一协议重测后，多数 RL 方法的收益远小于原文所报，SFT 方法的泛化更稳定。"
   plain: "同一个模型换个随机种子、换台机器，AIME 分数就能差好几分；很多“提升”其实在噪声范围内。作者把大家拉回同一起跑线重测了一遍。"
   takeaways:
-    - "在 AIME 这类 30 题的小基准上至少跑 10 个种子，报告均值±标准差；否则 3–5 个点的提升没有意义。"
+    - "在 AIME 这类 30 题的小基准上至少跑 10 个种子并报告均值与误差棒：单个种子的标准差常有 4–7 个点，3–5 个点的差距很可能只是噪声。"
     - "对比实验要固定并公开温度、top-p、最大生成长度、提示模板与推理框架版本。"
   tags: [可复现性, 方差, 数学推理]
 
@@ -783,7 +782,7 @@
   facets: [eval]
   tier: rec
   evidence: [adopted, open-source, community]
-  evidence_note: "LLM-as-a-judge 的奠基性论文，MT-Bench 与其判分提示被大量后续评测沿用，代码开源在 FastChat；引用量极高。文中系统记录的位置偏差、冗长偏差与自我偏好，至今仍是设计评审模型时的检查清单。"
+  evidence_note: "LLM-as-a-judge 的奠基性论文，MT-Bench 与其判分提示被大量后续评测沿用（如 Mistral 7B 的发布论文即用 MT-Bench 比较指令模型），代码开源在 FastChat；引用量极高。文中系统记录的位置偏差、冗长偏差与自我偏好，至今仍是设计评审模型时的检查清单。"
   summary: "系统研究用强模型当裁判评估开放式回答：GPT-4 与人类偏好的一致率超过 80%，与人类之间相当；同时揭示位置偏差、冗长偏差、自我偏好与判数学题能力有限，并给出交换顺序等缓解办法。"
   plain: "请最强的模型当阅卷老师，大体靠谱，但它有偏心：排在前面的答案、写得长的答案、自己写的答案，都容易多给分。"
   takeaways:

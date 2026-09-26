@@ -19,12 +19,12 @@
   facets: [algorithm]
   tier: must
   evidence: [adopted, ablation, open-source, community]
-  evidence_note: "GLM-5、DeepSeek-V4、MiMo-V2-Flash 的技术报告都把它列为所用 OPD 目标的出处；作者本人把它贡献进 TRL；官方代码与 GPT-2/OPT/LLaMA 系列检查点公开；ICLR 2024。arXiv 最新版已改名为 MiniLLM: On-Policy Distillation of Large Language Models。"
+  evidence_note: "Gemma 2 报告写明后训练“在学生分布上蒸馏”并引用它；GLM-5、DeepSeek-V4、MiMo-V2-Flash 的技术报告都把它列为所用 OPD 目标的出处；作者本人把它贡献进 TRL；官方代码与 GPT-2/OPT/LLaMA 系列检查点公开；ICLR 2024。arXiv 最新版已改名为 MiniLLM: On-Policy Distillation of Large Language Models。"
   summary: "把 LLM 蒸馏的前向 KL 换成反向 KL，用策略梯度在学生自己的采样上优化；单步分解、教师混合采样、长度归一化三招稳住训练，优于 SFT、词级 KD 与 SeqKD。"
   plain: "不再让小模型硬背大模型的所有说法，而是让它自己作答、老师逐词挑错；宁可少说，也不说老师认为离谱的话。"
   takeaways:
     - "今天通行的逐 token 反向 KL（折扣为 0）就是 MiniLLM 目标只保留“当前项”的特例；想降方差，可以像它一样对下一个 token 做全词表期望。"
-    - "较小的学生模型早期会生成重复、退化却能拿到不低教师分数的文本：在采样分布里掺一点教师（官方脚本 α=0.2）并做重要性修正。"
+    - '较小的学生模型早期会生成重复、退化却能拿到不低教师分数的文本：在采样分布里掺一点教师（官方脚本 $\alpha=0.2$）并做重要性修正。'
     - "序列级回报会偏向短回答，先按剩余长度归一化再当优势用。"
   tags: [反向 KL, 策略梯度, 知识蒸馏]
 
@@ -42,14 +42,14 @@
   areas: [opd]
   facets: [algorithm]
   tier: must
-  evidence: [adopted, ablation, community]
-  evidence_note: "Gemma 3 技术报告把后训练蒸馏建立在它之上（引 Agarwal et al., 2024）；MiMo-V2-Flash 的 MOPD 引用它；TRL 的 GKDTrainer 与 DistillationTrainer、verl 的 GKD OPD 模式都照它实现。消融覆盖 3 类任务 × 3 种学生规模 × 5 种散度 × 3 种数据比例。"
-  summary: "把自回归蒸馏看成交互式模仿学习：学生在自己生成的序列上接受教师逐 token 反馈；用广义 JSD(β) 统一前向/反向 KL，用学生数据比例 λ 统一监督与在线蒸馏。"
+  evidence: [industrial, adopted, ablation, community]
+  evidence_note: "作者所在的 Google DeepMind 在 Gemma 2 后训练中“在学生分布上蒸馏”（引本文与 MiniLLM），Gemma 3 的后训练也以引用本文的“改进版知识蒸馏”为主体；MiMo-V2-Flash 的 MOPD 引用它；TRL 的 GKDTrainer 与 DistillationTrainer、verl 的 GKD OPD 模式都照它实现。消融覆盖 3 类任务 × 3 种学生规模 × 5 种散度 × 3 种数据比例。"
+  summary: '把自回归蒸馏看成交互式模仿学习：学生在自己生成的序列上接受教师逐 token 反馈；用广义 $\mathrm{JSD}(\beta)$ 统一前向/反向 KL，用学生数据比例 $\lambda$ 统一监督与在线蒸馏。'
   plain: "学生先自己写，老师在学生写过的每个位置告诉它“换我会怎么写”；写错的地方正是最需要纠正的地方。"
   takeaways:
-    - "λ 取 1（只用学生样本）在摘要、翻译、数学上都最好或接近最好；数学上至少让 25% 的数据来自学生。"
-    - "散度选择与任务和解码温度有关：高温采样时反向 KL、JSD(0.9) 质量更高但多样性更低，贪心解码时差别不大。"
-    - "要和 RL 一起训时，论文建议用反向 KL 或 JSD(0.9)，与 RLHF 惯用的 KL 约束方向一致。"
+    - '$\lambda$ 取 1（只用学生样本）在摘要、翻译、数学上都最好或接近最好；数学上在线比例越高越好，前提是至少 25% 的数据来自学生。'
+    - '散度选择与任务和解码温度有关：高温采样时反向 KL、$\mathrm{JSD}(0.9)$ 质量更高但多样性更低，贪心解码时差别不大。'
+    - '要和 RL 一起训时，论文建议用反向 KL 或 $\mathrm{JSD}(0.9)$，与 RLHF 惯用的 KL 约束方向一致。'
   tags: [广义 JSD, 模仿学习, 知识蒸馏]
 
 - id: distillm
@@ -67,10 +67,10 @@
   tier: rec
   evidence: [ablation, open-source]
   evidence_note: "ICML 2024；官方代码沿用 MiniLLM 的数据与评测，可直接对照复现；与 MiniLLM、GKD 在同一套指令跟随基准上做了对比与消融。"
-  summary: "提出 skew KL：先把师生分布按 α 混合再算 KL，损失与梯度有界；再用自适应离策略采样（学生样本进回放池复用）压低采样成本，比同期方法最高快 4.3 倍。"
+  summary: '提出 skew KL：先把师生分布按比例 $\alpha$ 混合再算 KL，损失与梯度有界；再用自适应离策略采样（学生样本进回放池复用）压低采样成本，比同期方法最高快 4.3 倍。'
   plain: "比较两份分布前先让它们“掺一点对方”，某个词概率接近 0 时损失就不会爆掉；学生写过的答案存起来反复用，省下采样时间。"
   takeaways:
-    - "反向 KL 在学生概率接近 0 的位置梯度很尖；α≈0.1 的 skew KL 或 skew 反向 KL 是一个几乎零成本的稳定器。"
+    - '反向 KL 在学生概率接近 0 的位置梯度很尖；$\alpha\approx0.1$ 的 skew KL 或 skew 反向 KL 是一个几乎零成本的稳定器。'
     - "学生采样太贵时，把学生样本放进回放池复用几轮而不是每步重采，代价是轻微离策略。"
   builds_on: [minillm, gkd]
   tags: [skew KL, 回放池]
@@ -141,9 +141,9 @@
   summary: "提出多教师在线蒸馏 MOPD：SFT 后先分领域训练 RL/SFT 专家，再让统一学生在自己的采样上接受对应领域教师的逐 token 反向 KL 优势，并可叠加结果奖励优势；多数领域达到或超过最强教师。"
   plain: "先培养一群偏科的尖子生当老师，再让一个学生自己做各科题、由对应科目的老师逐字批改，最后一个人学会所有科目。"
   takeaways:
-    - "多领域能力互相拉扯（跷跷板）时，“分领域训专家 + MOPD 合并”比参数合并或混合 RL 更稳。"
-    - "教师优势和结果奖励优势可以直接相加；只用教师信号时，学生的上限就是教师。"
-    - "训练引擎与推理引擎概率不一致时，对 π_θ/μ 做截断重要性加权并丢掉偏差过大的 token，OPD 同样需要。"
+    - "多领域能力互相拉扯（跷跷板）时，“分领域训专家 + MOPD 合并”比参数合并或顺序训练更不容易顾此失彼。"
+    - "教师优势和结果奖励优势可以直接相加；只用教师信号时，学生基本以教师为上限。"
+    - '训练引擎与推理引擎概率不一致时，对 $\pi_\theta/\mu$ 做截断重要性加权并丢掉偏差过大的 token，OPD 同样需要。'
   builds_on: [gkd, minillm, tm-opd]
   tags: [MOPD, 多教师, MoE]
 
@@ -163,8 +163,8 @@
   facets: [theory]
   tier: ref
   evidence: [community]
-  evidence_note: "第一篇专门的 OPD 综述，作者来自腾讯大模型部门并维护配套论文清单；社区维护的 awesome-on-policy-distillation 把它列为入门第一篇。"
-  summary: "第一篇专门梳理 LLM 在线蒸馏的综述：按反馈信号、教师访问方式和损失作用范围组织散度最小化、奖励引导与自博弈三类方法，并讨论工业流水线中静态模仿的结构性缺陷。"
+  evidence_note: "社区维护的 awesome-on-policy-distillation 称它为第一篇专门的 OPD 综述，并列为入门第一篇；作者维护配套论文清单与检索站，综述已迭代到 V4。"
+  summary: "专门梳理 LLM 在线蒸馏的综述：从静态蒸馏的误差累积讲起，用 f 散度统一 OPD 的目标，按优化目标、信号来源与训练稳定化等维度组织方法，并归纳成功条件、失效模式及其与 KL 约束 RL 的联系。"
   plain: "OPD 论文一年冒出几百篇，这是一张按“信号从哪来、老师能看到什么”分好类的地图。"
   takeaways:
     - "刚进入这个方向时先用它建立坐标系，再按需要跳到具体方法；2026 年下半年的新工作需要另行补充。"
@@ -174,7 +174,7 @@
   title: "Revisiting On-Policy Distillation: Empirical Failure Modes and Simple Fixes"
   short: Revisiting OPD
   kind: paper
-  org: 中国科学院自动化研究所
+  org: 中国科学院自动化研究所 · 中国科学院大学 · 复旦大学
   authors: "Yuqian Fu, Haohuan Huang et al."
   date: 2026-03
   venue: COLM 2026
@@ -189,8 +189,8 @@
   plain: "只拿学生写下的那一个字问老师“你给几分”，信息太少也太吵；改成在老师最看好的几十个候选上整体比较，训练稳得多。"
   takeaways:
     - "长回答上，用教师 top-K（例如 32）截断并归一化后的反向 KL，比单个采样 token 的估计更稳。"
-    - "<think> 这类特殊 token 在师生间切分或含义不同时，先从 KL 里掩掉。"
-    - "token 级 OPD 相对序列级反向 KL 有偏，但方差上界紧得多，这正是大家默认折扣为 0 的理由。"
+    - "`<think>` 这类特殊 token 在师生间切分或含义不同时，先从 KL 里掩掉。"
+    - '逐 token 的 OPD 相对序列级反向 KL 有偏，但最坏情况方差上界随长度 $T$ 从 $O(T^4)$ 降到 $O(T^2)$，这正是大家默认折扣为 0 的理由。'
   builds_on: [tm-opd]
   tags: [失效模式, top-K]
 
@@ -244,7 +244,7 @@
   title: "Self-Distillation Enables Continual Learning"
   short: SDFT
   kind: paper
-  org: MIT · Improbable AI Lab · ETH Zürich
+  org: MIT（Improbable AI Lab）· ETH Zürich
   authors: "Idan Shenfeld et al."
   date: 2026-01
   arxiv: "2601.19897"

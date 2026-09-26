@@ -9,6 +9,14 @@ prereq:
 
 # SFT：先学会“样子”，再谈“本事”
 
+::: tldr
+- SFT 就是在示范上做最大似然，等价于最小化前向 KL $\KL(p_\text{data}\Vert\pi_\theta)$：示范里有什么（包括错误和啰嗦）模型都会学，而且训练时只见过示范的前缀。
+- SFT 的事故多出在管道而不在数据：EOS 被掩掉、训练与推理的模板不一致、打包时样本串味、梯度累积下按微批平均悄悄放大了短样本的权重。
+- 长 CoT 数据的关键是题和老师：题要难且杂，每题多采几条回答；分数最高的模型不一定最会教，3B 及以下的学生要混入短 CoT。
+- SFT 主要教“样子”，RL 才练“本事”：领域 SFT 容易遗忘通用能力，工业流水线用“冷启动 SFT → RL → 拒绝采样回流 → 蒸馏小模型”接力。
+- 如果只读一节：读 [长 CoT SFT：冷启动与蒸馏](#long-cot)。
+:::
+
 <Term t="sft">监督微调</Term>（Supervised Fine-Tuning，SFT）用成对的“提示—示范回答”数据，以教师强制下的逐 token 交叉熵，把模型的输出分布拉向示范分布。它主要决定模型以什么格式、什么口吻、按什么推理套路作答；模型最终能解多难的题，更多取决于预训练与中训练积累的知识，以及之后 RL 在模型自身分布上的探索。
 
 ::: human
@@ -66,7 +74,7 @@ $$
 
 - **覆盖而非挑选**。<Term t="forward-kl">前向 KL</Term> 在 $p_\text{data}(y\mid x)>0$ 而 $\pi_\theta(y\mid x)\to0$ 的地方给出趋于无穷的惩罚，模型必须给示范里出现过的每种写法都留出概率，包括错误、啰嗦和偶然的怪癖。与之相对，[反向 KL](/topics/opd#reverse-kl) $\KL(\pi_\theta\Vert p)$ 倾向于只抓一个峰，这正是 on-policy 蒸馏与 KL 正则 RL 的行为。
 - **离线，没有探索**。训练时的前缀全来自示范，推理时模型却要在自己生成的前缀上继续写；训练与推理的分布不一致（<Term t="exposure-bias">暴露偏差</Term>）会在长 CoT 里逐步放大。这是 SFT 之后还要做 [On-Policy 蒸馏](/topics/opd)或 RL 的根本原因之一。
-- **蒸馏就是 SFT**。若 $y^\ast$ 由教师 $\pi_T$ 采样，SFT 就是序列级 $\KL(\pi_T\Vert\pi_S)$ 的蒙特卡洛估计，即<Term t="sequence-kd">序列级知识蒸馏</Term>。R1-Distill、OpenThinker 都在做这件事。
+- **蒸馏就是 SFT**。若 $y^\ast$ 由教师 $\pi_T$ 采样，SFT 损失就是序列级交叉熵的蒙特卡洛估计；它与 $\KL(\pi_T\Vert\pi_S)$ 只差教师熵这个与学生无关的常数，最小化两者等价。这就是<Term t="sequence-kd">序列级知识蒸馏</Term>，R1-Distill、OpenThinker 都在做这件事。
 
 ::: human
 前向 KL 像一个“全都要”的老师：示范里出现过的写法，哪怕只出现一次、哪怕是错的，模型都得给它留点概率。所以 SFT 数据里混进什么，模型就学会什么。
@@ -98,7 +106,7 @@ $$
 - **为什么要掩掉提示**：提示在推理时由用户给出，对它算损失既浪费容量，又会把模型往“写出用户式文本”的方向推；RAG、长文档问答这类提示远长于回答的数据，不掩码时损失几乎全被提示主导。
 - **多轮对话**：可以对所有 assistant 轮算损失（TRL 的 `assistant_only_loss`），也可以只算最后一轮；前者样本效率更高，但要确认历史轮的内容与推理时的模板渲染一致（见下一节）。
 - **工具与智能体数据**：工具返回、环境观测一律掩掉，与 RL 里的<Term t="loss-mask">损失掩码</Term>同理，详见 [Agentic RL](/topics/agentic-rl#loss-mask)。
-- **上线前先看一眼**：把几条样本里 $m=1$ 的片段解码打印出来。s1 的训练脚本里留着一句注释：作者逐条核对过，损失恰好从思考 token 开始、到第一个 pad 结束[^s1code]。
+- **上线前先看一眼**：把几条样本里 $m=1$ 的片段解码打印出来。s1 的训练脚本里留着一句注释：已核对过，损失恰好从思考 token 开始、到第一个 pad token 结束[^s1code]。
 
 ### 聊天模板与 EOS：训练和推理说同一种“方言” {#chat-template}
 
@@ -109,7 +117,7 @@ $$
 1. **EOS 被掩掉**。把 pad token 设成 EOS、再把所有 pad 位置的 label 设为 −100，真正的结束符也会一并被掩掉，模型学不会停。s1 的做法是专门挑一个从不使用的 token 当 pad（Qwen 上用 `<|fim_pad|>`）[^s1code]。
 2. **结束符对不上**。模板里的轮次结束符（如 `<|im_end|>`）与生成配置里的 EOS（如 `<|endoftext|>`）不一致，模型答完还会继续写。Open-R1 的 README 专门警告：给 Qwen base 模型做 SFT 时必须把 EOS 设为 `<|im_end|>`[^openr1]。
 3. **历史轮的思考内容**。Qwen3、R1-Distill 等推理模型的模板会在多轮历史里删掉之前轮次的 `<think>` 内容，R1-Distill 的模板还会在回答开头预填 `<think>`。训练数据若保留了历史思考，或 RL 的格式奖励没考虑预填，就会与推理时的输入对不上[^openr1]。
-4. **新增特殊 token**。base 模型没有聊天模板时，新加 token 的嵌入是未训练的；更稳妥的做法是复用保留 token，并用该字符串原先切出的子词嵌入来初始化（open-instruct 就是这样做的）。
+4. **新增特殊 token**。新加 token 的嵌入没有训练过；open-instruct 的做法是占用一个从未用过的保留 token，再用该字符串原先切出的几个子词嵌入的均值来初始化。不加新 token 也有坑：在 `<think>` 会被切成多个子词的分词器上，最后一个子词可能和后面的换行合并，推理时模板以 `<think>` 结尾，模型面对的是训练中没见过的切分。open-instruct 把这类标签提升为单个 token，正是为了避开它[^oitok]。
 
 模板还承载“开关”。Llama-Nemotron 用系统提示 “detailed thinking on/off” 切换推理，Qwen3 用 `/think`、`/no_think` 与 `enable_thinking`，gpt-oss 的 harmony 格式则把推理强度写进系统消息（`Reasoning: high`），并把输出分到 analysis、commentary、final 三个通道[^harmony]。这些开关都要靠 SFT 数据里**同时存在两种模式的示范**才能学会；只改模板、不给数据，开关不会生效。
 
@@ -125,11 +133,11 @@ $$
 M_{jk}=\mathbf 1\big[k\le j\big]\cdot\mathbf 1\big[\operatorname{doc}(j)=\operatorname{doc}(k)\big],
 $$
 
-即位置 $j$ 只能看见同一条样本里不晚于它的位置 $k$。工程上用 FlashAttention 的变长接口（按 `cu_seqlens` 切分）或按样本重置 `position_ids` 实现；每条样本第一个 token 的 label 也要掩掉，免得拿上一条样本的末尾去预测它（open-instruct 的 padding-free collator 在样本边界插入一个 −100 标签）[^packingfa2]。
+即位置 $j$ 只能看见同一条样本里不晚于它的位置 $k$。工程上用 FlashAttention 的变长接口（按 `cu_seqlens` 切分）或按样本重置 `position_ids` 实现；每条样本第一个 token 的 label 也要掩掉，免得拿上一条样本的末尾去预测它（open-instruct 的 padding-free collator 把每条样本第一个位置的标签换成 −100）[^packingfa2]。
 
 两个容易忽略的细节：
 
-- **别把样本拦腰截断**。“先拼接再按长度切块”（TRL 里叫 `wrapped`）是预训练的常见做法，放在 SFT 里会切断回答、丢掉结束符。best-fit decreasing 装箱能在几乎不损失利用率的前提下大幅减少截断，TRL 的 `bfd` 系列打包策略即源于此[^fewertrunc]。
+- **别把样本拦腰截断**。“先拼接再按长度切块”（TRL 里叫 `wrapped`）是预训练的常见做法，放在 SFT 里会切断回答、丢掉结束符。best-fit decreasing 装箱能在几乎不损失利用率的前提下大幅减少截断[^fewertrunc]。TRL 的 `bfd`（默认）与 `bfd_split` 都按这个思路装箱，区别在于超长样本是截断还是切段；对 SFT 来说两者都会弄坏样本，超长样本宁可先过滤掉。
 - **无补齐批处理（padding-free）要配 FlashAttention 2/3**，否则同样会出现跨样本污染，TRL 文档称之为 batch contamination[^trlsft]。
 
 ### 损失怎么平均：按 token，还是按样本 {#loss-aggregation}
@@ -144,7 +152,9 @@ $$
 
 它们给单个 token 的权重分别是 $\frac{1}{\lvert\mathcal B\rvert\,n_i}$、$\frac{1}{\sum_i n_i}$ 和 $1$。区别在长回答：按序列平均时，一条 3 万 token 推理轨迹里每个 token 的权重只有 1 千 token 短回答的 1/30，长推理被系统性地“少学”。按 token 平均才是“每个 token 一票”，与 RL 里 DAPO 改用 <Term t="token-level-loss">token 级损失</Term>是同一个道理（见[算法谱系](/lenses/algorithms#dapo)）。
 
-更隐蔽的是梯度累积与数据并行。很多训练代码在每个微批内先按 token 平均、再对各微批取平均：微批只装一条样本时，这就退化成按序列平均；一般情况下，它既不是按序列平均，也不是全局按 token 平均。AI2 的 open-instruct 为此提供了 `reduce_loss=sum` 选项，代码注释写明：它让数据集中每个 token 等权，而不是在大量梯度累积时让每条样本等权，“可以带来 AlpacaEval 超过 5 分的提升”；Tulu 3 发布时的 8B/70B SFT 命令都用了 `--reduce_loss sum`[^tulu3cmd]。
+更隐蔽的是梯度累积与数据并行。很多训练代码在每个微批内先按 token 平均、再对各微批取平均：微批只装一条样本时，这就退化成按序列平均；一般情况下，它既不是按序列平均，也不是全局按 token 平均。AI2 的 open-instruct 为此提供了 `--reduce_loss sum`，代码注释写明：它让数据集中每个 token 等权，而不是在大量梯度累积时让每条样本等权，“可以带来 AlpacaEval 超过 5 分的提升”。Tulu 3 发布时的 8B/70B SFT 命令每卡微批只有 1 条样本，默认的 `mean` 恰好退化成按序列平均，两条命令都改用了 `--reduce_loss sum`[^tulu3cmd]。
+
+框架也在补这个坑。Hugging Face Transformers 的 Trainer 从 v4.46 起，在梯度累积时先数出整个优化步的有效 token 数（`num_items_in_batch`）再归一化；跨数据并行进程汇总 token 数的 `average_tokens_across_devices` 从 v4.54 起默认开启[^hfga]。用更老的版本或自己写训练循环时，这一步要自己做。
 
 ::: derive 梯度累积为什么会“偷偷改权重”
 设一次优化步用 $K$ 个微批，微批 $k$ 里有 $N_k$ 个有效 token，损失和为 $S_k=\sum_{(i,t)\in k}m_{i,t}\ell_{i,t}$。
@@ -165,9 +175,9 @@ $$\frac{1/(KN_k)}{1/(K\bar N)}=\frac{\bar N}{N_k}.$$
 
 也就是说，有效 token 少的微批（比如只装了一条短回答）里，每个 token 被放大了 $\bar N/N_k$ 倍；长 CoT 与短对话混训时，这个倍数可以到几十。
 
-**修正**：先在所有微批与数据并行进程上汇总全局 token 数 $N=\sum_k N_k$，每个微批用 $S_k/N$ 反传，累积后恰好等于 $\mathcal L_\text{tok}$。这正是 transformers 社区长期讨论的梯度累积问题[^gaissue]，也是 open-instruct 改用求和损失的原因。
+**修正**：先在所有微批与数据并行进程上汇总全局 token 数 $N=\sum_k N_k$，每个微批用 $S_k/N$ 反传，累积后恰好等于 $\mathcal L_\text{tok}$。如果框架在进程之间对梯度取平均（DDP 的默认做法），还要把损失乘回进程数；Transformers 开启 `average_tokens_across_devices` 时就是这样做的。open-instruct 的代码注释为这个问题引用了 transformers 的一个讨论帖[^gaissue]。
 
-**求和与按 token 平均**：$\mathcal L_\text{sum}=\big(\sum_i n_i\big)\,\mathcal L_\text{tok}$，只差一个随步变化的缩放。在 Adam 下，整体缩放大多会被二阶矩归一化抵消，但各步 token 数不同时，求和会让 token 多的步更新略大。真正决定学到什么的，是**同一步内**各 token 的相对权重。
+**求和与按 token 平均**：$\mathcal L_\text{sum}=\big(\sum_i n_i\big)\,\mathcal L_\text{tok}$，只差一个随步变化的缩放。在 Adam 下，整体缩放大多会被二阶矩归一化抵消，但各步 token 数不同时，求和会让 token 多的步更新略大。如果开着梯度裁剪，求和损失的梯度范数随 token 数线性增长，常见阈值（如 1.0）几乎每步都会触发，这点差别也随之被抹平。真正决定学到什么的，是**同一步内**各 token 的相对权重。
 :::
 
 ::: human
@@ -184,7 +194,7 @@ SFT 数据一直在“数量与质量”“人工与合成”两条轴上摆动�
 
 ### Flan 2022：指令微调的规模化 {#flan}
 
-Google 的 Flan Collection 把 Flan 2021、P3、Super-NaturalInstructions、多个 CoT 数据集与对话数据汇成一套，统一改写成零样本、少样本、带 CoT 等多种模板，按调好的比例混合，用来训练 Flan-T5 与 Flan-PaLM；配套的 Scaling Flan 工作把任务数扩到 1800 余个，并验证了模型规模的作用[^flan]。消融给出的三条结论至今成立：多种提示模板混合训练，零样本、少样本、CoT 三种设置都会变好；任务配平与输入反转（把输入输出对调生成新任务）是关键；指令微调过的 checkpoint 作为下游微调起点，收敛更快、效果更好。
+Google 的 Flan Collection 把 Flan 2021、P3、Super-NaturalInstructions、多个 CoT 数据集与对话数据汇成一套，统一改写成零样本、少样本、带 CoT 等多种模板，按调好的比例混合，用来训练 Flan-T5 与 Flan-PaLM；配套的 Scaling Flan 工作把任务数扩到 1800 余个，并验证了模型规模的作用[^flan]。消融给出的三条结论至今仍常被引用：多种提示模板混合训练，零样本、少样本、CoT 三种设置都会变好；任务配平与输入反转（把输入输出对调生成新任务）是关键；指令微调过的 checkpoint 作为下游微调起点，收敛更快、效果更好。
 
 学术 NLP 任务式的“短输入、短答案”数据对今天的对话模型帮助有限，但“先设计混合与模板、再扩规模”的方法论一直延续到 Tulu 3 与推理数据配方。
 
@@ -198,7 +208,7 @@ Self-Instruct 从 175 条人工种子任务出发，让 GPT-3 自举生成新指
 
 LIMA 只用 1000 条精选示范（750 条来自 Stack Exchange、wikiHow 等社区的高质量问答，250 条作者手写）对 LLaMA-65B 做 SFT，不做任何 RLHF；人工评测中，43% 的情况下它与 GPT-4 持平或更好[^lima]。据此提出<Term t="superficial-alignment">浅层对齐假说</Term>：模型的知识与能力几乎都在预训练中获得，对齐只是教它与用户交互时用哪种格式与风格。消融显示，不提升多样性、只把同源数据翻倍几乎没有收益，而质量与多样性各自都有可测的正面作用；只加 30 条多轮对话示范，多轮能力就明显改善。
 
-LIMA 的结论针对的是风格与格式，并不意味着少量数据能教会新能力，前提是底座足够强。一年半后，LIMO、s1 在推理上重演了同一个故事，前提也一样。
+LIMA 的结论针对的是风格与格式，并不是说少量数据能教会新能力，而且前提是底座足够强。不到两年后，LIMO、s1 在推理上重演了同一个故事，前提也一样。
 
 ### Tulu 3：把完整配方摊开 {#tulu3}
 
@@ -268,7 +278,7 @@ flowchart LR
   B --> C["推理 RL<br/>规则奖励与语言一致性"]
   C --> D["拒绝采样<br/>约 60 万推理样本"]
   E["约 20 万非推理样本<br/>写作·问答·翻译"] --> F
-  D --> F["第二轮 SFT<br/>从 V3-Base 重训 2 轮"]
+  D --> F["第二轮 SFT<br/>从 V3-Base 重训 2 个 epoch"]
   F --> G["全场景 RL<br/>推理与偏好"]
   G --> H["DeepSeek-R1"]
   D --> I["蒸馏 SFT<br/>Qwen 与 Llama 1.5B–70B"]
@@ -279,7 +289,7 @@ flowchart LR
 
 ### 千条就够？s1 与 LIMO {#small-data}
 
-s1 从 16 个来源收集 5.9 万道题，按三条准则筛到 1000 道：**质量**（去掉格式与生成错误）、**难度**（Qwen2.5-7B 与 32B 都做不对，且推理轨迹长）、**多样性**（按数学学科分类均匀抽样）。用这 1000 条轨迹对 Qwen2.5-32B-Instruct 做 SFT（学习率 1e-5、5 个 epoch、批大小 16，16 张 H100 约半小时），再配合 <Term t="budget-forcing">budget forcing</Term>：模型想结束思考时追加 “Wait” 逼它继续，超出预算就强制收尾。结果在竞赛数学上超过 o1-preview[^s1]。消融同样有启发：随机选 1000 道、只按多样性选、只挑最长的，都明显不如三准则联合；用全部 5.9 万道只多出一点分数，算力却高出几十倍。
+s1 从 16 个来源收集 5.9 万道题，按三条准则筛到 1000 道：**质量**（去掉格式与生成错误）、**难度**（Qwen2.5-7B 与 32B 都做不对，且推理轨迹长）、**多样性**（按数学学科分类均匀抽样）。用这 1000 条轨迹对 Qwen2.5-32B-Instruct 做 SFT（学习率 1e-5、5 个 epoch、批大小 16，16 张 H100 训练 26 分钟），再配合 <Term t="budget-forcing">budget forcing</Term>：模型想结束思考时追加 “Wait” 逼它继续，超出预算就强制收尾。结果在竞赛数学上超过 o1-preview[^s1]。消融同样有启发：随机选 1000 道、只按多样性选、只挑最长的，都明显不如三准则联合；用全部 5.9 万道只多出一点分数，训练算力却从 7 个 H100 GPU 小时涨到 394 个。
 
 LIMO 走得更远：从大规模题库层层筛出 817 道难题，精选带自我验证、探索与细致推导的推理链，同样在 Qwen2.5-32B-Instruct 上大幅提升 AIME 与 MATH，并提出“少即是多推理假说”：底座知识充足时，少量精准的“认知模板”就能激发复杂推理[^limo]。
 
@@ -297,7 +307,7 @@ LIMO 走得更远：从大规模题库层层筛出 817 道难题，精选带自�
 4. **按 LLM 标注的难度或 LLM 回答长度筛题**，好于 embedding、fastText 这类预训练式过滤。
 5. **各种答案校验与过滤都没有带来显著收益**。
 
-据此构建的 OpenThoughts3-1.2M（85 万数学、25 万代码、10 万科学）训练出的 OpenThinker3-7B，在 AIME25、LiveCodeBench、GPQA-Diamond 上分别比 R1-Distill-Qwen-7B 高出约 15 到 20 个百分点[^ot]。
+据此构建的 OpenThoughts3-1.2M（85 万数学、25 万代码、10 万科学）训练出的 OpenThinker3-7B，在 AIME25、LiveCodeBench、GPQA-Diamond 上分别比 R1-Distill-Qwen-7B 高 15.3、17.2、20.5 个百分点[^ot]。AI2 训练 OLMo 3 推理模型的 SFT 数据 Dolci-Think-SFT，也把 OpenThoughts3（扩展到 32K 上下文，约 94 万条提示）列为主要来源之一[^dolci]。
 
 ::: human
 OpenThoughts 相当于把“做一份推理训练数据”拆成六七道工序，每道都做对比实验。最反直觉的发现是：分数最高的模型不一定是最会教的老师，答案对不对的校验也没想象中重要。
@@ -310,7 +320,7 @@ OpenThoughts 相当于把“做一份推理训练数据”拆成六七道工序�
 工业团队的长 CoT SFT 很少“一把梭”，而是把数据按难度、模式、阶段拆开：
 
 - **Light-R1（奇虎 360）**：从没有长 CoT 能力的 Qwen2.5-32B-Instruct 出发，先用 7.6 万条按难度筛过的 R1 轨迹做第一阶段 SFT，再用其中最难的 3 千条做第二阶段，然后做半在线 DPO 与模型合并。每一步都有增益（AIME24：一阶段 69.0 → 二阶段 73.0 → DPO 75.8 → 合并 76.6），但第二阶段后 GPQA 从 64.3 降到 60.6，只训数学的遗忘清晰可见[^lightr1]。
-- **Llama-Nemotron（NVIDIA）**：同类提示同时准备“推理开”“推理关”两种回答，用系统提示切换；最大的 Ultra 在 SFT 之后接大规模 RL，才在部分基准上超过教师 DeepSeek-R1[^nemotron]。
+- **Llama-Nemotron（NVIDIA）**：同类提示同时准备“推理开”“推理关”两种回答，用系统提示切换。团队的初步实验发现小模型做 RL 不如直接蒸馏，因此只给最大的 Ultra 做了大规模推理 RL，它由此在 GPQA 上超过教师 DeepSeek-R1[^nemotron]。
 - **Phi-4-reasoning（微软）**：只挑处在 Phi-4 能力边缘的“可教”提示，用 o3-mini 写示范；14B 的 SFT 模型就超过了 R1-Distill-Llama-70B，一小段结果奖励 RL 再把推理拉长、分数提高[^phi4r]。
 - **AceReason-Nemotron 1.1（NVIDIA）**：把 SFT 数据沿两个方向扩，更多题、每题更多回答，两者都有效，加题收益更大；更强的 SFT 起点在 RL 之后仍然更好，但差距被 RL 明显缩小；RL 采样温度按“温度调整后的熵约 0.3”来选[^acereason]。
 - **Nemotron-Math（NVIDIA）**：多档推理强度的示范让模型学会控制思考长度；长上下文 SFT 按 16K→32K→64K→128K 分桶训练，提速 2–3 倍、精度只差 1–3%。但最后的长桶几乎只剩高档样本，若不刻意混入中低档数据，中低档也会越写越长[^nm]。
@@ -323,7 +333,7 @@ Qwen3 的四阶段流程（长 CoT 冷启动、推理 RL、思考模式融合、
 
 CMU 等团队的 *Demystifying Long CoT* 用受控实验回答了几个关键问题[^demystify]：长 CoT SFT 的性能上限高于短 CoT，并让后续 RL 更容易继续提升，而短 CoT SFT 很快饱和；RL 中 CoT 长度的增长并不稳定，需要余弦长度奖励与 n-gram 重复惩罚来整形（这两个奖励已被 TRL 直接实现）；纠错等行为在基座里本就潜在存在，但要靠足够的 RL 算力才能稳定地激发出来。
 
-另一面是**容量差距**。*Small Models Struggle to Learn from Strong Reasoners* 发现，3B 及以下的模型直接学长 CoT 或最强教师的轨迹，效果常常不如学短 CoT 或较小教师的轨迹；把长、短 CoT（或强、弱教师数据）按 1:4 混合的 Mix Distillation 能明显改善[^small]。这与 OpenThoughts“最强的不一定是最好的老师”一脉相承：教师的轨迹要落在学生学得动的范围里。蒸馏之后再做 [On-Policy 蒸馏](/topics/opd)，让学生在自己的分布上向教师对齐，是另一条补救路径。
+另一面是**容量差距**。*Small Models Struggle to Learn from Strong Reasoners* 发现，3B 及以下的模型直接学长 CoT 或更大教师的轨迹，并不稳定地受益，常常不如学短 CoT 或较小教师的轨迹。他们的 Mix Distillation 把长、短 CoT 按 1:4 混合（Mix-Long），或把大、小教师的数据混合（Mix-Large），都能明显改善[^small]。这与 OpenThoughts“最强的不一定是最好的老师”一脉相承：教师的轨迹要落在学生学得动的范围里。蒸馏之后再做 [On-Policy 蒸馏](/topics/opd)，让学生在自己的分布上向教师对齐，是另一条补救路径。
 
 <EntryGrid :ids="['demystifying-long-cot', 'small-models-struggle']" />
 
@@ -335,7 +345,7 @@ Chu 等人在两个规则可变的环境里做了干净的对照：纸牌算术 
 
 后续工作把这一现象推到真实的数学后训练上。*Does Math Reasoning Improve General LLM Capabilities?* 在同一底座、同一批数学题上对照 SFT 与 RL：两者数学都涨，但 SFT 模型在对话、指令遵循等非推理任务上明显退化，RL 模型保持甚至提升；表示与 token 分布分析显示，SFT 大范围扰动了与任务无关的 token，RL 只改动少量相关 token[^transfer]。原理层面，[RL's Razor](/library/?id=rl-razor) 给出了一个可检验的解释：遗忘程度可由微调后模型相对基座在新任务上的 KL 预测，而 on-policy 学习天然偏向 KL 最小的解（见[原理视角](/lenses/principles#forgetting)与<Term t="catastrophic-forgetting">灾难性遗忘</Term>）。
 
-补一句：“SFT 记忆”不是 SFT 的宿命，而是**离线、离自身分布远**的数据带来的后果。据上述 KL 解释可以推断（并非某篇论文的直接结论）：用自采样再筛选的数据做 SFT、控制 epoch、混入通用数据，都应能减轻遗忘。
+补一句本站的推断（据上面的 KL 解释，并非某篇论文的直接结论）：“SFT 记忆”未必是 SFT 目标函数本身的宿命，更可能来自**离线、离模型自身分布远**的数据；照此推理，用自采样再筛选的数据做 SFT、控制 epoch、混入通用数据，都应能减轻遗忘。
 
 ::: human
 SFT 像背标准答案：同类题很快就会，规则一变就露馅；RL 像自己刷题对答案：学得慢，学到的是解法。所以工业界先用 SFT 教会“答题格式和基本套路”，再用 RL 练“真本事”。
@@ -352,7 +362,7 @@ $$
 =\E_{y\sim\pi_\theta(\cdot\mid x)}\Big[\underbrace{\frac{\mathbf 1[y=y^\ast]}{\pi_\theta(y\mid x)}}_{\text{隐式奖励}}\,\nabla_\theta\log\pi_\theta(y\mid x)\Big].
 $$
 
-也就是说，SFT 等价于用奖励 $r/\pi_\theta$ 做<Term t="policy-gradient">策略梯度</Term>：模型越觉得示范不可能，这个奖励就越大。换个角度更直观：对指示奖励，RL 的目标就是 $J(\theta)=\E_{y\sim\pi_\theta}[r]=\pi_\theta(y^\ast\mid x)$，而 SFT 优化的是 $\log J$，梯度 $\nabla_\theta\log J=\nabla_\theta J/J$ 天然带着一个 $1/\pi_\theta$ 放大器。放大器带来高方差，也让模型在“死记示范”上用力过猛。
+论文把被积项拆成两部分：只有完全复现示范才为 1 的指示奖励 $r$，以及重要性权重 $1/\pi_\theta(y\mid x)$。两者相乘，SFT 就等价于用奖励 $r/\pi_\theta$ 做 on-policy <Term t="policy-gradient">策略梯度</Term>：模型越觉得示范不可能，这个奖励就越大。换个角度更直观：对指示奖励，RL 的目标就是 $J(\theta)=\E_{y\sim\pi_\theta}[r]=\pi_\theta(y^\ast\mid x)$，而 SFT 优化的是 $\log J$，梯度 $\nabla_\theta\log J=\nabla_\theta J/J$ 天然带着一个 $1/\pi_\theta$ 放大器。模型越没把握的示范，梯度被放得越大，训练不稳，也让模型在“死记示范”上用力过猛。
 
 DFT 的修正是一行代码：把每个 token 的损失乘以它自身的概率，并对这个系数停止梯度（$\sg$ 表示<Term t="stop-gradient">停止梯度</Term>）：
 
@@ -385,15 +395,15 @@ $$\nabla_\theta\Big[\sg\big(\pi_\theta(y^\ast\mid x)\big)\log\pi_\theta(y^\ast\m
 
 权重被抵消，剩下一个“干净”的稀疏奖励策略梯度。
 
-**第 6 步**：落到 token 级。序列概率 $\prod_t p_t$ 对长序列几乎为零，DFT 改为对每个 token 乘 $\sg(p_t)$，得到正文中的 $\mathcal L_\text{DFT}$。这一步是启发式替代：它与第 5 步的序列级目标并不严格相等，但保留了“去掉 $1/p$ 放大器”的核心。
+**第 6 步**：落到 token 级。序列概率 $\prod_t p_t$ 对长序列几乎为零，DFT 改为对每个 token 乘 $\sg(p_t)$，得到正文中的 $\mathcal L_\text{DFT}$。这一步是启发式替代：它与第 5 步的序列级目标并不严格相等，但保留了“去掉 $1/p$ 放大器”的核心。论文的消融也显示，改用序列级权重几乎没有收益。
 
-**直觉**：NLL 在单个 token 上的更新方向是 $\nabla_\theta p_t/p_t$，DFT 是 $\nabla_\theta p_t$。前者把力气集中在模型认为最不可能的 token 上，它们可能是真正需要学的新知识，也可能是示范里的噪声与个人习惯；后者更保守，更贴近模型自身的分布。这与作者自述的局限一致：在答案唯一、推理近乎确定的低熵任务上 DFT 偏弱。由此还可以推断（尚无专门实验）：需要向底座注入新知识的场景，也应保留 NLL。
+**直觉**：NLL 在单个 token 上的更新方向是 $\nabla_\theta p_t/p_t$，DFT 是 $\nabla_\theta p_t$。前者把力气集中在模型认为最不可能的 token 上，它们可能是真正需要学的新知识，也可能是示范里的噪声与个人习惯；后者更保守，更贴近模型自身的分布。这与作者自述的局限一致：在答案唯一、推理近乎确定的低熵任务上 DFT 偏弱。论文后续版本还补了一个事实知识的反例：在 Natural Questions 上，SFT 把准确率从 31.24% 提到 36.62%，DFT 反而降到 30.14%，作者的解释是按当前把握加权会强化模型已有的信念。由此可以推断（本站的推断，论文只测了这一个数据集）：凡是要向底座注入新知识的场景，都应保留 NLL。
 :::
 
-DFT 在 7B 及以下模型的数学、代码与多模态推理上显著优于 SFT，并已被 TRL（`loss_type="dft"`）、LLaMA-Factory、ms-swift 内置；但作者在仓库里也坦言它在低熵、单一答案的任务上偏弱，社区还反馈过文学、金融等场景的失败[^dft]。把 SFT 与 RL 放进同一个梯度形式的更一般框架（例如 HPT 把各类后训练算法的梯度拆成稳定掩码、参考策略分母、优势估计与似然梯度四个部件[^hpt]），见[算法谱系的统一视角](/lenses/algorithms#unified-view)。
+论文在 1.5B–8B 的五个底座上做数学推理，DFT 相对底座的提升都高于 SFT（Qwen2.5-Math-1.5B 上平均 +15.66 分，SFT 只有 +2.09），代码与多模态的探索性实验也有提升；TRL（`loss_type="dft"`）、LLaMA-Factory、ms-swift 已内置这个损失。作者在仓库里也坦言它在低熵、单一答案的任务上偏弱，社区还反馈过文学、金融等场景的失败[^dft]。把 SFT 与 RL 放进同一个梯度形式的更一般框架（例如 HPT 把各类后训练算法的梯度拆成稳定掩码、参考策略分母、优势估计与似然梯度四个部件[^hpt]），见[算法谱系的统一视角](/lenses/algorithms#unified-view)。
 
 ::: human
-普通 SFT 对模型最没把握的字用力最猛，像逼学生逐字背下范文里最生僻的句子；DFT 按学生自己的把握程度给每个字打折，更像 RL 那样“顺着自己的思路学”。代价是：真正陌生、必须硬记的新知识，它也会学得更慢。
+普通 SFT 对模型最没把握的字用力最猛，像逼学生逐字背下范文里最生僻的句子；DFT 按学生自己的把握程度给每个字打折，更像 RL 那样“顺着自己的思路学”。代价是：模型原本不会、必须硬记的新知识（比如事实问答），它反而学不进去。
 :::
 
 <EntryCard id="dft" />
@@ -402,7 +412,7 @@ DFT 在 7B 及以下模型的数学、代码与多模态推理上显著优于 SF
 
 把近两年的工业报告放在一起看，SFT 与 RL 的分工已经相当稳定：
 
-1. **冷启动 → RL**：SFT 负责格式稳定、推理可读、在难题上有非零通过率，让 RL 拿得到奖励（R1、Qwen3、[Kimi k1.5](/library/?id=kimi-k1-5)）。AceReason 1.1 的结论提醒我们：更强的起点最终仍占优，但 RL 会抹平大部分差距，SFT 做到“足够好”即可。
+1. **冷启动 → RL**：SFT 负责格式稳定、推理可读、在难题上有非零通过率，让 RL 拿得到奖励（R1、Qwen3、[Kimi k1.5](/library/?id=kimi-k1-5)）。AceReason 1.1 的对照说明：更强的 SFT 起点在 RL 之后仍然占优，只是差距被明显缩小；所以比较 SFT 方案时，要看接上 RL 之后的分数。
 2. **RL → 拒绝采样 → SFT**：RL checkpoint 生成的好轨迹被收回来，作为下一轮 SFT 的数据。R1 的第三阶段、[Llama 3](/library/?id=llama3) 多轮的“SFT + 拒绝采样 + DPO”都是这个飞轮。
 3. **专家 → 合并**：先对数学、代码、智能体等领域分别训练专家，再用 SFT 把它们蒸馏进一个模型，最后统一做 RL（[GLM-4.5](/library/?id=glm-4-5)、[DeepSeek-V3.2](/library/?id=deepseek-v3-2)）。
 4. **大 → 小**：小模型先做离线 SFT 蒸馏，再做 [On-Policy 蒸馏](/topics/opd)。Qwen3 的小模型就是先离策略、后在线策略蒸馏；Thinking Machines 的[在线策略蒸馏](/library/?id=tm-opd)还展示了它能找回个性化微调丢掉的能力。
@@ -416,7 +426,7 @@ DFT 在 7B 及以下模型的数学、代码与多模态推理上显著优于 SF
 | 有更强教师，目标是部署小模型 | SFT 蒸馏，再接 OPD | 离线蒸馏便宜，OPD 修正暴露偏差 |
 | 有可验证奖励，模型已有非零通过率 | RLVR | 在自身分布上学，泛化更好、遗忘更少 |
 | RL 起步通过率接近零、格式混乱 | 先冷启动 SFT | 给 RL 一个拿得到奖励的起点 |
-| 担心遗忘通用能力 | 少量 SFT 加 RL，或用自采样数据 SFT | 离自身分布越近，遗忘越少 |
+| 担心遗忘通用能力 | 少量 SFT 加 RL；也可试自采样数据 SFT（本站推断） | 离自身分布越近，遗忘越少 |
 
 ## LoRA 与超参 {#lora-hparams}
 
@@ -426,9 +436,9 @@ Thinking Machines 在 2025 年 9 月发布的这篇博客，是目前关于“<T
 
 1. **中小规模后训练数据上，高 rank LoRA 与全参的学习曲线几乎重合**；数据量超出 LoRA 容量时它才落后，表现为训练效率下降，而不是撞上一个硬地板。
 2. **挂到所有层，尤其是 MLP 与 MoE 层**；只挂注意力，即使用更高 rank 补齐参数量也更差。
-3. **LoRA 对大批量更敏感**，这个惩罚不会因提高 rank 而消失，由“两矩阵乘积”参数化本身的训练动力学决定。
-4. **RL 只需要很小的容量**：策略梯度从每条轨迹里得到的信息很少，rank 1 就能匹配全参。
-5. **最优学习率约为全参的 10 倍**；在 $1/r$ 缩放下，最优学习率与 rank 基本无关。Thinking Machines 自家的 tinker-cookbook 里，这个倍数就直接取 10[^tinker]。
+3. **在一些设置下，LoRA 对大批量更敏感**，这个惩罚不会因提高 rank 而消失，作者认为它来自“两矩阵乘积”参数化本身的训练动力学；好在两者的最优批大小都偏小，实际影响有限。
+4. **RL 只需要很小的容量**：策略梯度每条轨迹只带回约 1 bit 信息，rank 1 就能匹配全参。
+5. **最优学习率约为全参的 10 倍**（训练很短、约 100 步以内时约 15 倍）；在 $1/r$ 缩放下，最优学习率与 rank 基本无关。Thinking Machines 自家的 tinker-cookbook 里，这个倍数就直接取 10[^tinker]。
 
 LoRA 每步的算力约为全参的三分之二，同一基座还可以挂多个适配器并发服务。Thinking Machines 的 [Tinker](/library/?id=tinker) 训练服务以 LoRA 为训练接口；Hugging Face TRL 也发布了官方复现指南，建议 SFT 用 rank 256 左右、RL 用 1–32[^trllora]。
 
@@ -479,7 +489,7 @@ LoRA 每步的算力约为全参的三分之二，同一基座还可以挂多个
 :::
 
 ::: pitfall 灾难性遗忘
-领域 SFT 会让通用能力退化（Light-R1 只训数学后 GPQA 下降；数学 SFT 模型在对话与指令遵循上退步）。对策：混入通用数据、控制 epoch、优先用自采样数据，能用可验证奖励的提升尽量交给 RL，上线前必测一组非目标任务。
+领域 SFT 会让通用能力退化（Light-R1 只训数学后 GPQA 下降；数学 SFT 模型在对话与指令遵循上退步）。对策：混入通用数据、控制 epoch，能用可验证奖励的提升尽量交给 RL，上线前必测一组非目标任务；改用自采样数据做 SFT 可能也有帮助（本站推断，见[上文](#memorize-generalize)）。
 :::
 
 ## 延伸阅读 {#further-reading}
@@ -494,10 +504,12 @@ LoRA 每步的算力约为全参的三分之二，同一基座还可以挂多个
 [^openr1]: Hugging Face，[Open-R1 README](https://github.com/huggingface/open-r1)（EOS 与聊天模板对齐的警告、R1-Distill 模板预填 `<think>` 的说明）与 [OpenR1-Distill-7B 的 SFT 配置](https://github.com/huggingface/open-r1/blob/main/recipes/OpenR1-Distill-7B/sft/config_distill.yaml)。
 [^harmony]: OpenAI，[harmony 响应格式](https://github.com/openai/harmony)：gpt-oss 使用的对话格式，含 analysis、commentary、final 通道与系统消息中的推理强度设置。
 [^packingfa2]: open-instruct 的 [padding-free collator](https://github.com/allenai/open-instruct/blob/main/open_instruct/padding_free_collator.py)，以及它引用的 Hugging Face 博客 [Improving Hugging Face Training Efficiency Through Packing with Flash Attention 2](https://huggingface.co/blog/packing-with-FA2)。
-[^fewertrunc]: Ding et al., [Fewer Truncations Improve Language Modeling](https://arxiv.org/abs/2404.10830)；TRL 在 [paper index](https://huggingface.co/docs/trl/paper_index) 中说明其 BFD 打包策略源于此文。
+[^fewertrunc]: Ding et al., [Fewer Truncations Improve Language Modeling](https://arxiv.org/abs/2404.10830)；TRL 的 [paper index](https://huggingface.co/docs/trl/paper_index) 把此文对应到 `bfd_split` 打包策略，三种策略的区别见 [SFTConfig 源码](https://github.com/huggingface/trl/blob/main/trl/trainer/sft_config.py)。
 [^trlsft]: Hugging Face TRL 文档：[SFT Trainer](https://huggingface.co/docs/trl/sft_trainer) 与 [Reducing Memory Usage](https://huggingface.co/docs/trl/reducing_memory_usage)（packing、padding-free 与 batch contamination 警告）。
 [^tulu3cmd]: AI2 open-instruct，Tulu 3 发布时（2024-11-22）的[复现命令](https://github.com/allenai/open-instruct/blob/b08997673f7c451171fe3ed39463114e7eeaf141/docs/tulu3.md)与同一版本 [finetune.py](https://github.com/allenai/open-instruct/blob/b08997673f7c451171fe3ed39463114e7eeaf141/open_instruct/finetune.py) 中 `reduce_loss` 的注释。
 [^gaissue]: [huggingface/transformers#24725](https://github.com/huggingface/transformers/issues/24725)：open-instruct 代码注释引用的梯度累积与损失归一化讨论。
+[^hfga]: Hugging Face Transformers 源码：[v4.46.0 的 trainer.py](https://github.com/huggingface/transformers/blob/v4.46.0/src/transformers/trainer.py) 开始把 `num_items_in_batch` 传给损失函数；`average_tokens_across_devices` 在 v4.47.0 的 training_args.py 中加入，默认 `False`，[v4.54.0](https://github.com/huggingface/transformers/blob/v4.54.0/src/transformers/training_args.py) 起默认 `True`。
+[^oitok]: open-instruct 源码：[dataset_transformation.py](https://github.com/allenai/open-instruct/blob/main/open_instruct/dataset_transformation.py) 中的 `promote_tokens_into_reserved_slots`（占用保留 token，说明了 `<think>` 被切成多个子词时的问题）与 [model_utils.py](https://github.com/allenai/open-instruct/blob/main/open_instruct/model_utils.py) 中的 `initialize_promoted_token_embeddings`（用原子词嵌入的均值初始化）。
 [^flan]: Longpre et al., [The Flan Collection](https://arxiv.org/abs/2301.13688)；Chung et al., [Scaling Instruction-Finetuned Language Models](https://arxiv.org/abs/2210.11416)；数据生成代码见 [google-research/FLAN](https://github.com/google-research/FLAN)。
 [^selfinstruct]: Wang et al., [Self-Instruct](https://arxiv.org/abs/2212.10560)；46% 的抽查结果见[仓库 README](https://github.com/yizhongw/self-instruct)。
 [^alpaca]: Stanford CRFM，[Alpaca 发布博客](https://crfm.stanford.edu/2023/03/13/alpaca.html)与[仓库](https://github.com/tatsu-lab/stanford_alpaca)（成本与微调超参）。
@@ -513,6 +525,7 @@ LoRA 每步的算力约为全参的三分之二，同一基座还可以挂多个
 [^s1]: Muennighoff et al., [s1: Simple test-time scaling](https://arxiv.org/abs/2501.19393)；数据与代码见 [simplescaling/s1](https://github.com/simplescaling/s1)。
 [^limo]: Ye et al., [LIMO: Less is More for Reasoning](https://arxiv.org/abs/2502.03387)。
 [^ot]: Guha et al., [OpenThoughts: Data Recipes for Reasoning Models](https://arxiv.org/abs/2506.04178)；数据构成与 OpenThinker3-7B 的成绩见[仓库 README](https://github.com/open-thoughts/open-thoughts)。
+[^dolci]: AI2 数据集卡片 [Dolci-Think-SFT-7B](https://huggingface.co/datasets/allenai/Dolci-Think-SFT-7B)（OpenThoughts 3 一项：扩展到 32K 上下文、共 941,166 条提示）；open-instruct 的 [train_dolci_think.sh](https://github.com/allenai/open-instruct/blob/main/scripts/slurm/sft/train_dolci_think.sh) 注明用它训练 OLMo 3 7B。
 [^nemotron]: NVIDIA, [Llama-Nemotron: Efficient Reasoning Models](https://arxiv.org/abs/2505.00949)。
 [^phi4r]: Microsoft, [Phi-4-reasoning Technical Report](https://arxiv.org/abs/2504.21318)。
 [^acereason]: NVIDIA, [AceReason-Nemotron 1.1: Advancing Math and Code Reasoning through SFT and RL Synergy](https://arxiv.org/abs/2506.13284)。
@@ -520,7 +533,7 @@ LoRA 每步的算力约为全参的三分之二，同一基座还可以挂多个
 [^small]: Li et al., [Small Models Struggle to Learn from Strong Reasoners](https://arxiv.org/abs/2502.12143)；1:4 的混合比例见[仓库](https://github.com/Small-Model-Gap/Small-Model-Learnability-Gap)。
 [^sftrl]: Chu et al., [SFT Memorizes, RL Generalizes](https://arxiv.org/abs/2501.17161)。
 [^transfer]: Huan et al., [Does Math Reasoning Improve General LLM Capabilities?](https://arxiv.org/abs/2507.00432)
-[^dft]: Wu et al., [On the Generalization of SFT: A Reinforcement Learning Perspective with Reward Rectification](https://arxiv.org/abs/2508.05629)；局限说明与框架支持见[仓库 README](https://github.com/yongliang-wu/DFT)。
+[^dft]: Wu et al., [On the Generalization of SFT: A Reinforcement Learning Perspective with Reward Rectification](https://arxiv.org/abs/2508.05629)（ICLR 2026）；五个底座的数学结果、代码与多模态的探索性实验、序列级加权的消融和 Natural Questions 反例（第 4.6 节）见论文后续版本；局限说明与框架支持见[仓库 README](https://github.com/yongliang-wu/DFT)。
 [^hpt]: [Towards a Unified View of Large Language Model Post-Training](https://arxiv.org/abs/2509.04419)，代码见 [TsinghuaC3I/Unify-Post-Training](https://github.com/TsinghuaC3I/Unify-Post-Training)。
 [^luffy]: [LUFFY: Learning to Reason under Off-Policy Guidance](https://arxiv.org/abs/2504.14945)（NeurIPS 2025），代码见 [ElliottYan/LUFFY](https://github.com/ElliottYan/LUFFY)。
 [^tailsft]: TRL [paper index](https://huggingface.co/docs/trl/paper_index) 中的 TailSFT: Filtered Fine-Tuning Improves Post-Training Performance（arXiv 2608.25756）条目及其 GSM8K 示例；发布不足两个月，仅作趋势参考。

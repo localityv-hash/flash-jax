@@ -1,5 +1,5 @@
 # SFT 专题（/topics/sft）的条目：指令数据、合成数据、长 CoT 蒸馏、SFT 与 RL 的关系、LoRA。
-# 字段均按纯文本渲染；条件竖线用 ∣（U+2223），公式用 Unicode 书写。
+# summary、plain、takeaways、evidence_note 支持 $公式$ 与 `代码`（构建时渲染）；条件竖线写 \mid，含反斜杠的字符串用单引号。
 
 # ---------- 指令数据与合成数据 ----------
 
@@ -140,7 +140,7 @@
   summary: "完全公开的后训练配方：按技能整理数据（含 persona 合成）并去污染 → 近百万条混合 SFT → 长度归一化 DPO → 可验证奖励 RL（RLVR）；逐阶段给出消融与开源评测，在 Llama 3.1 上超过官方 Instruct。"
   plain: "把大模型从“会续写”调成“好用的助手”的全部步骤、数据和代码都摊开：先 SFT 学格式，再用偏好数据学分寸，最后在能自动判对错的题上做强化学习。"
   takeaways:
-    - "梯度累积下 SFT 损失要按 token 聚合（Tulu 3 发布的命令用 sum 损失），否则长短样本的权重会被悄悄改掉。"
+    - "梯度累积下 SFT 损失要按 token 聚合（Tulu 3 发布的命令用 `--reduce_loss sum`），否则长短样本的权重会被悄悄改掉。"
     - "按技能补数据（数学、精确指令遵循、代码）前先去污染，再用独立评测集确认每类数据的边际收益。"
   builds_on: [flan-2022, lima]
   tags: [SFT, DPO, RLVR, 开放配方]
@@ -206,10 +206,10 @@
   tier: rec
   evidence: [ablation, open-source]
   evidence_note: "在 Qwen2.5 0.5B–32B 与 Llama 3.x 1B–70B 上对照长/短 CoT、强/弱教师，训练数据与各尺寸模型均已开源；结论主要基于数学任务。"
-  summary: "发现“小模型可学性鸿沟”：3B 及以下的模型直接学长 CoT 或更强教师的推理，效果常不如学短 CoT 或较小教师；提出 Mix Distillation，把长/短 CoT（或强/弱教师数据）按 1:4 混合，显著提升小模型推理。"
+  summary: "发现“小模型可学性鸿沟”：3B 及以下的模型学长 CoT 或大教师的推理，常不如学短 CoT 或小教师；Mix Distillation 把长、短 CoT 按 1:4 混合（Mix-Long）或混合大、小教师数据（Mix-Large），显著提升小模型推理。"
   plain: "让小学生直接背博士生的草稿反而学不会；把难的和浅显的示范掺在一起教，小模型才跟得上。"
   takeaways:
-    - "给 3B 及以下模型做推理蒸馏时，别只用最强教师的最长轨迹：混入短 CoT 或小教师数据（如 1:4）。"
+    - "给 3B 及以下模型做推理蒸馏时，别只用最强教师的最长轨迹：混入短 CoT（长、短可按 1:4）或小教师的数据。"
     - "离线蒸馏之后再做在线蒸馏或 RL，让学生在自己的分布上补齐与教师的差距。"
   builds_on: [deepseek-r1]
   tags: [蒸馏, 容量差距, 小模型]
@@ -319,11 +319,11 @@
   tier: rec
   evidence: [industrial, adopted, ablation, open-source]
   evidence_note: "NVIDIA 以商用许可发布 Nano 8B / Super 49B / Ultra 253B，并开放完整后训练数据与训练代码（NeMo、NeMo-Aligner、Megatron-LM）；AI2 的 open-instruct 收录了该数据集的 SFT 转换脚本。报告逐阶段给出 SFT 与 RL 的效果。"
-  summary: "从 Llama 3 做架构搜索与蒸馏得到高吞吐的 8B/49B/253B 推理模型；以 R1 等教师的推理轨迹与非推理回答混合 SFT，用系统提示 “detailed thinking on/off” 切换推理，Ultra 再经大规模 RL 部分超过教师。"
-  plain: "同一个模型既能深思熟虑也能快问快答，靠系统提示里的一句开关切换；SFT 先把两种模式都教会，最大的版本再用 RL 练到比老师还强。"
+  summary: "从 Llama 3 经架构搜索与蒸馏得到 8B/49B/253B 推理模型；推理轨迹与非推理回答混合 SFT，靠系统提示 “detailed thinking on/off” 切换推理；Ultra 再做大规模推理 RL，在 GPQA 上超过教师 R1。"
+  plain: "同一个模型既能深思熟虑也能快问快答，靠系统提示里的一句开关切换；SFT 先把两种模式都教会，最大的版本再用 RL 在科学推理上超过了老师。"
   takeaways:
     - "想要推理开关，就在 SFT 数据里为同类提示同时准备“开/关”两种回答，并用固定的系统提示区分。"
-    - "蒸馏只能逼近教师；想超过教师，需要在蒸馏之后接大规模 RL。"
+    - "蒸馏通常只能逼近教师；想超过教师，要在蒸馏之后接大规模 RL。报告的初步实验里，小模型做 RL 不如直接蒸馏，所以 RL 只用在了最大的 Ultra 上。"
   builds_on: [deepseek-r1]
   tags: [推理开关, 蒸馏, 工业配方]
 
@@ -343,7 +343,7 @@
   facets: [data]
   tier: must
   evidence: [adopted, ablation, open-source, community]
-  evidence_note: "Thinking Machines 在 LoRA Without Regret 中以 OpenThoughts3 作推理 SFT 主实验集，TRL 的官方复现指南沿用其数据；奇虎 360 的 Light-R1 SFT 数据含 OpenThoughts-114k，仓库列出的下游模型数以百计。1000+ 次受控实验覆盖流水线每一步，数据、模型、生成与评测代码全部开源。"
+  evidence_note: "AI2 训练 OLMo 3 推理模型的 SFT 数据 Dolci-Think-SFT 以 OpenThoughts3 为主要来源之一（约 94 万条提示，数据卡与 open-instruct 训练脚本可查）；奇虎 360 的 Light-R1 SFT 数据含 OpenThoughts-114k；Thinking Machines 在 LoRA Without Regret 中以 OpenThoughts3 作推理 SFT 主实验集。仓库列出的下游模型数以百计；1000+ 次受控实验覆盖流水线每一步，数据、模型、生成与评测代码全部开源。"
   summary: "把推理 SFT 数据流水线拆成题源、过滤、去重、每题采样数、答案过滤、教师选择等环节，做了 1000+ 次对照实验；据此以 QwQ-32B 为教师构建 120 万条 OpenThoughts3，7B 学生显著超过 R1-Distill-Qwen-7B。"
   plain: "把“怎么做一份好的推理训练数据”拆成六七道工序，每道都做对比实验。最意外的发现是：分数最高的模型不一定是最好的老师，答案对不对的校验也没想象中重要。"
   takeaways:
@@ -369,7 +369,7 @@
   plain: "SFT 打底越好，RL 之后成绩越好，但 RL 会把起点差距抹平一大截；RL 采样温度要调到让模型既不太保守也不太随机。"
   takeaways:
     - "扩 SFT 数据优先加新题，其次才是每题多采样回答。"
-    - "RL 会缩小起点差距：SFT 做到“足够好”即可把预算转给 RL，但更强的 SFT 起点最终仍占优。"
+    - "更强的 SFT 起点在 RL 后仍占优，但差距会被 RL 明显缩小：比较 SFT 方案时要看接上 RL 之后的分数，而不只是 SFT 刚结束时的分数。"
     - "RL 开始前按“温度调整后的熵约 0.3”选采样温度，并在训练中持续盯住熵。"
   builds_on: [acereason-nemotron]
   tags: [SFT+RL, 冷启动, 数据规模]
@@ -458,12 +458,12 @@
   facets: [algorithm, theory]
   tier: rec
   evidence: [adopted, ablation, open-source, community]
-  evidence_note: "TRL（loss_type 设为 dft）、LLaMA-Factory、ms-swift 已内置该损失，知乎、小红书等社区讨论热烈；实验集中在 7B 及以下的数学、代码与多模态推理。作者在仓库中说明：在答案唯一、推理近乎确定（低熵）的任务上效果较弱，社区也反馈过文学、金融等场景的失败案例。"
-  summary: "证明 SFT 梯度等价于一种策略梯度，其隐式奖励是“是否等于示范”再乘以 1/π_θ：模型越没把握的样本权重越大，方差大、泛化差。DFT 把每个 token 的损失乘以自身概率（停止梯度），一行代码即在多个数学基准上显著优于 SFT。"
+  evidence_note: 'TRL（`loss_type="dft"`）、LLaMA-Factory、ms-swift 已内置该损失，知乎、小红书等社区讨论热烈。数学实验覆盖 1.5B–8B 的五个底座，代码与多模态是探索性实验。作者在仓库中说明：在答案唯一、推理近乎确定（低熵）的任务上效果较弱；论文自己的事实知识案例（Natural Questions）中 DFT 甚至低于底座，社区也反馈过文学、金融等场景的失败。'
+  summary: '把 SFT 梯度写成策略梯度：奖励是“是否等于示范”，外加重要性权重 $1/\pi_\theta$，越没把握的示范权重越大、训练越不稳。DFT 给每个 token 的损失乘上 $\sg(\pi_\theta)$，一行代码在多个数学基准上明显优于 SFT。'
   plain: "普通 SFT 对模型最没把握的字用力最猛，容易死记硬背；DFT 按模型自己的把握程度给每个字的损失打折，更像 RL 那样顺着自己的分布学。"
   takeaways:
     - "示范存在多种合理解法（数学 CoT、复杂代码）时，可以把 DFT 当作 SFT 的低成本替换做 A/B。"
-    - "答案高度确定（低熵）的任务保留标准 NLL：作者自己报告 DFT 在这类任务上偏弱。"
+    - "答案高度确定（低熵）的任务、以及要灌输新事实知识的任务，保留标准 NLL：作者报告 DFT 在前者偏弱，在 Natural Questions 上还低于底座。"
   builds_on: [sft-memorizes-rl-generalizes]
   tags: [SFT 目标函数, 奖励修正, SFT vs RL]
 
@@ -487,7 +487,7 @@
   summary: "系统比较 LoRA 与全参：中小规模后训练数据上高 rank LoRA 与全参曲线几乎重合，数据超出容量才落后；应挂满所有层（尤其 MLP/MoE）；对大批量更敏感；RL 用 rank 1 即可匹配全参；最优学习率约为全参 10 倍。"
   plain: "设置对了，LoRA 在多数后训练场景不比全参差：挂满所有层、学习率调大约十倍、批次别太大；做 RL 时连 rank 1 都够用。"
   takeaways:
-    - "LoRA 挂到所有线性层（all-linear），不要只挂注意力；学习率从全参最优值的约 10 倍起扫。"
+    - "LoRA 挂到所有线性层（PEFT 里的 `all-linear`），不要只挂注意力；学习率从全参最优值的约 10 倍起扫，很短的训练（约 100 步内）可再高一些。"
     - "RL 用低 rank（1–32）即可；SFT 数据规模越大越需要高 rank，超出容量时改用全参。"
     - "LoRA 下别盲目加大批次：大批次带来的损失惩罚无法靠提高 rank 弥补。"
   tags: [LoRA, 参数高效微调, 超参]

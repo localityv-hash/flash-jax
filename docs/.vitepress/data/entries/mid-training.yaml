@@ -137,7 +137,7 @@
   facets: [data]
   tier: rec
   evidence: [industrial, adopted, open-source, community]
-  evidence_note: "Hugging Face 的开放预训练语料：SmolLM3 以 FineWeb-Edu / FineWeb2 为网页主干，ProLong 的短数据混合里 FineWeb 与 FineWeb-Edu 各占 10%，NVIDIA Nemotron-CC 把它和 DCLM 作为主要对照。处理代码在 datatrove，分类器训练代码在 huggingface/smollm。"
+  evidence_note: "Hugging Face 的开放预训练语料：面壁智能 MiniCPM4 在 FineWeb 上跑自家的 UltraClean 过滤流水线，得到用于正式预训练的 UltraFineWeb（见 MiniCPM4 技术报告）；SmolLM3 以 FineWeb-Edu / FineWeb2 为网页主干；ProLong 的短数据混合里 FineWeb 与 FineWeb-Edu 各占 10%；NVIDIA Nemotron-CC 把它和 DCLM 作为主要对照。处理代码在 datatrove，分类器训练代码在 huggingface/smollm。"
   summary: "从 96 个 Common Crawl 快照构建 15T token 的 FineWeb；再用 Llama-3-70B-Instruct 标注的教育价值训练小分类器，筛出 1.3T token 的 FineWeb-Edu，在知识与推理基准上显著领先。"
   plain: "先请大模型当“阅卷老师”给一小批网页打分，再训练一个便宜的小模型按同样标准给海量网页打分，只留下有教育意义的。"
   takeaways:
@@ -296,11 +296,11 @@
   facets: [algorithm]
   tier: must
   evidence: [adopted, ablation, open-source, community]
-  evidence_note: "事实标准的 RoPE 扩展方法：DeepSeek-V3（代码中 s=40、β_fast=32、β_slow=1）、Qwen2.5 / Qwen3（YaRN + DCA 推理期 4 倍外推）、Kimi K2（扩到 128K）、Olmo 3（8K→64K）、SmolLM3 都在技术报告或官方代码里明确使用。"
-  summary: "按 RoPE 各维度的波长区别对待：波长远短于原上下文的高频维度不插值，波长超过上下文的低频维度按比例 s 插值，中间线性过渡（NTK-by-parts）；再给注意力 logit 乘一个随 ln s 增长的系数。约 0.1% 预训练量的微调即可把窗口扩展数倍。"
+  evidence_note: "开源模型最常用的 RoPE 扩展方法之一：DeepSeek-V3（代码中 $s=40$、$\\beta_\\text{fast}=32$、$\\beta_\\text{slow}=1$）、Qwen2.5 / Qwen3（YaRN + DCA 推理期 4 倍外推）、Kimi K2（扩到 128K）、Olmo 3（8K→64K，$s=8$）、SmolLM3（推理期外推到 128K）都在技术报告或官方代码里明确使用。"
+  summary: "按 RoPE 各维度的波长区别对待：波长远短于原上下文的高频维度不插值，波长超过上下文的低频维度按扩展倍数 $s$ 插值，中间线性过渡（NTK-by-parts）；再给注意力 logit 乘以 $(0.1\\ln s+1)^2$。约 0.1% 预训练量的微调即可把窗口扩展数倍。"
   plain: "位置编码像一组转速不同的指针：快指针在训练里早已转满很多圈，不用动；慢指针还没转满一圈，就按比例放慢，免得出现没见过的角度。"
   takeaways:
-    - "扩上下文优先用 YaRN 或调大 RoPE base，而不是朴素的位置插值；Llama 系可直接用 α=1、β=32。"
+    - "扩上下文优先用 YaRN 或调大 RoPE base，而不是朴素的位置插值；Llama 系可直接用 $\\alpha=1$、$\\beta=32$。"
     - "推理时想超过训练长度，可以叠加 YaRN / Dynamic NTK 外推，但必须在目标长度上实测。"
   tags: [RoPE, 长上下文, 位置编码]
 
@@ -342,7 +342,7 @@
   facets: [algorithm, data]
   tier: must
   evidence: [industrial, adopted, open-source, community]
-  evidence_note: "DeepSeek-V3 / R1 系列的底座报告，权重与推理代码开源（inference/model.py 中可直接看到 YaRN 的 s=40、β_fast=32、β_slow=1 与注意力缩放）。Kimi K2 的架构明确沿用 DeepSeek-V3 的设计；V3.1 沿用同一套两段扩展，并把 32K / 128K 两段加到 630B / 209B token。"
+  evidence_note: "DeepSeek-V3 / R1 系列的底座报告，权重与推理代码开源（inference/model.py 中可直接看到 YaRN 的 $s=40$、$\\beta_\\text{fast}=32$、$\\beta_\\text{slow}=1$ 与注意力缩放）。Kimi K2 的架构明确沿用 DeepSeek-V3 的设计；V3.1 沿用同一套两段扩展，并把 32K / 128K 两段加到 630B / 209B token。"
   summary: "14.8T token 预训练：学习率恒定到 10T，再 4.3T 余弦衰减，最后 500B 分两段常数；随后用 YaRN 分两段各 1000 步，把上下文从 4K 扩到 32K 再到 128K，学习率沿用预训练末值。"
   plain: "先用大学习率跑到 10T，再慢慢降，最后两小段“定型”；扩长文时不重新训练，只用很少的步数分两级把窗口拉长。"
   takeaways:

@@ -1,4 +1,4 @@
-# 经典 RL（/topics/classic-rl）的术语。字段按纯文本渲染，公式用 Unicode 书写。
+# 经典 RL（/topics/classic-rl）的术语。plain 与 definition 支持 `$…$` 行内公式与反引号代码（含反斜杠的字符串用单引号）。
 
 - id: mdp
   term: MDP
@@ -6,7 +6,7 @@
   zh: 马尔可夫决策过程
   area: classic-rl
   plain: "把“做决定”抽象成回合制游戏：看到局面、选一个动作、环境给奖励并换到新局面；接下来会怎样，只取决于当前局面和这一步的动作。"
-  definition: "五元组 (S, A, P, r, γ)：状态空间、动作空间、转移概率 P(s′∣s,a)、奖励 r(s,a) 与折扣因子 γ；马尔可夫性指下一状态只依赖当前状态与动作。LLM 生成可写成转移确定的 token 级 MDP：状态 s_t = (x, y_<t)，动作 a_t = y_t，下一状态就是把 y_t 接到前缀后面。"
+  definition: '五元组 $(\mathcal S,\mathcal A,P,r,\gamma)$：状态空间、动作空间、转移概率 $P(s''\mid s,a)$、奖励 $r(s,a)$ 与折扣因子 $\gamma$；马尔可夫性指下一状态只依赖当前状态与动作。LLM 生成可写成转移确定的 token 级 MDP：状态 $s_t=(x,y_{<t})$，动作 $a_t=y_t$，下一状态就是把 $y_t$ 接到前缀后面。'
   see: [/topics/classic-rl#mdp]
 
 - id: return
@@ -15,7 +15,7 @@
   zh: 回报（累计折扣奖励）
   area: classic-rl
   plain: "不是某一步的得分，而是从现在起到结束能拿到的总分；越远的分数可以打个折。"
-  definition: "G_t = Σ_{k≥0} γ^k·r_{t+k}，RL 的目标是最大化期望回报 E[G_0]。LLM 的 RLVR 中奖励通常只在回答结束时给出；取 γ=1 时，回答里每个 token 的回报都等于最终奖励 r(x,y)。"
+  definition: '$G_t=\sum_{k\ge 0}\gamma^k r_{t+k}$，RL 的目标是最大化期望回报 $\E[G_0]$。LLM 的 RLVR 中奖励通常只在回答结束时给出；取 $\gamma=1$ 时，回答里每个 token 的回报都等于最终奖励 $r(x,y)$。'
   see: [/topics/classic-rl#mdp]
 
 - id: discount-factor
@@ -23,8 +23,8 @@
   full: Discount Factor
   zh: 折扣因子
   area: classic-rl
-  plain: "明天的一块钱不如今天的一块钱值钱：γ 越小越“短视”，γ=1 表示未来的分和眼前的分一样重要。"
-  definition: "回报 G_t = Σ γ^k·r_{t+k} 中的 γ ∈ [0,1]。它既表达对远期奖励的偏好，也控制方差：γ<1 让无限长任务的回报有界，有效视野约为 1/(1−γ)。LLM 上的 PPO/GRPO 通常取 γ=1，因为回答长度有限、奖励在末尾，打折会让靠前的 token 几乎收不到信号。"
+  plain: '明天的一块钱不如今天的一块钱值钱：$\gamma$ 越小越“短视”，$\gamma=1$ 表示未来的分和眼前的分一样重要。'
+  definition: '回报 $G_t=\sum_k\gamma^k r_{t+k}$ 中的 $\gamma\in[0,1]$。它既表达对远期奖励的偏好，也控制方差：$\gamma<1$ 让无限长任务的回报有界，有效视野约为 $1/(1-\gamma)$。LLM 上的 PPO/GRPO 通常取 $\gamma=1$，因为回答长度有限、奖励在末尾，打折会让靠前的 token 几乎收不到信号。'
   see: [/topics/classic-rl#mdp]
 
 - id: bellman-equation
@@ -33,7 +33,7 @@
   zh: 贝尔曼方程
   area: classic-rl
   plain: "“这一步值多少”等于“这一步立刻拿到的分”加上“从下一步开始还能拿多少分”。整张价值表就靠这个递归关系一环扣一环地算出来。"
-  definition: "期望方程：V^π(s) = E_{a∼π(·∣s)}[ r(s,a) + γ·E_{s′∼P(·∣s,a)} V^π(s′) ]；最优方程把对策略的期望换成取最大：Q*(s,a) = r(s,a) + γ·E_{s′}[ max_{a′} Q*(s′,a′) ]。TD 学习与 Q-learning 都在逼近它的不动点；TD 误差 δ_t = r_t + γV(s_{t+1}) − V(s_t) 是 GAE 的基本单元。"
+  definition: '期望方程：$V^\pi(s)=\E_{a\sim\pi(\cdot\mid s)}\big[r(s,a)+\gamma\,\E_{s''\sim P(\cdot\mid s,a)}V^\pi(s'')\big]$；最优方程把对策略的期望换成取最大：$Q^*(s,a)=r(s,a)+\gamma\,\E_{s''}\big[\max_{a''}Q^*(s'',a'')\big]$。TD 学习逼近前者的不动点，Q-learning 逼近后者；TD 误差 $\delta_t=r_t+\gamma V(s_{t+1})-V(s_t)$ 是 GAE 的基本单元。'
   see: [/topics/classic-rl#bellman]
 
 - id: q-learning
@@ -42,7 +42,7 @@
   zh: Q 学习
   area: classic-rl
   plain: "给每个“局面 + 招式”打分，分数用“立刻得分 + 下一局面里最好招式的分”不断修正；学好之后每一步挑分最高的招式即可。"
-  definition: "离策略的时序差分方法：Q(s,a) ← Q(s,a) + α[ r + γ·max_{a′} Q(s′,a′) − Q(s,a) ]。max 让它能用任意行为策略收集的数据逼近最优 Q*；但在函数逼近下 max 会放大估计误差，离线训练时尤其会高估数据外的动作，这正是 CQL、IQL 要解决的问题。DQN 用深度网络、经验回放与目标网络实现了它。"
+  definition: '离策略的时序差分方法：$Q(s,a)\leftarrow Q(s,a)+\alpha\big[r+\gamma\max_{a''}Q(s'',a'')-Q(s,a)\big]$。max 让它在数据覆盖充分时能用任意行为策略收集的数据逼近最优 $Q^*$；但在函数逼近下 max 会放大估计误差，离线训练时尤其会高估数据外的动作，这正是 CQL、IQL 要解决的问题。DQN 用深度网络、经验回放与目标网络实现了它。'
   see: [/topics/classic-rl#bellman, /topics/classic-rl#offline-rl]
 
 - id: offline-rl
@@ -51,7 +51,7 @@
   zh: 离线强化学习
   area: classic-rl
   plain: "只给你一堆别人玩过的录像，不许再上手试，要从录像里学出比录像更好的打法。"
-  definition: "只用固定数据集 D = {(s,a,r,s′)} 学习策略，训练中不与环境交互。核心困难是分布偏移：学到的策略会选数据里罕见的动作，而这些动作的价值估计没有数据来纠正，容易被高估。主流对策是保守价值估计（CQL）、只在数据内改进（IQL、AWR）或约束策略靠近行为策略；DPO、拒绝采样微调都可以看作离线方法。"
+  definition: "只用固定数据集 $\\mathcal D=\\{(s,a,r,s')\\}$ 学习策略，训练中不与环境交互。核心困难是分布偏移：学到的策略会选数据里罕见的动作，而这些动作的价值估计没有数据来纠正，容易被高估。主流对策是保守价值估计（CQL）、只在数据内改进（IQL、AWR）或约束策略靠近行为策略；DPO、拒绝采样微调都可以看作离线方法。"
   see: [/topics/classic-rl#offline-rl]
 
 - id: model-based-rl
@@ -60,7 +60,7 @@
   zh: 基于模型的强化学习
   area: classic-rl
   plain: "先学会“我这么做，世界会怎么变”，再在脑子里模拟和规划，少在真实世界里试错。"
-  definition: "显式学习（或直接利用已知的）环境模型——转移 P(s′∣s,a)、奖励 r，或只预测决策相关量的隐模型——并用它做规划（MCTS、MPC）或生成想象数据训练策略（Dreamer）。优点是样本效率高；风险是模型误差被规划器钻空子（model exploitation）。"
+  definition: "显式学习（或直接利用已知的）环境模型——转移 $P(s'\\mid s,a)$、奖励 $r$，或只预测决策相关量的隐模型——并用它做规划（MCTS、MPC）或生成想象数据训练策略（Dreamer）。优点是样本效率高；风险是模型误差被规划器钻空子（model exploitation）。"
   see: [/topics/classic-rl#model-based]
 
 - id: world-model
@@ -78,7 +78,7 @@
   zh: 蒙特卡洛树搜索
   area: classic-rl
   plain: "下棋时在脑子里往后推演：优先试看起来好的招，也给没怎么试过的招留机会；推演得越多，越清楚哪一步真正好。"
-  definition: "反复执行“选择—扩展—评估—回传”的树搜索。AlphaZero 系用 PUCT 规则在先验策略 P(s,a) 与平均价值 Q(s,a) 之间权衡选边，叶节点用价值网络评估而非随机走子。搜索后根节点的访问分布是比原策略更强的改进策略，可作为策略网络的蒸馏目标（专家迭代）。"
+  definition: "反复执行“选择—扩展—评估—回传”的树搜索。AlphaZero 系用 PUCT 规则在先验策略 $P(s,a)$ 与平均价值 $Q(s,a)$ 之间权衡选边，叶节点用价值网络评估而非随机走子。搜索后根节点的访问分布是比原策略更强的改进策略，可作为策略网络的蒸馏目标（专家迭代）。"
   see: [/topics/classic-rl#model-based, /topics/classic-rl#search-analogy]
 
 - id: exploration
@@ -87,5 +87,5 @@
   zh: 探索
   area: classic-rl
   plain: "为了发现更好的做法，偶尔要尝试没把握的动作，而不是一直重复目前看来最好的那一招。"
-  definition: "在“利用当前最优估计”与“收集新信息”之间权衡的问题。经典手段有 ε-greedy、熵正则、乐观初始化、基于计数或好奇心的内在奖励、Go-Explore 等。LLM RL 的探索主要来自预训练先验与采样温度，很少直接照搬这些手段；熵塌缩、pass@k 随训练不升反降等现象都与探索不足有关。"
+  definition: "在“利用当前最优估计”与“收集新信息”之间权衡的问题。经典手段有 $\\varepsilon$-greedy、熵正则、乐观初始化、基于计数或好奇心的内在奖励、Go-Explore 等。LLM RL 的探索主要来自预训练先验与采样温度，很少直接照搬这些手段；熵塌缩、pass@k 随训练不升反降等现象都与探索不足有关。"
   see: [/topics/classic-rl#what-transfers]

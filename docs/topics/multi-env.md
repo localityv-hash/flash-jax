@@ -9,6 +9,14 @@ prereq:
 
 # 多环境与环境工程：环境是新的数据
 
+::: tldr
+- RL 的“数据”就是环境：任务、接口、工具、状态与重置、终止条件、验证器缺一不可；验证器的假阳性就是奖励作弊的入口。
+- 规模化靠合成：无状态的程序化生成器几乎零成本；有状态的 SWE 与工具环境，成本单位是“环境”而不是“任务”，一套环境里批量造题最划算。
+- 多环境混合要同时定四件事：按可学习性 $p(1-p)$ 分配采样、对齐各环境的奖励尺度、先在环境内做 token 平均再按目标份额加权、按环境分桶监控。
+- 有状态环境做成独立服务，用容器或 microVM 隔离，支持快照、重置与 fork；环境故障造成的轨迹要丢弃或 mask，不能记 0 分。
+- 如果只读一节：读 [多环境混合训练](#mixing)。
+:::
+
 <Term t="environment">环境</Term>（environment）是智能体与之交互、并据此得到奖励的完整系统：任务从哪里来，模型能看到什么、能做什么，状态怎样变化和重置，何时结束，以及由谁按什么标准给分。**环境工程**则是把“想让模型学会的能力”变成成千上万个可并行、可验证、可复现的环境实例，并把它们放进同一次 RL 训练里混合使用。
 
 ::: human
@@ -25,7 +33,7 @@ SFT 时代给模型的是“题库加标准答案”；RL 时代给它的是“�
 | 规模化瓶颈 | 高质量示范 | 难度合适、答案可靠的题 | 可执行、可复现、可验证的环境 |
 | 典型质量问题 | 示范有错 | 答案错、难度失配 | 验证器漏洞、环境不稳定、模拟与真实有差距 |
 
-这一判断最有影响力的表述来自 Shunyu Yao 2025 年 4 月的长文 *The Second Half*[^yao]。作者是 ReAct 与 τ-bench 的作者，文章基于他在斯坦福 CS224N 与哥伦比亚大学的演讲整理。核心论证分三步：
+这一判断最有影响力的表述来自 Shunyu Yao 2025 年 4 月的长文 *The Second Half*[^yao]。他是 ReAct 与 τ-bench 的作者，这篇文章据他在斯坦福 CS224N 与哥伦比亚大学的演讲整理。核心论证分三步：
 
 1. RL 有三个要素：算法、环境、先验。过去几十年研究者主要在改算法，事后看来最重要的却是先验（语言预训练）；有了好的先验，再把“推理”作为一种动作加进环境，“RL 算法反而可能是最不关键的部分”。
 2. 这套通用配方能把几乎任何基准刷上去，所以“再造一个更难的考试”越来越快被解决；AI 的下半场要从“解决问题”转向“定义问题”，**评测比训练更重要**。
@@ -33,8 +41,8 @@ SFT 时代给模型的是“题库加标准答案”；RL 时代给它的是“�
 
 这是一篇观点文章，没有对照实验；它的价值在于判断方向，而这个方向很快被工业实践印证：
 
-- **旗舰模型把环境当一等资产。** Kimi K2 收集了 3000 多个真实 MCP 工具、演化出 2 万多个合成工具，SWE 环境跑在支持 1 万以上并发沙箱的 Kubernetes 集群上[^k2]；MiniMax-M1 把数学、合成逻辑题、竞赛编程、SWE 沙箱和奖励模型判分的通用任务“按精心设计的课程”整合进同一个 RL 阶段[^m1]；DeepSeek-V3.2 用智能体自动合成了 1,800 多个环境和 8.5 万多个提示[^ds32]。
-- **环境开始像模型权重一样被分发。** Prime Intellect 在 2025-08-27 发布 Environments Hub，发布公告直言“RL 环境是下一波 AI 进展的关键瓶颈，而大实验室把它们锁起来了”[^pi-hub]；Meta 与 Hugging Face 在 2025-10-23 发布 OpenEnv[^openenv]；NVIDIA 用于 Nemotron 生产训练的 NeMo Gym 在 2025-11 发布首个正式版本[^nemo]。
+- **旗舰模型把环境当一等资产。** Kimi K2 收集了 3000 多个真实 MCP 工具、演化出 2 万多个合成工具，SWE 环境跑在支持 1 万以上并发沙箱的 Kubernetes 集群上[^k2]；MiniMax-M1 把数学、合成逻辑题、竞赛编程、SWE 沙箱和奖励模型判分的通用任务“按精心设计的课程”整合进同一个 RL 阶段[^m1]；DeepSeek-V3.2 的智能体 RL 用了约 8.5 万个任务，多数跑在真实环境里（GitHub issue 修复、搜索、代码解释器），另有 4,417 个任务连同 1,827 个环境完全由智能体自动合成[^ds32]。
+- **环境开始像模型权重一样被分发。** Prime Intellect 在 2025-08-27 发布 Environments Hub，发布公告直言“RL 环境是下一波 AI 进展的关键瓶颈，而大实验室把它们锁起来了”[^pi-hub]；Meta 与 Hugging Face 在 2025-10-23 发布 OpenEnv[^openenv]；NVIDIA 用于 Nemotron 生产训练的 NeMo Gym 在 2025-11 发布首个版本 v0.1.0[^nemo]。
 - **环境被主动设计，而不是被动接入。** Tongyi DeepResearch 的技术报告写道：环境“不应被看作外部现实，而应作为与训练过程深度耦合的系统来主动设计”[^tongyi]。
 
 ::: insight 环境就是新的数据
@@ -68,17 +76,17 @@ flowchart LR
 逐个部件看，每一个都有可以踩的坑：
 
 1. **任务分布。** 来自固定数据集、程序化生成器或合成流水线；必须能按难度调节，并预留与训练分布隔离的留出集。
-2. **观测与动作接口。** 通常是对话消息加工具的 JSON schema（函数调用或 MCP）。关键约束是**上下文只追加、不改写**：verifiers 明确要求 rollout 中的 token 序列只增不改——一个 token 一旦进入上下文，之后就必须原样保留——否则训练时重算的 token 和采样时对不上；像 Qwen3 这类会从历史中删掉思考内容的聊天模板因此需要专门处理[^verifiers]。NeMo Gym 2026 年的版本在支持外部 harness 做 RL 时，也特别强调“在多步运行中保留精确的 token id”[^nemo]（相关问题见 [训推不一致](/lenses/infra#mismatch)）。
-3. **工具。** 无状态工具（计算器、检索）只是函数；有状态工具（shell、数据库、浏览器、虚拟机）才需要沙箱。verifiers 的 `ToolEnv` 要求工具幂等、无状态，需要注入沙箱句柄或凭证时升级为 `StatefulToolEnv`[^verifiers]。
+2. **观测与动作接口。** 通常是对话消息加工具的 JSON schema（函数调用或 MCP）。关键约束是**上下文只追加、不改写**：verifiers 的早期（v0）文档明确要求 rollout 中的 token 序列只增不改——一个 token 一旦进入上下文，之后就必须原样保留——否则训练时重算的 token 和采样时对不上；像 Qwen3、DeepSeek-R1-Distill 这类会从历史中删掉思考内容的聊天模板因此需要专门处理[^verifiers]。NeMo Gym 在 2026-09 的 v0.6.0 中支持用外部 harness 做 RL，也特别强调“在多步运行中保留精确的 token id”[^nemo]（相关问题见 [训推不一致](/lenses/infra#mismatch)）。
+3. **工具。** 无状态工具（计算器、检索）只是函数；有状态工具（shell、数据库、浏览器、虚拟机）才需要沙箱。verifiers v0 的 `ToolEnv` 要求工具幂等、无状态，需要注入沙箱句柄或凭证时升级为 `StatefulToolEnv`[^verifiers]。
 4. **状态与重置。** 每个回合必须有隔离且可一键恢复的初始状态：τ-bench 与 AgentScaler 用数据库初始态，OSWorld 用虚拟机快照，SWE 环境用容器镜像。Kimi K3 的 microVM 沙箱还支持 **fork**：从完全相同的状态复制一个沙箱专门用来判分，避免判分操作污染现场[^k3]。
-5. **终止条件。** 模型给出最终回答、不再调用工具（verifiers 的 `ToolEnv` 即以此结束）、超过最大轮数、超过 token 或时间预算。被截断的轨迹怎么计奖励要单独约定，否则会悄悄变成长度惩罚。
+5. **终止条件。** 模型给出最终回答、不再调用工具（verifiers v0 的 `ToolEnv` 即以此结束）、超过最大轮数、超过 token 或时间预算。被截断的轨迹怎么计奖励要单独约定，否则会悄悄变成长度惩罚。
 6. **验证器与奖励。** <Term t="verifier">验证器</Term>可以是规则匹配、执行单元测试、比对终态，也可以是按 rubric 打分的 LLM 评审，逐级更通用、也逐级更容易被钻空子。
 
 ::: human
 环境就像一间考场：发卷（任务）、答题纸（接口）、允许带的工具、考前把桌面收拾干净（重置）、收卷规则（终止）、阅卷老师（验证器）。任何一个环节松了，模型学到的就可能是“钻考场的空子”，而不是本事。
 :::
 
-**无状态与有状态。** 无状态环境（数学、逻辑谜题、单轮代码题）的“环境”就是一个奖励函数，可以和采样同进程计算，几乎零成本；有状态环境（SWE、终端、网页、电脑操作、带数据库的工具使用）要管理沙箱的创建、暂停、销毁与并发，单步延迟从毫秒到分钟不等，成本和故障率都高出几个量级。多环境训练的大部分工程难题都来自后者。
+**无状态与有状态。** 无状态环境（数学、逻辑谜题、单轮代码题）的“环境”就是一个奖励函数，可以和采样同进程计算，几乎零成本；有状态环境（SWE、终端、网页、电脑操作、带数据库的工具使用）要管理沙箱的创建、暂停、销毁与并发，单步延迟从毫秒到分钟不等，成本高出几个数量级，出故障的环节也多得多。多环境训练的大部分工程难题都来自后者。
 
 **保真度光谱。** Tongyi DeepResearch 把环境分成三档[^tongyi]：*先验世界环境*只提供任务、工具和状态定义，让模型基于预训练知识“想象”交互过程，零成本但没有真实反馈，适合给智能体中训练批量造数据；*模拟环境*在本地复刻真实交互（如基于 2024 年维基百科离线库加本地检索工具模拟网页），稳定、便宜、可做归因实验，但覆盖有限、存在模拟与真实的差距；*真实环境*保真度最高，但交互贵、分布随时间漂移、还有探索风险。他们的做法是先在模拟环境里验证算法与策略，再迁到真实环境做最终训练。Kimi K2 的工具使用数据也采取混合路线：多数场景用维护状态、带受控随机性的“工具模拟器”（相当于世界模型），代码与 SWE 场景则换成真实执行沙箱[^k2]。
 
@@ -105,8 +113,8 @@ flowchart LR
 
 三个趋势值得注意：
 
-- **分发：从代码仓库到 Hub。** verifiers 的环境是带 `pyproject.toml` 的 Python 包，暴露统一的 `load_environment` 入口，可以一条命令推送到 <Term t="environment-hub">Environments Hub</Term>、在任意机器上安装[^verifiers]；Prime Intellect 随后用 Hub 上的环境训练并评测了开源模型 INTELLECT-3[^intellect3]。OpenEnv 则把每个环境做成可部署到 Hugging Face Spaces 的容器服务[^openenv]。
-- **互通：生态开始相互兼容。** NeMo Gym 可以直接接入 Reasoning Gym、verifiers、OpenEnv 与 Harbor 的环境[^nemo]；verifiers v1 支持 Harbor 格式的任务集；SWE-Bench Pro 在 2026-09 的 V2 也以 Harbor 格式发布[^swepro]。
+- **分发：从代码仓库到 Hub。** verifiers 把环境打包成带 `pyproject.toml` 的 Python 包（v0 时期统一暴露 `load_environment` 入口），用 `prime env push` 一条命令推送到 <Term t="environment-hub">Environments Hub</Term>，在任意机器上都能安装[^verifiers]；Prime Intellect 随后用 Hub 上的环境训练并评测了开源模型 INTELLECT-3[^intellect3]。OpenEnv 则把每个环境做成可部署到 Hugging Face Spaces 的容器服务[^openenv]。
+- **互通：生态开始相互兼容。** NeMo Gym 可以直接接入 Reasoning Gym、verifiers、OpenEnv 与 Harbor 的环境[^nemo]；verifiers v1 支持 Harbor 格式的任务集[^verifiers]；SWE-Bench Pro 在 2026-09 的 V2 也以 Harbor 格式发布[^swepro]。
 - **解耦：任务与 harness 分开。** verifiers v1 把“任务集”（数据、工具、奖励）与“harness”（模型运行其中的程序，如 Claude Code、Codex、mini-swe-agent）拆成两层[^verifiers]；NeMo Gym 把 harness 列为环境的四个组成部分之一[^nemo]。Kimi K3 走得更远：用一个“白盒”环境把 <Term t="scaffold">脚手架</Term> 拆成可配置的工具接口、系统提示、上下文管理、技能与子智能体等模块，训练时为不同任务组合出不同 harness，理由是“用单一固定 harness 训练会让模型过拟合某种工具 schema、提示或交互协议”[^k3]。
 
 ::: human
@@ -154,7 +162,7 @@ SWE 环境贵在“有状态”：每道题都要一个装好依赖、能跑测�
 
 两条经验：
 
-- **环境是成本单位，任务不是。** SWE-smith 反过来做——每个仓库只搭一个环境，在里面批量注入 bug，保留能让已有单测失败的实例再生成 issue 文本——于是合成成本主要随仓库数而非任务数增长[^swesmith]。SWE-bench-Live 在 2026 年的更新里也采用了“每个仓库只构建一个 commit，其余 commit 直接从已建镜像检出”的策略[^swelive]。
+- **环境是成本单位，任务不是。** SWE-smith 反过来做——每个仓库只搭一个环境，在里面批量注入 bug，保留能让已有单测失败的实例再生成 issue 文本——于是合成成本主要随仓库数而非任务数增长[^swesmith]。SWE-bench-Live 在 2026-08 的更新里也改为“每个仓库只构建一个 commit，其余 commit 直接从已建镜像检出”：为 93 个仓库的 856 个 issue 建环境时，成功率不低于 98%，LLM API 成本省下 82%，镜像存储省下 78%[^swelive]。
 - **造环境的智能体也会作弊。** Qwen3-Coder-Next 用专门的环境构建智能体为每个 PR 搭 Docker 环境和验证脚本，要求脚本能通过执行可靠地区分“有 bug”与“已修复”两种状态；他们发现构建智能体会利用表面的验证捷径，于是加入自动检测来过滤“不起作用的验证器”，并专门训练了一个提升构建质量的模型，最后再由质检智能体剔除歧义任务和测试错配[^qcn]。
 
 工业界的规模已经到了另一个量级：DeepSeek-V3.2 构建了数万个可复现的 issue 修复环境，覆盖 Python、Java、JavaScript、Go 等多种语言[^ds32]；Kimi K2 的 SWE 环境支持 1 万以上并发沙箱[^k2]。
@@ -163,9 +171,9 @@ SWE 环境贵在“有状态”：每道题都要一个装好依赖、能跑测�
 
 真实 API 难以大规模、可重复地调用，于是工具使用环境普遍走向模拟：
 
-- **Kimi K2**[^k2]：3000 多个真实 MCP 工具加 2 万多个按“类别 → 领域 → 工具”层级演化出的合成工具；组合出数千个带不同工具集的智能体；每个任务配一份 rubric（成功标准、预期工具使用模式、检查点）；由 LLM 扮演的用户与维护状态的工具模拟器生成多轮轨迹，最后由 LLM 评审按 rubric 过滤。
+- **Kimi K2**[^k2]：3000 多个真实 MCP 工具加 2 万多个按“类别 → 领域 → 工具”层级演化出的合成工具；组合出数千个带不同工具集的智能体；每个任务配一份 rubric（成功标准、预期工具使用模式、检查点）；由 LLM 扮演的用户与维护状态的工具模拟器生成多轮轨迹，最后由 LLM 评审按 rubric 过滤。这条流水线产出的是 SFT 数据，相当于大规模拒绝采样。
 - **[AgentScaler](/library/?id=agentscaler)**（通义）：约 3 万个 API 按参数相似度建成工具图，用 Louvain 社区发现切成 1000 多个领域；每个领域落成“数据库 + Python 工具”的全模拟环境，工具调用就是读写数据库；沿工具图采样调用序列生成带初始态与目标态的任务，再用模拟用户采轨迹，按数据库终态和调用序列双重过滤。Tongyi DeepResearch 的函数调用数据就是这样合成的[^tongyi]。
-- **DeepSeek-V3.2**[^ds32]：给定任务类别（如规划旅行）和一个带 bash 与搜索工具的沙箱，由智能体先收集数据存进沙箱数据库，再合成任务专用工具，然后提出一个简单任务及其解和 Python 验证函数，并在此基础上逐步加难，最终得到 1,827 个任务环境。
+- **DeepSeek-V3.2**[^ds32]：给定任务类别（如规划旅行）和一个带 bash 与搜索工具的沙箱，由智能体先收集数据存进沙箱数据库，再合成任务专用工具，然后提出一个简单任务及其解和 Python 验证函数，并在此基础上逐步加难；再用 DeepSeek-V3.2 在这些任务上跑 RL，只保留 pass@100 非零（至少能解出一次）的实例，最终得到 1,827 个环境、4,417 个任务。
 - **Kimi K3**[^k3]：用智能体在网络上持续扩展一张层级知识图谱，按节点采样关键词、检索真实资料来合成任务；还构建了跨多个模拟日、事件相互依赖的“活环境”，单个 rollout 可包含上千次工具调用。
 
 ::: details 另一条路：让对手或模型自己出题
@@ -181,7 +189,7 @@ SWE 环境贵在“有状态”：每道题都要一个装好依赖、能跑测�
 **设计模式一：按规模的温度采样。** 设环境 $e$ 有 $N_e$ 个任务，取
 
 $$
-w_e=\frac{ N_e^{\alpha} }{ \sum_{k} N_k^{\alpha} },\qquad \alpha\in[0,1].
+w_e=\frac{ N_e^{\alpha} }{ \sum_{e'} N_{e'}^{\alpha} },\qquad \alpha\in[0,1].
 $$
 
 $\alpha=1$ 按规模比例抽，$\alpha=0$ 各环境均匀抽；取中间值可以防止大环境淹没小环境。这是多语言预训练里常用的温度采样在环境层面的翻版。
@@ -205,20 +213,20 @@ $$
 **有出处的三种做法：**
 
 - *按题优先采样。* Kimi k1.5 跟踪每道题的成功率 $s_i$，按 $1-s_i$ 成比例抽题，把算力集中到模型最弱的地方[^k15]。
-- *环境内自适应难度。* RLVE 为每个环境维护一个难度上限 $h_e$，从最近 $W$ 档难度中均匀抽题；在难度 $h_e$ 上累计到足够样本后，若正确率不低于阈值（默认 0.9）就令 $h_e\leftarrow h_e+1$。代码默认 $W=4$，初始上限为 0，每次检查前至少积累 8 个提示的样本[^rlve]。
-- *环境间的 bandit 课程。* Self-Evolving Curriculum 把每个题目类别当作非平稳多臂老虎机的一只手臂，以该类别样本的平均绝对优势作为“即时学习收益”，用 TD(0) 更新各臂的价值 $Q_e\leftarrow \eta\,r_e+(1-\eta)\,Q_e$，再按 $\text{softmax}(Q_e/T)$ 抽类别[^sec]。
+- *环境内自适应难度。* RLVE 在环境之间均匀抽取，但为每个环境维护一个难度上限 $h_e$，从最近 $W$ 档难度中均匀抽题；在难度 $h_e$ 上累计到足够样本后，若正确率不低于阈值（默认 0.9）就令 $h_e\leftarrow h_e+1$。代码默认 $W=4$，初始上限为 0，每次检查前至少积累 8 个提示的样本[^rlve]。
+- *环境间的 bandit 课程。* Self-Evolving Curriculum 把每个题目类别当作非平稳多臂老虎机的一只手臂，以该类别样本的平均绝对优势作为“即时学习收益”，用 TD(0) 更新各臂的价值 $Q_e\leftarrow \eta\,r_e+(1-\eta)\,Q_e$，再按 $\text{softmax}(Q_e/T)$ 抽类别（$T$ 为温度）[^sec]。
 
 ### 奖励怎么对齐：尺度与归一化
 
 不同环境的奖励天生不在一个尺度上：数学题是 $\{0,1\}$，RLVE 的很多环境给连续的部分分，MiniMax-M1 的 SWE 环境对编译错误、测试回退给零分或负分[^m1]，rubric 评审给的是多维分数。
 
-GRPO 的组内标准化对同一个提示内的仿射变换是不变的：若 $r'_i=a\,r_i+b$（$a>0$），则
+GRPO 的组内标准化对同一个提示内的仿射变换是不变的（忽略分母里防除零的小常数）：若 $r'_i=a\,r_i+b$（$a>0$），则
 
 $$
 \hat A_i=\frac{r'_i-\operatorname{mean}(r'_1,\dots,r'_G)}{\operatorname{std}(r'_1,\dots,r'_G)}=\frac{r_i-\operatorname{mean}(r_1,\dots,r_G)}{\operatorname{std}(r_1,\dots,r_G)} .
 $$
 
-所以用标准差归一化时，各环境的奖励尺度会被自动抹平；代价是低方差的组被放大。若按 Dr. GRPO 的建议去掉标准差，奖励尺度就会直接变成梯度尺度，此时需要**按环境归一化（设计模式三）**：为每个环境维护奖励均值与标准差的滑动估计 $\mu_e,\sigma_e$，用
+所以用标准差归一化时，各环境的奖励尺度会被自动抹平；代价是低方差的组被放大。若按 Dr. GRPO 的建议去掉标准差，奖励尺度就会直接变成梯度尺度，此时需要**按环境归一化（设计模式三）**：为每个环境维护奖励标准差的滑动估计 $\sigma_e$，用
 
 $$
 \hat A_i=\frac{r_i-\operatorname{mean}_{\text{组} }(r)}{\sigma_e+\epsilon}
@@ -236,13 +244,13 @@ $$
 \text{环境 } e \text{ 的份额}\approx\frac{\sum_{i\in e}\lvert y_i\rvert}{\sum_i \lvert y_i\rvert}.
 $$
 
-一条 SWE 轨迹动辄数万 token，一道数学题几千 token，按样本数 1:1 混合时，SWE 的梯度份额可能是数学的十倍。**设计模式四**是先在环境内做 token 平均，再按目标份额 $\lambda_e$ 加权：
+一条 SWE 轨迹动辄数万 token（工具返回被 mask 后仍然很长），一道数学题通常几千 token；按样本数 1:1 混合时，SWE 的梯度份额可能是数学的数倍乃至十倍。**设计模式四**是先在环境内做 token 平均，再按目标份额 $\lambda_e$ 加权：
 
 $$
 \mathcal L=\sum_{e}\lambda_e\cdot\frac{1}{\sum_{i\in e}\lvert y_i\rvert}\sum_{i\in e}\sum_t \ell_{i,t},\qquad \sum_e\lambda_e=1 .
 $$
 
-此外，工具返回的 token 要用 <Term t="loss-mask">loss mask</Term> 排除在损失之外；Kimi K2 还按任务类型设定每条样本的最大 token 预算，超出即截断并惩罚，防止非推理类任务的回答越训越长[^k2]。
+此外，工具返回的 token 要用 <Term t="loss-mask">loss mask</Term> 排除在损失之外；Kimi K2 还按任务类型设定每条样本的最大 token 预算，超出即截断并惩罚，以免模型在不需要长推理的任务上也越答越长[^k2]。
 
 ### 顺序怎么安排：课程与遗忘
 
@@ -250,11 +258,11 @@ $$
 - **先热身、后攻坚。** Kimi k1.5 先在全量数据上热身，再只训难题，消融显示明显优于均匀采样[^k15]；POLARIS 则在每个阶段结束时剔除已掌握（正确率高于 0.9）的题（见 [POLARIS](/library/?id=polaris)）。
 - **防遗忘。** Kimi K2 在联合 RL 中加入基于精选高质量数据的 PTX 辅助损失，并对探索温度做衰减[^k2]（遗忘的机制见 [原理：遗忘](/lenses/principles#forgetting)）。
 - **跨领域迁移并不对称。** Guru 的实验表明，预训练中常见的领域（数学、代码、科学）能从跨领域 RL 中获益，预训练覆盖少的领域（逻辑、模拟、表格）则需要本领域的环境才能提升（见 [Guru](/library/?id=guru)）。
-- **先分后合。** 另一条路线是不把所有环境塞进一个策略：DeepSeek-V3.2 先训领域专家再蒸馏、最后做一次混合 RL；Kimi K3 为三个领域 × 三档推理强度各训一个专家，再用多教师 [On-Policy 蒸馏](/topics/opd) 合并[^k3]。
+- **先分后合。** 另一条路线是不把所有环境塞进一个策略：DeepSeek-V3.2 先训领域专家再蒸馏、最后做一次混合 RL[^ds32]；Kimi K3 为三个领域 × 三档推理强度各训一个专家，再用多教师 [On-Policy 蒸馏](/topics/opd) 合并[^k3]。
 
 ### 看得见：按环境分桶的监控
 
-多环境训练最常见的失败是“总奖励在涨，某个环境在悄悄崩”。每个环境至少单独看六条曲线：平均奖励、通过率、零方差组比例（全对或全错的组）、回答长度与截断率、环境错误率（工具超时、沙箱崩溃）、在批次中的 token 份额。环境错误要与策略失败区分开：Tongyi DeepResearch 专门做了统一沙箱层，用限流、结果缓存、超时重试、降级与备用数据源切换，把不稳定的外部 API 包装成确定、稳定的接口，理由是“工具错误会污染智能体的学习轨迹”[^tongyi]。一个可执行的设计模式是：环境侧故障导致的轨迹直接丢弃或 mask 掉，而不是给 0 分。
+多环境训练最常见的失败是“总奖励在涨，某个环境在悄悄崩”。每个环境至少单独看六条曲线：平均奖励、通过率、零方差组比例（全对或全错的组）、回答长度与截断率、环境错误率（工具超时、沙箱崩溃）、在批次中的 token 份额。环境错误要与策略失败区分开：Tongyi DeepResearch 专门做了统一沙箱层，用限流、结果缓存、超时重试、降级与备用数据源切换，把不稳定的外部 API 包装成确定、稳定的接口，理由是“工具错误会污染智能体的学习轨迹”[^tongyi]。与之配套的**设计模式五**：环境侧故障导致的轨迹直接丢弃或 mask 掉，而不是给 0 分。
 
 ::: human
 多个练习场一起练，就像同时补几门课：要决定每门课排几节（采样权重），把各科分数换算到同一把尺子上（归一化），别让作业最长的那门课占掉全部精力（损失聚合），先打基础再上难度（课程），还要每门课单独看成绩单（分桶监控）。
@@ -299,14 +307,14 @@ sequenceDiagram
 
 <LineageGraph graph="env-scaling" />
 
-这张图有四条主线。**静态基准**（WebArena、SWE-bench、OSWorld、τ-bench）最先把“真实任务 + 执行判分”做成可复现的环境，但它们只为考试设计，题少、环境搭建靠人工。**训练用 Gym**（SWE-Gym、Reasoning Gym、GEM、RLVE）把考题改造成可反复练习的训练场，并把难度控制内置进环境。**规模化合成**（R2E-Gym、SWE-smith、Kimi K2、AgentScaler、DeepSeek-V3.2、Kimi K3）解决“题从哪来”：从回译 commit、注入 bug，到由智能体自己搭数据库、写工具、出难解易验的任务。**标准与 Hub**（verifiers、Environments Hub、OpenEnv、NeMo Gym）解决“环境怎么共享”：统一接口、容器化、可安装、可组合。2026 年的前沿是把 harness 也变成环境的可配置部分，以及用 microVM 支撑跨越数天的长程“活环境”。
+这张图有四条主线。**静态基准**（WebArena、SWE-bench、OSWorld、τ-bench）最先把“真实任务 + 执行判分”做成可复现的环境，但它们只为考试设计，题少、环境搭建靠人工。**训练用 Gym**（SWE-Gym、Reasoning Gym、GEM、RLVE）把考题改造成可反复练习的训练场，并把难度控制内置进环境。**规模化合成**（R2E-Gym、SWE-smith、Kimi K2、AgentScaler、DeepSeek-V3.2、Kimi K3）解决“题从哪来”：从回译 commit、注入 bug，到由智能体自己搭数据库、写工具、出难解易验的任务。**标准与 Hub**（verifiers、Environments Hub、OpenEnv、NeMo Gym）解决“环境怎么共享”：统一接口、容器化、可安装、可组合。2026 年的前沿是把 harness 也变成环境的可配置部分，用 microVM 沙箱承载可暂停、可 fork 的长程任务，以及跨越多个模拟日、事件相互依赖的“活环境”。
 
 ## 关键工作精读 {#papers}
 
 <EntryGrid :ids="['the-second-half', 'verifiers', 'reasoning-gym', 'swe-smith', 'r2e-gym', 'agentscaler', 'rlve', 'kimi-k2', 'deepseek-v3-2', 'kimi-k3']" />
 
 - **The Second Half**：不是技术论文，但给出了这一页的问题意识——算法趋同之后，环境与评测的设计决定上限。读它时带着一个问题：你的环境默认了哪些“不真实”的设定？
-- **verifiers**：最值得借鉴的是它的抽象边界——数据集、交互逻辑、Rubric、解析器各管一件事，外加“token 序列只增不改”的硬约束；2026 年拆出 harness 一层，代表了行业方向。
+- **verifiers**：最值得借鉴的是它的抽象边界。早期版本让数据集、交互逻辑、Rubric、解析器各管一件事，外加“token 序列只增不改”的硬约束；2026 年的 v1 改成 taskset、harness、trace 三层，把 harness 单独拆出来，代表了行业方向。
 - **Reasoning Gym**：程序化环境的标准实现。它的价值不在任何单个任务，而在“难度可调 + 无限供给 + 天然无污染”这三件事同时成立。
 - **SWE-smith 与 R2E-Gym**：两种互补的 SWE 造题思路。R2E-Gym 从真实 commit 回译，贴近真实分布；SWE-smith 在一个仓库里批量注入 bug，成本更低、规模更大。二者都证明了合成任务能训练出强 SWE 智能体。
 - **AgentScaler**：把“工具使用”彻底改写成“读写数据库”，从而用状态比对得到可靠奖励。工具图加社区发现的领域划分方法可以直接复用。
@@ -352,19 +360,19 @@ sequenceDiagram
 [^yao]: Shunyu Yao, “The Second Half”，2025-04-10。<https://ysymyth.github.io/The-Second-Half/>
 [^k2]: Kimi Team, “Kimi K2: Open Agentic Intelligence”，§3.1.1（工具使用数据合成）、§3.2.1（SWE 沙箱，1 万以上并发实例）、§3.2.3（预算控制、PTX 损失、温度衰减）、§3.3.4（智能体 rollout）。<https://arxiv.org/abs/2507.20534>
 [^m1]: MiniMax, “MiniMax-M1: Scaling Test-Time Compute Efficiently with Lightning Attention”，§4.1（SynLogic 41 类任务、约 5.3 万条，难度上下界；SWE 沙箱奖励）、§4.3（课程）。<https://arxiv.org/abs/2506.13585>
-[^ds32]: DeepSeek-AI, “DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models”（大规模智能体任务合成：1,800+ 环境、8.5 万+ 提示；通用智能体环境合成流程；多语言 issue 修复环境）。<https://arxiv.org/abs/2512.02556>
+[^ds32]: DeepSeek-AI, “DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models”：引言称合成了“1,800 多个环境、8.5 万个复杂提示”；“Large-Scale Agentic Tasks”一节的任务表为代码智能体 24,667、搜索智能体 50,275、通用智能体 4,417、代码解释器 5,908，其中只有通用智能体的环境与提示都是合成的（保留 pass@100 非零后得到 1,827 个环境）；另述多语言 issue 修复环境的构建。<https://arxiv.org/abs/2512.02556>
 [^pi-hub]: Prime Intellect, “Environments Hub: A Community Hub To Scale RL To Open AGI”，2025-08-27。<https://www.primeintellect.ai/blog/environments>；发布公告原文见 <https://x.com/PrimeIntellect/status/1960783427948699680>
 [^openenv]: Hugging Face, “Building the Open Agent Ecosystem Together: Introducing OpenEnv”，2025-10-23。<https://huggingface.co/blog/openenv>
 [^nemo]: NVIDIA NeMo Gym README（环境的四个组成部分；与 Reasoning Gym、verifiers、OpenEnv、Harbor 的集成；v0.6.0 保留精确 token id）。<https://github.com/NVIDIA-NeMo/Gym>
 [^tongyi]: Tongyi DeepResearch Team, “Tongyi DeepResearch Technical Report”，§2（三类环境）、§3.3.2（基于环境扩展的函数调用数据合成）、§3.4.3（统一沙箱、离线维基模拟环境、异步 rollout）。<https://arxiv.org/abs/2510.24701>
 [^k3]: Moonshot AI, “Kimi K3: Open Frontier Intelligence”，§4.2（白盒 RL 环境、知识图谱引导的任务合成、活环境、自主执行任务与隐藏验证器）、§5.3.2（AgentENV microVM 沙箱）。<https://arxiv.org/abs/2607.24653>
-[^verifiers]: PrimeIntellect-ai/verifiers README（2025-10 版：环境组成、`ToolEnv` / `StatefulToolEnv`、token 序列只增约束）与 docs/v1（taskset、harness、trace）。<https://github.com/PrimeIntellect-ai/verifiers>
+[^verifiers]: PrimeIntellect-ai/verifiers：v0 时期的 README（如 2025-10 的 v0.1.6 标签：环境打包与 `load_environment`、`ToolEnv` / `StatefulToolEnv`、token 序列只增约束及其与 Qwen3、R1-Distill 模板的冲突）；docs/v1（taskset、harness、trace，Harbor 任务集支持；v0 接口已移除）。<https://github.com/PrimeIntellect-ai/verifiers>
 [^intellect3]: Prime Intellect Team, “INTELLECT-3: Technical Report”。<https://arxiv.org/abs/2512.16144>
 [^swepro]: scaleapi/SWE-bench_Pro-os README（V2：11 个仓库上 642 个复核任务，Harbor 格式）。<https://github.com/scaleapi/SWE-bench_Pro-os>
 [^enigmata]: BytedTsinghua-SIA/Enigmata README（用于 Seed1.5-Thinking 训练）。<https://github.com/BytedTsinghua-SIA/Enigmata>
 [^intern]: InternLM/InternBootcamp README 与技术报告（1000+ 任务、90% 以上自动合成、Task Scaling、Emergent Moment）。<https://arxiv.org/abs/2508.08636>
 [^swesmith]: SWE-bench/SWE-smith README（构建流程：建环境 → 合成任务 → 保留让单测失败的实例 → 生成 issue）。<https://github.com/SWE-bench/SWE-smith>
-[^swelive]: microsoft/SWE-bench-Live README（2026-08 更新：每个仓库只构建一个 commit，其余复用镜像）。<https://github.com/microsoft/SWE-bench-Live>
+[^swelive]: microsoft/SWE-bench-Live README（2026-08-21 更新：每个仓库只用 RepoLaunch 构建一个 commit，其余 commit 从已建镜像检出并复用命令与解析器；856 个 issue、93 个仓库上成功率 ≥98%，LLM API 成本省 82%，镜像存储省 78%）。<https://github.com/microsoft/SWE-bench-Live>
 [^qcn]: Qwen Team, “Qwen3-Coder-Next Technical Report”，§2（从 PR 构建可执行环境、过滤无效验证器、质检智能体、MegaFlow 编排）。<https://arxiv.org/abs/2603.00729>
 [^spiral]: “SPIRAL: Self-Play on Zero-Sum Games Incentivizes Reasoning via Multi-Agent Multi-Turn Reinforcement Learning”。<https://arxiv.org/abs/2506.24119>
 [^azr]: “Absolute Zero: Reinforced Self-play Reasoning with Zero Data”。<https://arxiv.org/abs/2505.03335>

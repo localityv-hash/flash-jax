@@ -11,7 +11,7 @@ nodes:
     label: Self-Instruct
     date: 2022-12
     lane: synth
-    note: "用模型自己生成指令与实例，摆脱对人工标注任务集的依赖；代价是噪声大，抽查约一半样本有问题。"
+    note: "用模型自己生成指令与实例，摆脱对人工标注任务集的依赖；代价是噪声大，抽查的 200 条里 46% 有问题。"
     href: "#self-instruct-alpaca"
     entry: self-instruct
   - id: flan
@@ -52,14 +52,14 @@ nodes:
     label: Tulu 3
     date: 2024-11
     lane: inst
-    note: "把 SFT → DPO → RLVR 的数据、代码、评测全部公开，让“完整后训练配方”第一次可复现。"
+    note: "把 SFT → DPO → RLVR 的数据、代码、评测与中间检查点全部公开，让完整的后训练配方可以端到端复现。"
     href: "#tulu3"
     entry: tulu3
   - id: r1
     label: R1 冷启动与蒸馏
     date: 2025-01
     lane: longcot
-    note: "用数千条可读长 CoT 冷启动 RL，再把拒绝采样得到的约 80 万条数据蒸馏给小模型：长 CoT SFT 成为标配。"
+    note: "用数千条可读长 CoT 冷启动 RL，再把约 80 万条 SFT 数据（其中约 60 万条推理样本来自拒绝采样）蒸馏给小模型：长 CoT SFT 成为标配。"
     href: "#r1-cold-start"
     entry: deepseek-r1
   - id: sft-mem
@@ -101,7 +101,7 @@ nodes:
     label: Llama-Nemotron
     date: 2025-05
     lane: longcot
-    note: "推理/非推理回答混合 SFT 实现推理开关；最大模型在蒸馏后接大规模 RL，部分基准超过教师。"
+    note: "推理/非推理回答混合 SFT 实现推理开关；只给最大的 Ultra 在蒸馏后接大规模推理 RL，它在 GPQA 上超过了教师。"
     href: "#industrial-recipes"
     entry: llama-nemotron
   - id: openthoughts

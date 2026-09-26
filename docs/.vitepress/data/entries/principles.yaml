@@ -1,5 +1,6 @@
 # 原理与可解释性视角（/lenses/principles）的条目：RL 到底改变了模型什么。
-# 字段均按纯文本渲染，公式用 Unicode 书写。按页面上的问题顺序排列。
+# summary / plain / evidence_note / takeaways 支持 `$公式$` 与 `代码`（构建时渲染）；含公式的字符串用单引号，免得转义反斜杠。
+# 按页面上的问题顺序排列。
 
 # ---------- 熵：探索预算如何被花掉 ----------
 
@@ -18,11 +19,11 @@
   facets: [theory, algorithm]
   tier: must
   evidence: [industrial, ablation, open-source, community]
-  evidence_note: "作者所在的上海 AI Lab 在 Intern-S1 技术报告（arXiv 2508.15763）中用 KL-Cov 控制 RL 阶段的熵；Clip-Cov / KL-Cov 已合入 verl 主干（loss_mode 设为 clip_cov 或 kl_cov 即可）；熵—性能拟合覆盖 Qwen2.5 0.5B–32B 等多个模型，发布当天登上 Hugging Face Daily Papers 第一。"
-  summary: "推导 softmax 策略在策略梯度下的一阶熵变化：由动作对数概率与 logit 更新（约等于优势）的协方差决定，解释了熵为何持续下降；经验拟合 R = −a·e^H + b，并提出只约束极少数高协方差 token 的 Clip-Cov 与 KL-Cov。"
+  evidence_note: "作者所在的上海 AI Lab 在 Intern-S1 技术报告（arXiv 2508.15763）中用 KL-Cov 控制 RL 阶段的熵；Clip-Cov / KL-Cov 已合入 verl 主干（`loss_mode` 设为 `clip_cov` 或 `kl_cov` 即可）；熵—性能拟合覆盖 Qwen2.5 0.5B–32B 等多个模型，发布当天登上 Hugging Face Daily Papers 第一。"
+  summary: '推导 softmax 策略的一阶熵变化：由动作对数概率与 logit 更新量的协方差决定（自然策略梯度下即与优势的协方差），解释了熵为何持续下降；经验拟合 $R=-a\,e^{\mathcal H}+b$，并提出只约束极少数高协方差 token 的 Clip-Cov 与 KL-Cov。'
   plain: "模型越有把握、又恰好答对的地方，RL 越会把它推得更确定，熵就这样被花光；只给最“贪心”的极少数 token 踩刹车，探索就能保住。"
   takeaways:
-    - "训练时把策略熵与 token 级协方差一起记录：熵若在前几百步就塌到底，性能上限基本锁定在 R = −a + b 附近。"
+    - '训练时把策略熵与 token 级协方差一起记录：熵若在前几百步就塌到底，性能上限基本锁定在拟合值 $R=-a+b$ 附近。'
     - "想保熵时，只约束极少数高协方差 token（官方配方里 KL-Cov 作用于 0.2%（7B）/ 0.02%（32B）的 token），比给全体 token 加熵奖励更精准。"
   builds_on: [grpo, dapo]
   tags: [熵, 探索, RLVR]
@@ -36,11 +37,12 @@
   date: 2025-06
   venue: NeurIPS 2025
   arxiv: "2506.01939"
+  repo: Shenzhi-Wang/Beyond-the-80-20-Rule-RLVR
   areas: [rl-llm]
   facets: [theory, algorithm]
   tier: rec
-  evidence: [ablation, community]
-  evidence_note: "Qwen 团队在 Qwen3-8B/14B/32B 基座上对照“只更新前 20% 高熵 token”“全量更新”“只更新后 80% 低熵 token”三种设置，并跟踪训练过程中熵模式的变化；NeurIPS 2025 收录，社区讨论与后续跟进工作很多。"
+  evidence: [ablation, open-source, community]
+  evidence_note: "Qwen 团队在 Qwen3-8B/14B/32B 基座上对照“只更新前 20% 高熵 token”“全量更新”“只更新后 80% 低熵 token”三种设置，并跟踪训练过程中熵模式的变化；第一作者公开了训练代码；NeurIPS 2025 收录，社区讨论与后续跟进工作很多。"
   summary: "CoT 中只有约两成 token 熵高，它们是决定推理走向的“分叉点”；RLVR 基本沿用基座的熵模式，主要调整这些 token 的熵。只对前 20% 高熵 token 回传策略梯度，在 Qwen3-8B 上与全量持平，在 14B、32B 上明显更好。"
   plain: "一段解答里，大多数字是顺着写的，只有少数“接下来往哪走”的词在做选择；RL 只盯着这些岔路口学，效果反而更好。"
   takeaways:
@@ -65,7 +67,7 @@
   evidence: [ablation, community]
   evidence_note: "覆盖 PPO、GRPO、DPO 等 7 种算法与 10 个不同家族的模型，现象一致；只微调该子网络即可复现全量结果。后续 The Path Not Taken（arXiv 2511.08567）、TinyLoRA（arXiv 2602.04118）等工作在此基础上继续解释并利用这一现象。"
   summary: "逐参数比较 RL 微调前后的权重：只有约 5%–30% 的参数发生变化，在 7 种算法、10 个模型上普遍存在且无需任何稀疏正则；只训练这个子网络就能得到几乎相同的模型，不同种子、数据乃至算法得到的子网络高度重合。"
-  plain: "RL 训完一看，大部分参数一位都没变，真正动了的只是一小撮；换种子、换数据，动的还是差不多那一撮。"
+  plain: "RL 训完一看，大部分参数几乎没动（变化小于 bf16 的数值误差），真正改动的只是一小撮；换种子、换数据，动的还是差不多那一撮。"
   takeaways:
     - "RL 的更新“信息量”很小：LoRA 等参数高效方法在 RL 中通常够用，可作为默认起点。"
     - "别把“大部分参数没变”解读成“能力没变”：稀疏的更新同样能带来显著的行为变化。"
@@ -80,6 +82,7 @@
   org: MIT
   authors: "Idan Shenfeld, Jyothish Pari, Pulkit Agrawal"
   date: 2025-09
+  venue: ICLR 2026
   arxiv: "2509.04259"
   links:
     - { label: "作者博客", url: "https://jyopari.github.io/posts/rl_razor" }
@@ -87,7 +90,7 @@
   facets: [theory]
   tier: rec
   evidence: [ablation, community]
-  evidence_note: "在大语言模型与机器人基础模型上系统对比 RL 与 SFT 的“新任务收益—旧能力保留”权衡，并给出理论解释；发布后被遗忘方向的后续工作（如 Retaining by Doing）广泛引用与讨论。"
+  evidence_note: "ICLR 2026 收录。在大语言模型与机器人基础模型上系统对比 RL 与 SFT 的“新任务收益—旧能力保留”权衡，并给出理论解释；Nathan Lambert 的 RLHF Book 在正则化一章把它与 Retaining by Doing 并列专节讨论。"
   summary: "新任务表现相近时，RL 比 SFT 保留更多旧能力；遗忘程度可由在新任务上测得的“微调模型与基座之间的 KL”预测。on-policy RL 隐式偏向所有能解新任务的策略中 KL 最小的那个，SFT 则可能被拉到离基座任意远处。"
   plain: "同样学会一门新手艺，RL 挑的是“离原来的自己最近”的改法，所以旧本事丢得少；SFT 则可能被标注数据拽到很远的地方。"
   takeaways:
@@ -136,11 +139,11 @@
   facets: [theory, eval]
   tier: must
   evidence: [adopted, ablation, open-source, community]
-  evidence_note: "NeurIPS 2025 最佳论文亚军。“用大 k 的 pass@k 曲线检验推理边界”已成通行做法：NVIDIA 的 ProRL（arXiv 2505.24864）直接沿用这一评测口径检验长时 RL 并给出反例。实验覆盖多个模型族、6 种 RL 算法与数学 / 代码 / 视觉任务，评测代码开源。"
+  evidence_note: "NeurIPS 2025 最佳论文亚军。“用大 k 的 pass@k 曲线检验推理边界”已成通行做法：NVIDIA 的 ProRL（arXiv 2505.24864）沿用这一评测口径检验长时 RL 并给出反例；Qwen3 技术报告也用 pass@64 对照 RL 与 on-policy 蒸馏，结论一致（RL 不提高 pass@64，蒸馏提高）。实验覆盖多个模型族、6 种 RL 算法与数学 / 代码 / 视觉任务，评测代码开源。"
   summary: "用大 k 的 pass@k 刻画推理边界：RLVR 模型在小 k 占优，k 到几十上百时被基座反超；困惑度分析表明 RL 的解题路径本就在基座分布内，6 种 RL 算法差别很小、离“基座上限”仍远；蒸馏则能真正扩展边界。"
   plain: "RL 像是把模型本来就会、但不常说出口的解法调到嘴边：一次答对的概率高了，可多给几次机会时，原本偶尔能做出的题反而丢了。"
   takeaways:
-    - "评估 RL 时同时报告 pass@1 与 k≥256 的 pass@k 曲线；大 k 掉点说明你主要在“锐化”。"
+    - '评估 RL 时同时报告 pass@1 与直到 $k=256$ 的 pass@k 曲线；大 k 掉点说明你主要在“锐化”。'
     - "想真正扩展边界，只换 RL 算法作用有限：更强的先验（蒸馏、中训练）或显式的探索机制更关键。"
   builds_on: [deepseek-r1, simplerl-zoo]
   tags: [pass@k, 推理边界, RLVR]
@@ -161,7 +164,7 @@
   tier: rec
   evidence: [open-source, community]
   evidence_note: "代码开源；在 MATH500、HumanEval、GPQA 等单次作答任务上与 GRPO 后训练模型对照，是“RL 主要在锐化分布”一方被讨论最多的正面证据之一。"
-  summary: "不训练、不用验证器，只借基座模型自身的似然做类 MCMC 的迭代重采样，从“幂次锐化”分布 p^α 中取样：单次作答成绩接近甚至超过 RL 后训练模型，且没有 RL 常见的多样性塌缩。"
+  summary: '不训练、不用验证器，只借基座模型自身的似然做类 MCMC 的迭代重采样，从“幂次锐化”的序列分布 $p^\alpha$ 中取样：单次作答成绩接近甚至超过 RL 后训练模型，且没有 RL 常见的多样性塌缩。'
   plain: "不做 RL，只换一种更会“挑”的采样方式，基座模型就能答得和 RL 模型差不多好，答案还更多样。"
   takeaways:
     - "衡量 RL 收益时加一个“更强采样”基线（幂次采样、best-of-n 等），把能力提升和分布锐化区分开。"
@@ -184,7 +187,7 @@
   tier: rec
   evidence: [ablation, open-source]
   evidence_note: "在可控的字符串变换任务上把原子技能与组合技能分开，对照 RL 与同数据的 RFT（下一 token 训练），并检验更深层组合与跨任务（Countdown）迁移；代码、数据与模型公开，ICLR 2026 收录。"
-  summary: "先用 RFT 让模型学会原子函数 f、g，再只在组合题上做 RL：模型学会了没见过的组合 g(f(x))，还能泛化到更多层嵌套和其他任务；用同样数据做下一 token 训练则做不到。说明 RL 能通过组合旧技能获得新技能。"
+  summary: '先用 RFT 让模型学会原子函数 $f$、$g$，再只在组合题上做 RL：模型学会了没见过的组合 $g(f(x))$，还能泛化到更多层嵌套和其他任务；用同样数据做下一 token 训练则做不到。说明 RL 能通过组合旧技能获得新技能。'
   plain: "模型会加法、会乘法，却没练过“先加后乘”；RL 能教会它把两招串起来，而且这种串法还能迁移到别的题上。"
   takeaways:
     - "想让 RL 带来新能力，先确保原子技能已在 SFT / 中训练阶段学会，再用需要组合的题做 RL。"
@@ -207,7 +210,7 @@
   tier: rec
   evidence: [ablation, open-source]
   evidence_note: "用可完全控制的合成推理任务，分别操纵预训练、中训练与 RL 阶段的数据分布，因果地拆分三者的贡献；ICML 2026 Spotlight，代码公开。"
-  summary: "受控实验表明：只有预训练留有余量、且 RL 数据落在模型“能力边缘”时，RL 才带来真实的能力增益；预训练里只要有约 1% 的相关暴露，RL 就能稳健泛化；同等算力下“中训练 + RL”在 OOD 难题上比只做 RL 高 10.8%。"
+  summary: "受控实验表明：只有预训练留有余量、且 RL 数据落在模型“能力边缘”时，RL 才带来真实的能力增益；预训练里对长尾语境只要有约 1% 的暴露，RL 就能把能力迁移过去；同等算力下“中训练 + RL”在 OOD 难题上的 pass@128 比只做 RL 高 10.8 个点。"
   plain: "RL 像教练：底子太差教不动，已经全会也没得教，只有“跳一跳够得着”的题最有用；中训练负责把底子打好。"
   takeaways:
     - "按当前模型的通过率挑 RL 数据：优先 0 < pass rate < 1 的边缘题，太易或太难都浪费算力。"

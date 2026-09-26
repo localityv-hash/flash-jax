@@ -8,6 +8,14 @@ prereq:
 
 # Mid-training：给后训练打地基
 
+::: tldr
+- 中训练的目标仍是下一个 token 的交叉熵，变的只有数据和学习率：配比向后训练靠拢但保留通用网页，学习率进入衰减。
+- 衰减期是参数“落定”的窗口，这段喂什么模型就往哪边靠；但 WSD 胜在灵活而非损失更低，调度要看后训练之后的指标来选。
+- 配比的趋势是把后训练要用的格式都先喂一点：Olmo 3 的中训练里代码、数学各占两成，QA、指令与思维链合计近三成。
+- 长上下文分段扩：先调 RoPE（调大基频或用 YaRN），每段混入约四成短数据，用 SFT 之后的长文任务验收。
+- 如果只读一节：读[面向 RL 的中训练](#rl-readiness)——同一套 RL 在不同基座上效果悬殊，根源多在中训练。
+:::
+
 **中训练（mid-training）**指主体预训练之后、SFT 与 RL 之前的一段继续训练：目标仍是下一个 token 的交叉熵，但换成规模中等、面向目标能力的高质量数据配比，通常伴随学习率退火、上下文扩展与模型汤。它决定了后训练的起点——base 模型会什么、以什么格式会、能读多长。
 
 ::: human
@@ -42,7 +50,7 @@ GLM-4.5 报告给了一个务实的定义：预训练之后那些“使用中等
 
 ```mermaid 中训练在训练流水线中的位置
 flowchart LR
-  P["通用预训练<br/>恒定学习率 · 数万亿 token"] --> M["中训练 / 退火<br/>高质量网页 + 数学代码 + QA + 指令 + 推理<br/>数百亿到数万亿 token"]
+  P["通用预训练<br/>学习率保持高位 · 数万亿 token"] --> M["中训练 / 退火<br/>高质量网页 + 数学代码 + QA + 指令 + 推理<br/>数百亿到数万亿 token"]
   M --> L["长上下文扩展<br/>调 RoPE · 分段加长"]
   M -.-> A["智能体中训练（可选）<br/>仓库级代码 · 合成轨迹"]
   L --> S["SFT"]
@@ -54,7 +62,7 @@ flowchart LR
 输入通常是一个稳定期检查点（学习率仍在高位），输出是交给 SFT 与 RL 的 base 模型。各家在三件事上的安排不同：
 
 - **顺序**：Olmo 3 先中训练再扩长上下文；SmolLM3 先扩长上下文再做推理中训练[^olmo3][^smollm3]；GLM-4.5 把仓库级代码、合成推理、长上下文与智能体数据拆成三个递进阶段[^glm45]。
-- **预算**：公开报告里从几十 B 到数 T token 不等——OLMo 2 7B 为 3×50B，Olmo 3 为 100B（另加 50B 长上下文），Qwen3 的推理阶段约 5T，GLM-4.5 的中训练合计约 1.1T[^olmo2][^olmo3][^qwen3][^glm45]。
+- **预算**：公开报告里从几十 B 到数 T token 不等——OLMo 2 7B 为 3×50B，Olmo 3 7B 为 100B（另加 50B 长上下文），Qwen3 的推理阶段约 5T，GLM-4.5 的中训练合计约 1.1T[^olmo2][^olmo3][^qwen3][^glm45]。
 - **目标**：推理（数学、代码、思维链）、长上下文、智能体行为，或者三者兼顾。
 
 ## 学习率调度与退火 {#annealing}
@@ -88,14 +96,14 @@ $$w_{t+1}=w_t-\eta g_t=(1-\eta h)\,w_t-\eta\,\xi_t .$$
 
 $$v_{t+1}=(1-\eta h)^2\,v_t+\eta^2\sigma^2 .$$
 
-令 $v_{t+1}=v_t$ 得稳态 $v^\star=\dfrac{\eta^2\sigma^2}{1-(1-\eta h)^2}=\dfrac{\eta\,\sigma^2}{h\,(2-\eta h)}$，于是
+当 $0\lt\eta h\lt 2$ 时迭代收敛，令 $v_{t+1}=v_t$ 得稳态 $v^\star=\dfrac{\eta^2\sigma^2}{1-(1-\eta h)^2}=\dfrac{\eta\,\sigma^2}{h\,(2-\eta h)}$，于是
 
 $$\E[\mathcal L]=\frac{h}{2}\,v^\star=\frac{\eta\,\sigma^2}{2\,(2-\eta h)}\approx\frac{\eta\,\sigma^2}{4}\qquad(\eta h\ll 1).$$
 
 三个推论：
 
 - **损失有一个与 $\eta$ 成正比的“噪声地板”**。稳定段里损失停在地板附近晃动；衰减把 $\eta$ 压小，地板随之下降——这就是衰减期的“骤降”。
-- **衰减需要时间**。每步收缩因子是 $(1-\eta h)^2$，回到新稳态约需 $1/(2\eta h)$ 步，$\eta$ 越小越慢。衰减段太短，参数来不及“落下去”，与“10% 够、2.5% 不够”的观察一致。
+- **衰减需要时间**。$v_t-v^\star$ 每步乘以 $(1-\eta h)^2\approx e^{-2\eta h}$，弛豫时间约 $1/(2\eta h)$ 步，$\eta$ 越小越慢。衰减段太短，参数来不及“落下去”，与“10% 够、2.5% 不够”的观察一致。
 - **平均也能降地板**。若 $K$ 个结果独立地分布在同一极小值附近，平均后方差降为 $v^\star/K$。这给了下文“模型汤”一个直观解释。
 
 真实损失面远非二次函数，这个推导只解释趋势，不给具体数值。
@@ -103,9 +111,9 @@ $$\E[\mathcal L]=\frac{h}{2}\,v^\star=\frac{\eta\,\sigma^2}{2\,(2-\eta h)}\appro
 
 ### 退火期换数据：最后的 token 分量最重
 
-既然衰减期是参数“落定”的阶段，这段时间喂什么就格外关键。MiniCPM 给出了一个干净的对照：同一个稳定期检查点，衰减期混入高质量数据与 SFT 数据、再做同样的 SFT，明显好于衰减期只用预训练数据、把 SFT 数据全留到最后；即使把后者的 SFT token 翻倍也补不回差距。作者的结论是“能力的专门化应当从衰减期就开始”[^minicpm]。
+既然衰减期是参数“落定”的阶段，这段时间喂什么就格外关键。MiniCPM 给出了一个干净的对照：同一个稳定期检查点，衰减期混入高质量数据与 SFT 数据、再做同样的 SFT，明显好于衰减期只用预训练数据、把 SFT 数据全留到最后；即使把后者的 SFT token 翻倍也补不回差距。作者据此主张：能力的专门化应当从衰减期就开始[^minicpm]。
 
-Llama 3 把这件事做成了标准动作：405B 在最后 40M token 把学习率线性退火到 0，同时上采样质量最高的数据源，并对退火期间的检查点取平均，得到最终的 base 模型[^llama3]。报告还给了一个耐人寻味的对照：把 GSM8K 与 MATH 的训练集放进退火数据，8B 模型在两者验证集上分别提升 24.0% 与 6.4%，405B 却几乎不变——小模型更依赖“见过同类题”，大模型靠上下文学习已经够用。也正因如此，Llama 3 的正式退火数据不含常用评测的训练集。
+Llama 3 把这件事做成了标准动作：405B 在最后 40M token 把学习率线性退火到 0，同时上采样质量最高的数据源，并对退火期间的检查点取平均，得到最终的 base 模型[^llama3]。报告还给了一个耐人寻味的对照：把 GSM8K 与 MATH 的训练集放进退火数据，8B 模型在两者验证集上分别提升 24.0% 与 6.4%，405B 却几乎不变——小模型更依赖“见过同类题”，大模型靠上下文学习已经够用。Llama 3 的正式退火数据则明确不含常用评测的训练集。
 
 ```mermaid 衰减期的配比切换：以 SmolLM3 为例
 flowchart LR
@@ -141,7 +149,7 @@ WSD 的核心价值是**灵活**，而不是一定更低的损失。三条值得
 
 - **GLM-4.5** 早期实验发现，WSD 训练的模型在 SimpleQA、MMLU 等通用基准上更差，判断为稳定段欠拟合，于是改用余弦调度，学习率一路降到中训练结束；GLM-5 沿用了这一设置[^glm45][^glm5]。
 - **Kimi K3** 为两种调度分别搜索最优超参（两者的最优峰值学习率与 batch 差别很大），在各自的最优设置下，余弦的最终损失始终低于 WSD，于是改以余弦为默认，不再沿用 K2 的 WSD[^k3]。
-- **WSO**（ICLR 2026）走得更远：在 1B 与 8B 的实验里，完全不衰减的“预热—稳定”调度预训练指标最差，SFT 之后却一致最好；加入中训练阶段、延长训练后结论依旧成立。作者用损失面曲率解释：衰减把模型推进更尖的极小值，不衰减则保持平坦、更容易被微调[^wso]。
+- **WSO**（warmup–stable–only，ICLR 2026）走得更远：在 1B 与 8B 的实验里，完全不衰减的调度在预训练指标上不如衰减调度，SFT 之后却一致更好；加入中训练阶段或做过量训练（over-training），结论依旧成立。作者用损失面曲率解释：衰减把模型推进更尖的极小值，不衰减则保持平坦、更容易被微调[^wso]。
 
 ::: insight 选调度看的是后训练之后的表现
 衰减调度优化的是预训练损失，而真正要紧的是后训练之后的表现。选调度、定衰减长度时，至少要在一个小规模的“中训练 → SFT（→ RL）”闭环里比较最终指标；只看 base 模型的损失或 few-shot 分数，可能选错方向。
@@ -169,7 +177,7 @@ WSD 的核心价值是**灵活**，而不是一定更低的损失。三条值得
 | 改写 1 次，重复 10 轮 | 27.39 |
 | 改写 10 次，各训 1 轮 | 28.94 |
 
-Kimi K2 的改写流水线有三个要点：按风格与视角多样化提示；长文分块、带着上文自回归地改写再拼接，避免丢信息；逐段做保真校验。数学数据则仿照 SwallowMath 改写成“学习笔记”风格，并把其他语言的优质数学材料译成英文；每个语料最多改写两次[^k2]。Kimi K3 沿用了同一套配方[^k3]。
+Kimi K2 的改写流水线有三个要点：按风格与视角多样化提示；长文分块、带着上文自回归地改写再拼接，避免丢信息；逐段做保真校验。推广到其他大规模知识语料时，每个语料最多改写两次。数学数据则仿照 SwallowMath 改写成“学习笔记”风格，并把其他语言的优质数学材料译成英文[^k2]。Kimi K3 沿用了同一套配方[^k3]。
 
 其他几条典型路线：
 
@@ -250,9 +258,9 @@ flowchart TD
 ```
 
 ::: derive 代入数字：Llama 形状的模型与 DeepSeek-V3
-**分组**。取 $b=10000$、$d=128$、$L=4096$。$r_i\lt 1$ 等价于 $\lambda_i\gt L$，即 $2\pi\cdot 10^{i/16}\gt 4096$，解得 $i\ge 46$：18 组完全插值。$r_i\gt 32$ 等价于 $\lambda_i\lt 128$，解得 $i\le 20$：21 组保持不变。其余 25 组（$i=21,\dots,45$）按斜坡混合。
+**分组**。取 $b=10000$、$d=128$、$L=4096$。$r_i\lt 1$ 等价于 $\lambda_i\gt L$，即 $2\pi\cdot 10^{i/16}\gt 4096$，解得 $i\ge 46$：18 组完全插值。$r_i\gt 32$ 等价于 $\lambda_i\lt 128$，解得 $i\le 20$：21 组保持不变。其余 25 组（$i=21,\dots,45$）按斜坡混合。实现上有个细节：官方代码（jquesnelle/yarn，以及 DeepSeek-V3 的 inference/model.py）先把 $r=\beta$、$r=\alpha$ 换算成维度下标（向下、向上取整后正好是 20 和 46），再在两者之间按下标 $i$ 线性过渡，而不是按 $r$ 线性过渡。三段的划分与上面一致，只是中间各组的混合权重略有不同；论文脚注也说明斜坡可以换成别的形式。
 
-**温度**。DeepSeek-V3 取 $s=40$、$\alpha=1$、$\beta=32$，YaRN 只作用在 MLA 中解耦出来的 64 维 RoPE 分量上[^dsv3]。此时 $0.1\ln 40+1\approx1.369$，logit 被放大约 $1.369^2\approx1.87$ 倍；官方推理代码正是把 softmax 缩放乘以这个系数的平方。若按同一公式，$s=8$（例如 8K 扩到 64K）时系数约为 $1.208^2\approx1.46$。
+**温度**。DeepSeek-V3 取 $s=40$、$\alpha=1$、$\beta=32$；频率插值只作用在 MLA 解耦出来的 64 维 RoPE 分量上，温度缩放则乘在整个注意力 logit 上[^dsv3]。此时 $0.1\ln 40+1\approx1.369$，logit 被放大约 $1.369^2\approx1.87$ 倍；官方推理代码正是把 softmax 缩放乘以这个系数的平方。按同一公式，$s=8$（例如 8K 扩到 64K）时放大约 $1.208^2\approx1.46$ 倍。
 
 **为什么是放大而不是缩小**。上下文变长后参与 softmax 的 key 更多，注意力熵上升、分布变平；放大 logit 相当于降低温度，把注意力重新“聚焦”。
 :::
@@ -268,10 +276,10 @@ flowchart TD
 | Qwen2.5-Turbo | 32K→64K→128K→256K | base 10M | 每段 40% 为当前最大长度，60% 更短[^qwen25] |
 | Qwen3 | 数千亿 token，32K | base 1M，推理期加 YaRN 与 DCA | 75% 样本 16K–32K，25% 为 4K–16K[^qwen3] |
 | Kimi K2 | 退火 400B（4K）→ 60B（32K） | YaRN 扩到 128K | 长上下文“激活”与退火连在一起[^k2] |
-| SmolLM3 | 4K→32K→64K，各 50B | θ 1.5M → 5M，每 4 层一层 NoPE | 额外上采样代码仓库、书籍等长数据没有收益[^smollm3] |
+| SmolLM3 | 4K→32K→64K，各 50B | θ 1.5M → 5M；每 4 层有 1 层 NoPE | 额外上采样代码仓库、书籍等长数据没有收益[^smollm3] |
 | Olmo 3 7B | 8K→64K，50B | YaRN，s = 8 | 文档内注意力掩码[^olmo3] |
 | GLM-5 | 32K（1T）→128K（500B）→200K（50B） | — | 200K 阶段让 128K 以内的表现也提升[^glm5] |
-| Kimi K3 | 预训练 8K→64K，冷却期 256K→1M | NoPE（KDA 层） | 合成必须跨全窗口检索才能完成的任务[^k3] |
+| Kimi K3 | 预训练 8K→64K，冷却期 256K→1M | MLA 层 NoPE，位置信息靠 KDA 层 | 合成必须跨全窗口检索才能完成的任务[^k3] |
 
 ### ProLong 的消融：长上下文训练的五条规矩
 
@@ -291,9 +299,9 @@ flowchart TD
 
 2025 年上半年的一个普遍现象：同样的 <Term t="rlvr">RLVR</Term> 配方，在 Qwen2.5 上稳定提升，在 Llama 上常常原地踏步。几条解释互相补充：
 
-- **行为先验**：Qwen 天生会验证、回溯、设子目标，Llama 缺少这些“认知行为”；用富含这些行为的数据继续预训练，Llama 就能追上（见[认知行为](/library/?id=cognitive-behaviors)）。
-- **数据先验**：Qwen2.5 在预训练与退火期见过海量数学与代码，RL 更多是在放大已有能力。连随机奖励都能让 Qwen2.5-Math 涨分，换到 Llama 就无效（见[虚假奖励](/library/?id=spurious-rewards)）。
-- **污染疑虑**：部分增益可能来自预训练阶段见过评测原题（见 [Reasoning or Memorization](/library/?id=reasoning-or-memorization)）。比较 RL 友好度时要用模型发布后才出现的新题。
+- **行为先验**：Qwen 基座本身就会验证、回溯、设子目标，Llama 缺少这些“认知行为”；用富含这些行为的数据继续预训练，Llama 就能追上（见[原理视角：认知行为](/lenses/principles#cognitive-behaviors)）。
+- **数据先验**：Qwen2.5 在预训练与退火期见过海量数学与代码，RL 更多是在放大已有能力。连随机奖励都能让 Qwen2.5-Math 涨分，换到 Llama 就无效（见[伪奖励](/library/?id=spurious-rewards)）。
+- **污染疑虑**：部分增益可能来自预训练阶段见过评测原题（见 [Reasoning or Memorization](/library/?id=reasoning-or-memorization)；两种解释之争见[原理视角](/lenses/principles#spurious-rewards)）。比较 RL 友好度时要用模型发布后才出现的新题。
 
 结论是：**RL 能走多远，很大程度上在中训练就定了**。这也是[“RL 是否扩展了 base 模型的能力边界”](/lenses/principles#pass-at-k-debate)之争在数据侧的对应。
 
@@ -306,7 +314,7 @@ OctoThinker 在 Llama-3.2 上系统比较了中训练配方对后续 RL 的影�
 3. **长 CoT 是双刃剑**：推理更深，但回复变冗长、RL 训练不稳，数据格式需要仔细设计；
 4. **中训练越多，RL 越好**：扩大中训练 token 数带来一致的下游 RL 提升。
 
-据此提出 **Stable-then-Decay**：先用恒定学习率训 200B token，再分出短 CoT、长 CoT、混合三个分支，各用 20B token 衰减学习率，得到 OctoThinker 系列。RL 之后，OctoThinker-Long-3B 追平了以推理见长的 Qwen2.5-3B。团队同时开源了 70B+ token 的 MegaMath-Web-Pro-Max；AI2 按同样的提示词在 MegaMath-Web-Pro 上重新生成了一份（MegaMatt），放进 Olmo 3 的中训练配比[^olmo3mix]。
+据此提出 **Stable-then-Decay**：先用恒定学习率训 200B token，再分出短 CoT、长 CoT、混合三个分支，各用 20B token 衰减学习率，得到 OctoThinker 系列。RL 之后，它们明显缩小了与同尺寸 Qwen2.5 的差距。团队同时开源了 70B+ token 的 MegaMath-Web-Pro-Max；AI2 按同样的提示词在 MegaMath-Web-Pro 上重新生成了一份（MegaMatt），放进 Olmo 3 的中训练配比[^olmo3mix]。
 
 ::: human
 RL 更像“挑选并强化”已有的解题习惯，而不是凭空教会新本事。中训练就是在 RL 之前把好习惯种下去；种得越好，RL 能放大的东西越多。
@@ -337,12 +345,14 @@ CMU 的 Midtraining Bridges 用从零预训练的小模型做控制实验，把�
 
 - **AgentFounder / Tongyi DeepResearch**：两阶段的智能体继续预训练，先 32K 再 128K；以实体为锚构建开放世界记忆来合成多风格问题，再合成规划、推理、决策三类动作数据；全程穿插少量通用预训练数据防遗忘，环境扩展得到的函数调用数据也放进中训练[^agentfounder]。AgentFounder-30B 在 BrowseComp-en / zh 上达到 39.9% / 43.3%。
 - **GLM-4.5**：中训练分三段——仓库级代码（同仓库文件拼接，外加 issue、PR 与 commit，500B token，32K）、合成推理数据（500B）、长上下文与智能体轨迹（100B，128K）；只在中训练使用 best-fit packing，避免截断推理过程与仓库代码[^glm45]。GLM-5 把这套框架扩到约 1000 万个 issue–PR 对（约 160B 独立 token）和 200K 上下文[^glm5]。
-- **FIM 中训练**（2026）：把函数调用点看作“行动→观察→继续”的同构结构，用程序依赖图挑选函数挖空，让模型先写推理再补全；接上 R2E-Gym、SWE-Smith、SWE-Lego 三条原样的后训练流水线，SWE-bench Verified 提升 2.8–5.3 分，并挽回部分通用能力损失[^fim]。
+- **FIM 中训练**（2026）：把函数调用点看作“行动→观察→继续”的同构结构，用程序依赖图挑选函数挖空，让模型先写推理再补全；接上 R2E-Gym、SWE-smith、SWE-Lego 三条原样的后训练流水线，SWE-bench Verified 提升 2.8–5.3 分，并挽回部分通用能力损失[^fim]。
 - **中训练里的蒸馏**（2026）：以 OLMo-2 1B 为学生、7B 为教师，发现中训练阶段的<Term t="knowledge-distillation">知识蒸馏</Term>以事实召回换推理；只把教师熵最低的 20% token 交给反向 KL 的 Switch Distillation 能兼顾两者[^kd]。这把中训练和 [On-Policy 蒸馏](/topics/opd)连在了一起。
 
 ## 谁在中训练里做了什么 {#who}
 
-只列有公开技术报告或官方配置可核对的工作；数字以原始报告为准。
+把 13 份有公开技术报告或官方配置可核对的配方放在一起，能看出三个规律：**预算越来越大**（从几十 B 到 T 级）；**数据越来越像后训练**（从“更好的网页”到指令、思维链、智能体轨迹）；**长上下文越来越长、越来越靠后**（放进退火或冷却期，与能力数据一起训练）。
+
+::: details 展开对照表：阶段、预算、学习率与数据（数字以原始报告为准）
 
 | 工作 | 阶段与预算 | 学习率 | 数据与关键做法 |
 |---|---|---|---|
@@ -350,9 +360,9 @@ CMU 的 Midtraining Bridges 用从零预训练的小模型做控制实验，把�
 | Llama 3 405B（2024-07） | 长上下文六段约 800B → 最后 40M 退火 | 余弦 → 线性降到 0 | 退火上采样最优数据、平均检查点；短退火评估新数据[^llama3] |
 | OLMo 2（2024-11） | 7B：3×50B；13B：3×100B + 1×300B | 线性降到 0 | Dolmino Mix 1124：DCLM 高分网页、FLAN、学术文本、合成数学；模型汤[^olmo2] |
 | Phi-4（2024-12） | 约 10T → 250B 中训练 | 峰值降为 1/10 | 4K→16K；30% 新长文本 + 70% 回放[^phi4] |
-| DeepSeek-V3（2024-12） | 14.8T，末 500B 两段常数 → YaRN 两段各 1000 步 | 恒定 → 余弦 → 分段常数 | 提高数学与代码比例；4K→32K→128K[^dsv3] |
+| DeepSeek-V3（2024-12） | 14.8T，末 500B 两段常数 → YaRN 两段各 1000 步 | 恒定 → 余弦 → 分段常数 | 整体预训练语料上调数学与代码比例；4K→32K→128K[^dsv3] |
+| OctoThinker（2025-04） | Llama-3.2 上 200B 恒定 + 20B 衰减 | Stable-then-Decay | MegaMath-Web-Pro、QA 式 CoT、指令数据[^octo] |
 | Qwen3（2025-05） | 30T+ → 推理阶段约 5T → 长上下文数千亿 | 推理阶段加快衰减 | 上调 STEM、代码、推理与合成数据[^qwen3] |
-| OctoThinker（2025-06 报告） | Llama-3.2 上 200B 恒定 + 20B 衰减 | Stable-then-Decay | MegaMath-Web-Pro、QA 式 CoT、指令数据[^octo] |
 | Kimi K2（2025-07） | 15.5T → 退火 400B + 长上下文 60B | WSD，退火 2e-5 → 7e-6 | 知识与数学改写；YaRN 扩到 128K[^k2] |
 | GLM-4.5（2025-07） | 15T + 7T → 中训练 500B + 500B + 100B | 余弦，降到 2.5e-5 | 仓库级代码、合成推理、长上下文与智能体轨迹[^glm45] |
 | SmolLM3（2025-07） | 约 11T → 长上下文 100B → 推理 140B | WSD，末 10% 降到 0 | 衰减期代码 24%、数学 13%；模型合并补长文能力[^smollm3] |
@@ -360,13 +370,13 @@ CMU 的 Midtraining Bridges 用从零预训练的小模型做控制实验，把�
 | GLM-5（2026-02） | 27T → 32K（1T）→ 128K（500B）→ 200K（50B） | 中训练 4e-5 线性降到 1e-5 | 约 1000 万 issue–PR 对；后期上采样长文档与智能体轨迹[^glm5] |
 | Kimi K3（2026-07） | 预训练 8K→64K → 冷却期 256K→1M | 余弦（对照中优于 WSD） | 沿用 K2 改写；NoPE，无需改位置编码[^k3] |
 
-横向看有三个规律：**预算越来越大**（从几十 B 到 T 级）；**数据越来越像后训练**（从“更好的网页”到指令、思维链、智能体轨迹）；**长上下文越来越长、越来越靠后**（放进退火或冷却期，与能力数据一起训练）。
+:::
 
 ## 演化脉络 {#lineage}
 
 <LineageGraph graph="mid-training" />
 
-这条线大致分三步。2023–2024 年上半年，中训练还只是两个独立的“技巧”：WSD 与退火让“最后换数据”变得可行，YaRN 与 ABF 让“事后扩长”变得便宜。2024 年下半年，数据工程成为主角：FineWeb-Edu、DCLM 把质量筛选做成标准工序，Nemotron-CC、Phi-4 把改写与合成推到万亿 token 级，OLMo 2 把一次完整、可复现的中训练公开出来。2025 年起，焦点转向“为后训练铺路”：OctoThinker、Front-Loading、Midtraining Bridges 从不同角度说明 RL 与 SFT 的上限在中训练就被决定，AgentFounder、GLM-4.5 则把智能体行为也搬进了中训练。到 2026 年，一方面是 1M 上下文与智能体数据成为标配，另一方面 Kimi K3 与 WSO 开始质疑“衰减一定好”，调度的选择回到以后训练结果为准。
+这条线大致分三步。2023–2024 年上半年，中训练还只是两个独立的“技巧”：WSD 与退火让“最后换数据”变得可行，YaRN 与 ABF 让“事后扩长”变得便宜。2024 年下半年，数据工程成为主角：FineWeb-Edu、DCLM 把质量筛选做成标准工序，Nemotron-CC、Phi-4 把改写与合成推到万亿 token 级，OLMo 2 把一次完整、可复现的中训练公开出来。2025 年起，焦点转向“为后训练铺路”：OctoThinker、Front-Loading、Midtraining Bridges 从不同角度说明 RL 与 SFT 的上限在中训练就被决定，AgentFounder、GLM-4.5 则把智能体行为也搬进了中训练。到 2026 年，一方面 1M 上下文与智能体数据进入旗舰模型的中训练配方，另一方面 Kimi K3 与 WSO 开始质疑“衰减一定好”，调度的选择回到以后训练结果为准。
 
 ## 关键工作精读 {#papers}
 
@@ -395,7 +405,7 @@ CMU 的 Midtraining Bridges 用从零预训练的小模型做控制实验，把�
 
 <EntryGrid :ids="['yarn', 'prolong', 'deepseek-v3']" />
 
-- **YaRN**：几乎所有开源长上下文模型的共同依赖，推导值得亲手算一遍。
+- **YaRN**：开源长上下文模型最常用的 RoPE 扩展方法之一（DeepSeek-V3、Qwen 系列、Kimi K2、Olmo 3 都在用），推导值得亲手算一遍。
 - **ProLong**：长上下文“怎么配数据、怎么评测”最系统的消融，结论可以直接照做。
 - **DeepSeek-V3**：两段 YaRN、学习率沿用预训练末值，是“低成本事后扩长”的工业范例。
 
@@ -417,7 +427,7 @@ CMU 的 Midtraining Bridges 用从零预训练的小模型做控制实验，把�
 ::: takeaway
 1. **先搭评估闭环再调配方**：用“中训练 → 小规模 SFT（→ RL）”的探针比较方案，别只看 base 模型的损失或 few-shot 分数。
 2. **把衰减期当作中训练窗口**：从稳定期检查点出发，用约 10% 的 token（几十到几百 B）切到目标配比、学习率降到 0 或很低；预算允许就换几个数据顺序各跑一遍再做模型汤。
-3. **配比从 Olmo 3 起步**：网页（含 PDF）约三成，代码、数学各约两成，QA 一成半左右，指令与思维链合计一成多；每个新数据源先做“30% 新数据 + 70% 默认配比”的短退火体检再决定去留。
+3. **配比从 Olmo 3 起步**：网页（含定向爬取与 PDF）约三成，代码、数学各两成，QA、指令与思维链合计近三成；每个新数据源先做“30% 新数据 + 70% 默认配比”的短退火体检再决定去留。
 4. **高质量数据宁改写、勿重复**：知识类语料换风格、换视角改写（每份一到两次并做保真校验）；代码与数学“改写后保留”。
 5. **长上下文分段扩**：先调 RoPE（ABF 或 YaRN），每段保留约四成短数据；验收看短文本能力是否恢复、SFT 后长文任务是否达标。
 6. **为 RL 铺路**：中训练就放入多样的推理数据与少量指令格式数据，控制长 CoT 比例；智能体方向可以先做一段智能体继续预训练。
@@ -458,7 +468,7 @@ CMU 的 Midtraining Bridges 用从零预训练的小模型做控制实验，把�
 [^minicpm]: Hu et al., “MiniCPM: Unveiling the Potential of Small Language Models with Scalable Training Strategies”, §4–5, COLM 2024. [arXiv:2404.06395](https://arxiv.org/abs/2404.06395)
 [^cooldown]: Hägele et al., “Scaling Laws and Compute-Optimal Training Beyond Fixed Training Durations”, NeurIPS 2024. [arXiv:2405.18392](https://arxiv.org/abs/2405.18392)
 [^llama3]: Llama Team, “The Llama 3 Herd of Models”, §3.1.3（退火数据）、§3.4（长上下文与退火）. [arXiv:2407.21783](https://arxiv.org/abs/2407.21783)
-[^minicpm4]: MiniCPM Team, “MiniCPM4: Ultra-Efficient LLMs on End Devices”，数据验证策略一节（见 [OpenBMB/MiniCPM 仓库 docs/](https://github.com/OpenBMB/MiniCPM)）。
+[^minicpm4]: MiniCPM Team, “MiniCPM4: Ultra-Efficient LLMs on End Devices”，数据验证策略一节与表 1（报告 PDF 见 [OpenBMB/MiniCPM](https://github.com/OpenBMB/MiniCPM) 仓库 docs/MiniCPM_4_Technical_Report.pdf）。
 [^olmo2]: Team OLMo, “2 OLMo 2 Furious”, [arXiv:2501.00656](https://arxiv.org/abs/2501.00656)；stage 2 与模型汤配置见 [allenai/OLMo](https://github.com/allenai/OLMo) 的 README 与 configs/official-1124、configs/microannealing。
 [^olmo3]: Team Olmo, “Olmo 3”, [arXiv:2512.13961](https://arxiv.org/abs/2512.13961)；官方训练脚本与各阶段 token 数见 [allenai/OLMo-core](https://github.com/allenai/OLMo-core) 的 src/scripts/official/OLMo3。
 [^olmo3mix]: [allenai/OLMo-core](https://github.com/allenai/OLMo-core) 的 src/olmo_core/data/source_mixtures/OLMo3-32B-midtraining-modelnamefilter.yaml 与 src/olmo_core/data/mixes/OLMo-midtraining-mix-0625-100B.txt；[allenai/dolma3](https://github.com/allenai/dolma3) 的 datasets/configs/midtraining（各轮配置）、datasets/dolma3_dolmino_mix（CraneCode、CraneMath、MegaMatt 说明）与 procedures/decontamination。按类别汇总为本站计算。
@@ -471,7 +481,7 @@ CMU 的 Midtraining Bridges 用从零预训练的小模型做控制实验，把�
 [^k3]: Kimi Team, “Kimi K3: Open Frontier Intelligence”, §3（数据、缩放律与长上下文扩展）. [arXiv:2607.24653](https://arxiv.org/abs/2607.24653)
 [^glm45]: GLM-4.5 Team, “GLM-4.5: Agentic, Reasoning, and Coding (ARC) Foundation Models”, §2.3–2.4. [arXiv:2508.06471](https://arxiv.org/abs/2508.06471)
 [^glm5]: GLM-5 Team, “GLM-5: from Vibe Coding to Agentic Engineering”, §2.3 与附录 A. [arXiv:2602.15763](https://arxiv.org/abs/2602.15763)
-[^smollm3]: Hugging Face, “SmolLM3: smol, multilingual, long-context reasoner”（2025-07-08）. [huggingface.co/blog/smollm3](https://huggingface.co/blog/smollm3)
+[^smollm3]: Hugging Face, “SmolLM3: smol, multilingual, long-context reasoner”（2025-07-08）. [huggingface.co/blog/smollm3](https://huggingface.co/blog/smollm3)；各阶段训练配置见 [huggingface/smollm](https://github.com/huggingface/smollm) 的 text/pretraining/smollm3。注意 4K→32K 阶段的 RoPE θ 在公开配置里是 2M，博客写的是 1.5M。
 [^wso]: Yano et al., “Pre-training LLM without Learning Rate Decay Enhances Supervised Fine-Tuning”, ICLR 2026. [arXiv:2603.16127](https://arxiv.org/abs/2603.16127)
 [^fineweb]: Penedo et al., “The FineWeb Datasets: Decanting the Web for the Finest Text Data at Scale”. [arXiv:2406.17557](https://arxiv.org/abs/2406.17557)
 [^dclm]: Li et al., “DataComp-LM: In search of the next generation of training sets for language models”. [arXiv:2406.11794](https://arxiv.org/abs/2406.11794)；分类器说明见 [mlfoundations/dclm](https://github.com/mlfoundations/dclm)。

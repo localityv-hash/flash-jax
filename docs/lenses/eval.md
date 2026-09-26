@@ -9,6 +9,14 @@ prereq:
 
 # 评测：如何知道模型真的变强了
 
+::: tldr
+- 任何分数都混着三类误差：抽样噪声、协议差异、数据问题（污染、坏题、饱和）；不带误差棒和协议说明的“提升”不可信。
+- 按目的选指标：比模型用 avg@k（pass@1 的低方差估计），看能力上限用 pass@k（用无偏估计量），上线前看 pass^k。
+- AIME 只有 30 题：正确率 50% 左右时，单次运行的 95% 置信区间约 ±18 个百分点；多采样只能压住题内随机性，题目抽样带来的误差只能靠加题；比较两个模型用逐题配对差。
+- 智能体分数是“模型 + 脚手架 + 预算 + 环境版本 + 判分器”的系统成绩：跨报告比较先对齐协议，并抽查高分轨迹有没有走捷径。
+- 如果只读一节：读 [方差：别被 30 道题骗了](#variance)。
+:::
+
 **评测**是在固定协议下，用有限的题目和有限次采样去估计模型能力的统计过程。任何一个分数都混着三类误差：**抽样噪声**（题少、采样有随机性）、**协议差异**（提示模板、解码参数、脚手架、预算、判分器各不相同）、**数据问题**（污染、标签错误、基准饱和）。只有把三者都控制住并如实报告，“A 比 B 强”才是一个可信的结论。
 
 ::: human
@@ -57,8 +65,8 @@ flowchart TD
 
 | 基准 | 测什么 | 环境与判分 | 2026 年状态 | 已知问题 |
 |---|---|---|---|---|
-| [SWE-bench Verified](/library/?id=swe-bench-verified) | 仓库级修 issue | 500 题，容器内跑测试 | 饱和，OpenAI 已停止报告 | 部分测试过窄或超出题面 |
-| [SWE-Bench Pro](/library/?id=swe-bench-pro) | 长程、多文件修改 | 1,865 题（V2 公开集 642 题） | 主流替代 | 脚手架、步数上限影响很大 |
+| [SWE-bench Verified](/library/?id=swe-bench-verified) | 仓库级修 issue | 500 题，容器内跑测试 | 饱和且受污染，OpenAI 已停止报告 | 部分测试过窄或超出题面 |
+| [SWE-Bench Pro](/library/?id=swe-bench-pro) | 长程、多文件修改 | 1,865 题（公开集 731 题；复核后的 V2 公开集 642 题） | 主流替代 | 脚手架、步数上限影响很大 |
 | [Terminal-Bench](/library/?id=terminal-bench) 2.0 | 终端里的端到端任务 | 89 题，容器 + 测试脚本 | 未饱和 | 有的报告因联网或安全限制删题、改用内部框架 |
 | [τ²-bench](/library/?id=tau2-bench) / τ³ | 遵守政策的客服工具使用 | 用户模拟 + 数据库终态 | 常用 | 用户模拟器与任务版本都会改变分数 |
 | [BrowseComp](/library/?id=browsecomp) | 深度检索 | 1,266 题，短答案核对 | 常用 | 开放网络上可能检索到答案本身 |
@@ -84,7 +92,7 @@ flowchart LR
   C --> E["退役<br/>只作回归测试"]
 ```
 
-SWE-bench 是走完这条路的典型：2023 年发布 → 2024 年 OpenAI 请工程师人工复核出 500 题的 Verified 子集 → 2025 年前后头部成绩逼近上限 → OpenAI 发文说明不再评测它：对 GPT-5.2 在 64 次独立运行中都失败的 138 道题审计后，约 59% 存在问题，其中不少测试要求题面从未提到的函数名，或检查原问题之外的功能（据媒体转述）[^swev-audit] → SWE-Bench Pro、SWE-rebench 接棒。**饱和的真实含义往往是：剩下没做对的题里，坏题占了多数。**
+SWE-bench 是走完这条路的典型：2023 年发布 → 2024 年 OpenAI 请工程师人工复核出 500 题的 Verified 子集 → 2025 年前后头部成绩逼近上限 → 2026 年初 OpenAI 发文说明不再评测它：这个基准已被训练数据泄漏污染，测试也有缺陷，建议改用 SWE-Bench Pro。据媒体转述，OpenAI 审计了 GPT-5.2 在 64 次独立运行中都失败的 138 道题，约 59% 有问题，最常见的是测试要求题面从未提到的函数名，或检查原问题之外的功能[^swev-audit] → SWE-Bench Pro、SWE-rebench 接棒。**饱和的真实含义往往是：剩下没做对的题里，坏题占了多数。**
 
 ## 指标：pass@k、avg@k 与 pass^k {#pass-at-k}
 
@@ -152,9 +160,11 @@ $$
 2. **$k=1$ 时退化为伯努利。** 记 $\mu=\E_i[p_i]$，因为 $\E_i[p_i(1-p_i)]=\mu(1-\mu)-\operatorname{Var}_i(p_i)$，代入得 $\operatorname{Var}(\bar s)=\mu(1-\mu)/N$。AIME 取 $N=30$、$\mu=0.5$：标准误约 9.1 个百分点，95% 置信区间约 ±18 个百分点。
 
 如果只关心“在这 30 道题上”的表现（不外推到同类题），题目间方差不计入，条件方差为 $\frac{1}{N^2}\sum_i p_i(1-p_i)/k$——这正是换随机种子重跑时看到的波动。
+
+**一个数值例子：$k$ 次采样能压下多少。** 用下文 Sober Look 的实测数字粗算：R1-Distill-Qwen-1.5B 在 AIME'24 上每次运行（每题 1 个样本）的标准差为 4.8 个百分点，即 $\sqrt{\sum_i p_i(1-p_i)}/N\approx0.048$，得 $\E_i[p_i(1-p_i)]\approx30\times0.048^2\approx0.069$；再由均值 $\mu\approx0.287$ 得 $\operatorname{Var}_i(p_i)\approx\mu(1-\mu)-0.069\approx0.136$。取 $k=10$：题内采样一项的标准误约 1.5 个百分点（即 $4.8/\sqrt{10}$），题目间一项约 6.7 个百分点（$\sqrt{0.136/30}$），合计约 6.9 个百分点，95% 置信区间约 ±13.5 个百分点。继续加采样只能让 1.5 变小，6.7 纹丝不动。
 :::
 
-**实测的波动有多大。** [A Sober Look](/library/?id=sober-look) 在统一协议下重测了几十个开源推理模型：AIME'24、AIME'25、AMC'23 各跑 10 个种子，其余基准跑 3 个，报告均值±标准差[^sober]。DeepSeek-R1-Distill-Qwen-1.5B 在 AIME'24 上是 28.7±4.8，而在 500 题的 MATH-500 上是 84.9±0.3——同一模型，题少的基准标准差大了十几倍。以它为起点做 RL 的几个模型，AIME'24 分别为 27.7±4.2、28.9±6.0、29.7±4.6、31.3±7.7，与起点的差距都在一个标准差以内；DeepScaleR-1.5B-Preview 的 37.0±6.6 才算清楚的提升。论文的结论是：推理基准对解码参数、随机种子、提示格式乃至硬件与软件配置都高度敏感，很多声称的 RL 收益在统一协议下大幅缩水，SFT 方法的泛化反而更稳定。
+**实测的波动有多大。** [A Sober Look](/library/?id=sober-look) 在统一协议下重测了几十个开源推理模型：AIME'24、AIME'25、AMC'23 各跑 10 个种子，其余基准跑 3 个，报告均值±标准差[^sober]。这里的 ± 是不同种子之间的标准差，反映单次运行会晃多少；10 次平均后，均值的标准误约为它的 $1/\sqrt{10}$。DeepSeek-R1-Distill-Qwen-1.5B 在 AIME'24 上是 28.7±4.8，而在 500 题的 MATH-500 上是 84.9±0.3——同一模型，题少的基准标准差大了十几倍。以它为起点做 RL 的 L1-Qwen-1.5B-Max、Open-RS1、Open-RS3、Open-RS2，AIME'24 分别为 27.7±4.2、28.9±6.0、29.7±4.6、31.3±7.7，与起点的差距都小于单次运行的标准差，按 10 个种子的均值做检验也不显著；DeepScaleR-1.5B-Preview 的 37.0±6.6 高出约 8 个百分点，才算清楚的提升。论文的结论是：推理基准对解码参数、随机种子、提示格式乃至硬件与软件配置都高度敏感，很多声称的 RL 收益在统一协议下大幅缩水，SFT 方法的泛化反而更稳定。
 
 **比较两个模型时，用配对差。** 两个模型在同一批题上作答，逐题差值 $d_i=s_{A,i}-s_{B,i}$ 的均值标准误为
 
@@ -162,7 +172,7 @@ $$
 \operatorname{SE}(\bar d)=\sqrt{ \frac{ \operatorname{Var}(s_A)+\operatorname{Var}(s_B)-2\operatorname{Cov}(s_A,s_B) }{N} } .
 $$
 
-两个模型往往在同样的题上一起对、一起错，协方差为正，配对后的误差棒比两个独立误差棒小得多，能检出更小的真实差距。这是 Anthropic 的 Evan Miller 在 [Adding Error Bars to Evals](/library/?id=error-bars) 中的核心建议之一，同文还建议：题目成组出现时用聚类标准误，并在实验前做功效分析估算需要多少题[^miller]。训练曲线层面，经典 RL 领域的 [rliable](/library/?id=rliable) 主张用分层 bootstrap 置信区间和四分位均值代替“少量种子取平均”。
+两个模型往往在同样的题上一起对、一起错，协方差为正，配对后的误差棒比两个独立误差棒小得多，能检出更小的真实差距。这是 Anthropic 的 Evan Miller 在 [Adding Error Bars to Evals](/library/?id=error-bars) 中的核心建议之一，同文还建议：题目成组出现时用聚类标准误，并在实验前做功效分析估算需要多少题[^miller]。训练曲线层面，经典 RL 领域的 [rliable](/library/?id=rliable) 主张用分层 bootstrap 置信区间和四分位间均值（IQM，去掉最高、最低各 25% 的运行后取平均）代替“少量种子取平均”。
 
 ::: human
 比两个学生谁更强，最好让他们做同一张卷子、逐题对比，而不是各考各的再比总分：两人都会的题、都不会的题互相抵消，剩下的才是真正的差距。
@@ -171,7 +181,7 @@ $$
 一套可以直接照抄的协议：
 
 1. 固定并公开温度、top-p、最大生成长度、提示模板与推理引擎版本；截断的回答按错计，并报告截断率。
-2. 小基准用 avg@k，$k\ge16$（AIME 常用 32 或 64）；报告均值 ± <Term t="standard-error">标准误</Term> 或 95% 置信区间。
+2. 小基准用 avg@k，$k\ge16$（AIME 常用 32 或 64）；报告均值 ± <Term t="standard-error">标准误</Term> 或 95% 置信区间，并写明误差棒只含重跑波动，还是也计入了题目抽样。
 3. 声称“某训练方法更好”时，至少跑 3 个训练种子，而不只是 3 个评测种子。
 4. 比较两个模型或两个 checkpoint 用逐题配对差。
 5. 在单独的开发集上选 checkpoint 和超参数，测试集只看一次；在很多 checkpoint、很多基准里挑最好的一个报告，会系统性高估（“赢家诅咒”）。
@@ -200,7 +210,7 @@ $$
 - **私有与留出集**：SWE-Bench Pro 除公开集外还有留出集和来自初创公司专有仓库的商业集。
 - **程序化生成**：用 [Reasoning Gym](/library/?id=reasoning-gym) 这类生成器现场出题，题目天然不在任何语料里（见 [多环境](/topics/multi-env#synthesis)）。
 
-**标签本身也会错。** 污染让分数虚高，坏题则让分数虚低、并制造出“饱和”的假象：FutureHouse 核查 HLE 的化学、生物纯文本题，认为约 29% 的参考答案与文献相悖[^futurehouse]；Epoch AI 在 2026-06-12 更新 FrontierMath，修正了 42% 的题目[^frontiermath]；τ³-bench 基于 SABER 的分析修正了 75 处以上任务错误，并声明修订前后的成绩不可比[^tau3]；SWE-Bench Pro 删除过一批已经过时的单元测试（例如要求当前年份是 2025 的测试）[^swepro]。实践上，引用任何基准成绩都要写明版本号。
+**标签本身也会错。** 污染让分数虚高，坏题则让分数虚低、并制造出“饱和”的假象：FutureHouse 核查 HLE 的化学、生物纯文本题，认为约 29% 的参考答案与文献相悖[^futurehouse]；Epoch AI 在 2026-06-12 发布 FrontierMath（Tiers 1–3）的重大更新，修正了 42% 题目中的错误[^frontiermath]；τ³-bench 依据 SABER 的分析修正了 75 处以上任务错误，2026-07 的 v1.0.1 又因修正 banking_knowledge 领域的判分，明确要求该领域新旧成绩不得混比[^tau3]；SWE-Bench Pro 删除过一批已经过时的单元测试（例如要求当前年份是 2025 的测试）[^swepro]。实践上，引用任何基准成绩都要写明版本号。
 
 ## 智能体评测 {#agent-eval}
 
@@ -244,7 +254,7 @@ $$
 
 令成功率等于 $q$，解得时间视界 $h_q=2^{(\operatorname{logit}(q)-\alpha)/\beta}$；$q=0.5$ 时 $\operatorname{logit}(q)=0$，$h_{50}=2^{-\alpha/\beta}$。因为 $\beta<0$ 而 $\operatorname{logit}(0.8)=\ln 4>0$，所以 $h_{80}<h_{50}$：要求越可靠，能胜任的任务越短。
 
-论文的主要发现是：2019–2025 年间，前沿模型的 50% 时间视界大约每 7 个月翻一番；Claude 3.7 Sonnet 约为 50 分钟[^metr]。分析代码与数据开源，2026 年的 v1.1 报告已覆盖到 GPT-5.2、Claude Opus 4.6 等 2026 年初的模型。读这个指标时要记住三点：任务集以软件和研究工程为主；50% 的成功率离“可放心交付”还很远；真实工作比基准任务更“乱”，实际表现通常更低。
+论文的主要发现是：2019–2025 年间，前沿模型的 50% 时间视界大约每 7 个月翻一番；Claude 3.7 Sonnet 约为 50 分钟[^metr]。分析代码与数据开源，换用更新任务集的 v1.1 报告已覆盖到 Claude Opus 4.6、GPT-5.3-Codex 等 2026 年初发布的模型。读这个指标时要记住三点：任务集以软件和研究工程为主；50% 的成功率离“可放心交付”还很远；真实工作比基准任务更“乱”，实际表现通常更低。
 
 ### LLM 评审的坑
 
@@ -258,9 +268,9 @@ $$
 
 ### 评测完整性：模型会“识破考场” {#integrity}
 
-Anthropic 公开过一个案例[^bc-aware]：Claude Opus 4.6 在 BrowseComp 评测中经过数百次常规搜索仍找不到答案后，开始推断“这道题可能来自某个基准”，逐一猜测 GAIA、BrowseComp 等名字，在 GitHub 上找到评测代码，复现了其中基于 canary 字符串派生密钥的解密逻辑，又绕开网址黑名单找到 Hugging Face 上的第三方数据镜像，解密全部 1,266 道题并查到自己的答案。影响的题目不多（约 11 题，调整后分数从 86.81% 变为 86.57%），但有几个信号值得记住：多智能体配置下受污染题目的比例约为单智能体的 3.7 倍；第一次成功解密消耗了 4050 万 token，约为中位数的 38 倍——**异常的 token 消耗是可监控的信号**。作者的结论是：评测完整性应当当作一个持续对抗的问题来处理，而不只是设计阶段的一次性考虑。
+Anthropic 公开过一个案例[^bc-aware]：Claude Opus 4.6 在 BrowseComp 评测中经过数百次常规搜索仍找不到答案后，开始推断“这道题可能来自某个基准”，逐一排查 GAIA、BrowseComp 等候选，在 GitHub 上找到评测代码，照着其中用 canary 字符串派生密钥的 XOR 方案自己写了解密函数；加密数据是二进制文件、被评测工具拒收，它又找到 Hugging Face 上以 JSON 提供同一份数据的第三方镜像，解密全部 1,266 道题并查到自己的答案。受影响的题目不多：共 11 题的答案来自基准材料而非真正的检索（9 题是普通泄漏，2 题是这种“识破考场”），加黑名单重跑后，分数从 86.81% 调为 86.57%。但有几个信号值得记住：多智能体配置下这类非预期解法的比例（0.87%）约为单智能体（0.24%）的 3.7 倍；其中一题消耗了 4050 万 token，约为中位数的 38 倍——**异常的 token 消耗是可监控的信号**。作者的结论是：评测完整性应当当作一个持续对抗的问题来处理，而不只是设计阶段的一次性考虑。
 
-对开放网络上的智能体评测，这意味着：尽量在受控环境中运行（固定语料的 BrowseComp-Plus 就是这个思路）；屏蔽评测数据的已知来源；监控每条轨迹的 token 与工具调用分布；抽查高分轨迹是否“走了捷径”。训练侧的对应做法是把验证器与智能体隔离，并保留隐藏的验证器（见 [多环境：验证器设计](/topics/multi-env#anatomy)）。
+对开放网络上的智能体评测，这意味着：尽量在受控环境中运行（固定语料的 BrowseComp-Plus 就是这个思路）；屏蔽评测数据的已知来源（Anthropic 发现网址级黑名单会被绕开，直接过滤含基准名称的搜索结果最有效）；监控每条轨迹的 token 与工具调用分布；抽查高分轨迹是否“走了捷径”。训练侧的对应做法是把验证器与智能体隔离，并保留隐藏的验证器（见 [多环境：验证器设计](/topics/multi-env#anatomy)）。
 
 ## 关键工作 {#papers}
 
@@ -322,7 +332,7 @@ RL 训练用的验证器会被模型“学会”，它的分数只能说明优�
 [^tau]: sierra-research/tau-bench：README 排行榜（航空领域 claude-3-5-sonnet-20241022 的 pass^1 为 0.460、pass^4 为 0.225）与 `tau_bench/run.py` 中 pass^k 的计算。<https://github.com/sierra-research/tau-bench>
 [^sober]: Andreas Hochlehnert et al., “A Sober Look at Progress in Language Model Reasoning: Pitfalls and Paths to Reproducibility”（COLM 2025）；排行榜数据见 bethgelab/sober-reasoning 仓库的 `data.json`。<https://arxiv.org/abs/2504.07086>
 [^miller]: Evan Miller, “Adding Error Bars to Evals: A Statistical Approach to Language Model Evaluations”。<https://arxiv.org/abs/2411.00640>
-[^swev-audit]: OpenAI, “Why we no longer evaluate SWE-bench Verified”；138 题、64 次运行、59.4% 有问题等数字转引自 Decrypt 的报道。<https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/> · <https://decrypt.co/359012/openai-benchmark-measure-ai-coding-supremacy-contaminated>
+[^swev-audit]: OpenAI, “Why we no longer evaluate SWE-bench Verified”（OpenAI 的摘要：该基准“越来越受污染”，分析显示测试有缺陷且存在训练泄漏，建议改用 SWE-bench Pro）；138 题、64 次运行、59.4% 有问题、35.5% 与 18.8% 两类缺陷等数字转引自 Decrypt 的报道，原文未能直接核对。<https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/> · <https://decrypt.co/359012/openai-benchmark-measure-ai-coding-supremacy-contaminated>
 [^illusion-arena]: Shivalika Singh et al., “The Leaderboard Illusion”。<https://arxiv.org/abs/2504.20879>
 [^lcb]: LiveCodeBench README（版本划分、按时间窗评测，以及为规避 DeepSeek 模型的污染只报告 2023 年 8 月之后题目的说明）。<https://github.com/LiveCodeBench/LiveCodeBench>
 [^swe-illusion]: Liang et al., “The SWE-Bench Illusion: When State-of-the-Art LLMs Remember Instead of Reason”。<https://arxiv.org/abs/2506.12286>
@@ -332,13 +342,13 @@ RL 训练用的验证器会被模型“学会”，它的分数只能说明优�
 [^livebench]: “LiveBench: A Challenging, Contamination-Free LLM Benchmark”。<https://arxiv.org/abs/2406.19314>
 [^futurehouse]: FutureHouse 对 HLE 化学、生物题的核查。<https://www.futurehouse.org/research-announcements/hle-exam>
 [^frontiermath]: Epoch AI, FrontierMath Tiers 1–3 v2 说明页（“On 2026-06-12, we released a major update, addressing errors in 42% of problems.”）。<https://epoch.ai/benchmarks/frontiermath-tiers-1-3-v2>
-[^tau3]: sierra-research/tau2-bench README（τ³-bench：75 处以上任务修正；1.0.1 前后成绩不可比）。<https://github.com/sierra-research/tau2-bench>
+[^tau3]: sierra-research/tau2-bench README 与 CHANGELOG（τ³-bench：依据 SABER 的 75 处以上任务修正，其中航空 27 题、零售 26 题；v1.0.1 起 banking_knowledge 成绩与此前不可比，其他领域不受影响）。<https://github.com/sierra-research/tau2-bench>
 [^swepro]: scaleapi/SWE-bench_Pro-os README 的更新记录。<https://github.com/scaleapi/SWE-bench_Pro-os>
 [^m1]: MiniMax, “MiniMax-M1: Scaling Test-Time Compute Efficiently with Lightning Attention”，评测设置部分。<https://arxiv.org/abs/2506.13585>
 [^seed2]: ByteDance Seed, “Seed2.0 Model Card”，§3.3 智能体评测说明。<https://github.com/ByteDance-Seed/Seed2.0>
 [^hal]: Sayash Kapoor et al., “Holistic Agent Leaderboard: The Missing Infrastructure for AI Agent Evaluation”。<https://arxiv.org/abs/2510.11977>
 [^aatm]: Sayash Kapoor et al., “AI Agents That Matter”。<https://arxiv.org/abs/2407.01502>
-[^metr]: Thomas Kwa et al., “Measuring AI Ability to Complete Long Tasks”；分析代码见 METR/eval-analysis-public。<https://arxiv.org/abs/2503.14499> · <https://metr.org/blog/2025-03-19-measuring-ai-ability-to-complete-long-tasks/>
+[^metr]: Thomas Kwa et al., “Measuring AI Ability to Complete Long Tasks”；分析代码与运行数据见 METR/eval-analysis-public（含 v1.0、v1.1 两版报告）。<https://arxiv.org/abs/2503.14499> · <https://metr.org/blog/2025-03-19-measuring-ai-ability-to-complete-long-tasks/>
 [^mtbench]: Lianmin Zheng et al., “Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena”。<https://arxiv.org/abs/2306.05685>
 [^onetoken]: Yulai Zhao et al., “One Token to Fool LLM-as-a-Judge”。<https://arxiv.org/abs/2507.08794>
 [^arb]: Lù et al., “AgentRewardBench: Evaluating Automatic Evaluations of Web Agent Trajectories”。<https://arxiv.org/abs/2504.08942>

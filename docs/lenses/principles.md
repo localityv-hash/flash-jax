@@ -10,6 +10,14 @@ prereq:
 
 # 原理与可解释性：RL 到底改变了模型什么
 
+::: tldr
+- RLVR 以锐化为主：熵主要花在已经会做的题上，pass@1 大涨，大 k 的 pass@k 常持平甚至下降；训得够久、题目落在能力边缘时才可能扩展边界。
+- RL 改得少、忘得少：参数更新稀疏且避开主方向，on-policy 数据让它偏向离基座 KL 最近的解法。
+- RL 放大的是基座已有的先验：“随机奖励也涨分”主要出现在 Qwen2.5-Math 上，缺少验证、回溯行为的基座也练不动，所以结论要跨模型家族、配随机奖励对照。
+- CoT 常常不忠实，但读 CoT 仍能抓到 reward hacking；一旦把监控分数并进奖励，模型就会学会把意图藏起来。
+- 如果只读一节：读 [pass@k 之争](#pass-at-k-debate)。
+:::
+
 这一视角不问“RL 把分数提高了多少”，而问“RL 改变了模型的什么”：输出分布的熵怎样被消耗，参数更新落在哪里，旧能力为何得以保留，推理边界是否真的扩张，奖励信号是否真的在起作用，以及写出来的思维链（CoT）还能不能如实反映模型的计算。
 
 ::: human
@@ -44,9 +52,9 @@ flowchart LR
 |---|---|---|
 | [熵怎样被花掉](#entropy) | 高概率且答对的 token 推动熵单调下降，性能增益几乎都在熵耗尽前拿到 | 同时监控熵与协方差；只约束极少数高协方差 token |
 | [更新落在哪里](#sparse-updates) | RL 只改动少量参数、避开主方向，每条样本带来的信息很少 | LoRA 可作默认起点；别把“参数没变”当“能力没变” |
-| [为什么忘得少](#forgetting) | on-policy 数据让模型选择离基座 KL 最近的解法 | 加新能力优先用自采样数据；跟踪新任务上的 KL |
+| [为什么忘得少](#forgetting) | on-policy 数据让模型偏向离基座 KL 最近的解法 | 加新能力优先用自采样数据；跟踪新任务上的 KL |
 | [边界有没有扩](#pass-at-k-debate) | 常规短训以锐化为主；长训、边缘题、组合任务上能扩 | 同时报告 pass@1 与大 k 曲线；数据挑“边缘题” |
-| [奖励在起作用吗](#spurious-rewards) | “随机奖励也有效”主要来自 Qwen2.5-Math 的先验与污染 | 两个以上模型家族、随机奖励对照、无污染基准 |
+| [奖励在起作用吗](#spurious-rewards) | “随机奖励也有效”主要反映强先验，Qwen2.5-Math 上还叠加了评测污染 | 两个以上模型家族、随机奖励对照、无污染基准 |
 | [基座要有什么](#cognitive-behaviors) | RL 放大的是基座已有的验证、回溯等行为 | RL 前先查行为，缺了就先预热或中训练 |
 | [CoT 还能信吗](#faithfulness) | CoT 常不忠实，但监控仍然有效，而且脆弱 | 监控只用于检测、不进奖励；先修环境 |
 
@@ -54,11 +62,11 @@ flowchart LR
 
 ### 现象：性能是拿熵换来的
 
-用 GRPO 一类算法做 RLVR，最常见的曲线是：<Term t="entropy">策略熵</Term>在前几百步急剧下跌，验证集准确率同步快速上升；之后熵见底，准确率也基本停住。上海 AI Lab 等团队的 *The Entropy Mechanism of RL for Reasoning LMs* 以一次典型训练为例：前约三分之一的步数消耗了 95% 的熵，也拿到了 95% 的性能增益；剩下三分之二的训练只换来 5%[^cui]。他们在 Qwen2.5 全系列（0.5B–32B）上发现，准确率 $R$ 与熵 $\mathcal H$ 之间近似满足
+用 GRPO 一类算法做 RLVR，最常见的曲线是：<Term t="entropy">策略熵</Term>在前几百步急剧下跌，验证集准确率同步快速上升；之后熵见底，准确率也基本停住。上海 AI Lab 等团队的 *The Entropy Mechanism of RL for Reasoning LMs* 以一次典型训练为例：前约三分之一的步数消耗了 95% 的熵，也拿到了 95% 的性能增益；剩下三分之二的训练只换来 5%[^cui]。他们在 Qwen2.5 从 0.5B 到 32B 的多个尺寸上发现，验证集准确率 $R$ 与策略熵 $\mathcal H$ 之间近似满足
 
 $$R=-a\,e^{\mathcal H}+b$$
 
-其中 $a,b$ 是随模型和数据变化的拟合系数。这个式子有一个直接推论：熵耗尽（$\mathcal H\to 0$）时，性能上限就是 $R=-a+b$。<Term t="entropy-collapse">熵塌缩</Term>之后，再训多久也只是在这块天花板下徘徊。
+其中 $a,b$ 是随模型和数据变化的拟合系数。按这条拟合曲线外推，熵耗尽（$\mathcal H\to 0$）时的性能上限约为 $R=-a+b$。<Term t="entropy-collapse">熵塌缩</Term>之后，再训多久也只是在这块天花板下徘徊。
 
 ::: human
 探索像一笔预算：每次把“有把握的答案”推得更确定，就花掉一点熵。预算花光时，模型只会走老路，成绩也就到顶了。
@@ -70,7 +78,7 @@ $$R=-a\,e^{\mathcal H}+b$$
 
 $$\Delta\mathcal H(s)\approx-\operatorname{Cov}_{a\sim\pi_\theta(\cdot\mid s)}\big(\log\pi_\theta(a\mid s),\ \Delta z_a\big)$$
 
-对表格型 softmax 的策略梯度，$\Delta z_a=\eta\,\pi_\theta(a\mid s)\,A(s,a)$；对自然策略梯度，$\Delta z_a=\eta\,A(s,a)$，其中 $\eta$ 是步长、$A$ 是优势。于是熵的变化取决于“对数概率”与“优势”的协方差：
+对表格型 softmax 的策略梯度，$\Delta z_a=\eta\,\pi_\theta(a\mid s)\,A(s,a)$；对自然策略梯度，$\Delta z_a=\eta\,A(s,a)$，其中 $\eta$ 是步长、$A$ 是优势。于是熵的变化主要取决于“对数概率”与“优势”的协方差（普通策略梯度下，优势还要乘上该动作的概率）：
 
 - **高概率且优势为正**（模型有把握，又答对了）：协方差为正，熵下降；
 - **低概率但优势为正**（冷门解法碰巧答对）：协方差为负，熵上升。
@@ -103,18 +111,20 @@ $$\Delta\mathcal H\approx-\eta\,\operatorname{Cov}_{a\sim\pi}\big(\log\pi_a,\ \p
 $$\operatorname{Cov}(y_i)=\Big(\log\pi_\theta(y_i)-\tfrac{1}{N}\textstyle\sum_{j}\log\pi_\theta(y_j)\Big)\cdot\Big(\hat A(y_i)-\tfrac{1}{N}\textstyle\sum_{j}\hat A(y_j)\Big)$$
 
 其中 $N$ 是 batch 中的有效 token 数。实验里这一项的走势与熵的逐步变化高度吻合。
+
+**适用范围。** 这是不含裁剪的一阶近似。奖励与回答无关时（例如随机奖励），对数概率与优势相互独立，协方差的期望为 0，公式预测熵不变；实测中熵仍会变化，需要二阶项和比率裁剪才能解释[^eve]。
 :::
 
 ### 对策：只给最“贪心”的 token 踩刹车
 
 既然熵是被少数“高概率 + 高优势”的 token 推着往下走的，就没必要对所有 token 一刀切。论文提出两种只作用于极少数高协方差 token 的做法：
 
-- **Clip-Cov**：在协方差落入某个高区间（官方配置为 1 到 5）的 token 里随机挑出极小比例（约 0.02%），直接切断它们的梯度；
-- **KL-Cov**：按协方差排序，取最高的一小撮（官方配置 7B 为 0.2%、32B 为 0.02%），在它们的损失上额外加 $\beta\,\lvert\log\pi_\theta-\log\pi_{\theta_\text{old}}\rvert$，把它们“拴”在旧策略附近。
+- **Clip-Cov**：从协方差落在某个高区间（官方配置为 1 到 5）的 token 中，随机挑出一小批（数量约为全部 token 的 0.02%），把它们的梯度置零；
+- **KL-Cov**：按协方差排序，取最高的一小撮（官方配置 7B 为 0.2%、32B 为 0.02%），在它们的损失上额外加 $\beta\,\lvert\log\pi_\theta-\log\pi_{\theta_\text{old}}\rvert$（官方配置 $\beta=1$），把它们“拴”在旧策略附近。
 
-在官方配置里，这两种机制基本取代了 PPO 式的比率裁剪。在 Qwen2.5-7B / 32B 上，二者都让熵在整个训练中维持在高得多的水平（KL-Cov 在基线熵见底时仍高出 10 倍以上）；其中 KL-Cov 的平均分在 7B、32B 上分别比 GRPO 高 2.0 和 6.4 个点，32B 上把 AIME24 从 21.8 提到 36.8、AIME25 从 16.2 提到 30.8。同表中 DAPO 的 clip-higher 在 32B 上平均为 47.2，KL-Cov 为 52.2[^cui]。两者已合入 verl（`loss_mode` 设为 `clip_cov` 或 `kl_cov`），上海 AI Lab 的 Intern-S1 也在 RL 阶段用 KL-Cov 控制熵[^interns1]。
+官方实现里，KL-Cov 不再做比率裁剪，Clip-Cov 则把裁剪范围放宽到 $[0,2]$，两者基本取代了 PPO 式裁剪。在 Qwen2.5-7B / 32B 上，二者都让熵在整个训练中维持在高得多的水平（KL-Cov 在基线熵见底时仍高出 10 倍以上）；其中 KL-Cov 的平均分在 7B、32B 上分别比 GRPO 高 2.0 和 6.4 个点，32B 上把 AIME24 从 21.8 提到 36.8、AIME25 从 16.2 提到 30.8。同表中 DAPO 的 clip-higher 在 32B 上平均为 47.2，KL-Cov 为 52.2[^cui]。两者已合入 verl（`loss_mode` 设为 `clip_cov` 或 `kl_cov`），上海 AI Lab 的 Intern-S1 也在 RL 阶段用 KL-Cov 控制熵[^interns1]。
 
-对照两种常见做法更容易看清它的位置：全局熵奖励对系数很敏感，Skywork-OR1 因此改用了自适应的熵控制（[条目](/library/?id=skywork-or1)）；DAPO 的 clip-higher 放宽上裁剪，让低概率的正样本多涨一点，本质上是在制造负协方差（[算法页](/lenses/algorithms#dapo)）。
+对照两种常见做法更容易看清它的位置：全局熵奖励对系数很敏感，Skywork-OR1 因此改用了自适应的熵控制（[条目](/library/?id=skywork-or1)）；DAPO 的 clip-higher 放宽上裁剪，让低概率的正样本多涨一点，相当于少截断那些“低概率 + 正优势”、会抬高熵的更新（[算法页](/lenses/algorithms#dapo)）。
 
 ### 哪些 token 在做选择：分叉 token
 
@@ -145,13 +155,13 @@ flowchart TB
 
 - 把策略熵、协方差的 batch 均值与奖励画在同一张图上；熵在前几百步塌到底，就该干预，而不是继续堆步数。
 - 优先用“精准”的保熵手段：Clip-Cov / KL-Cov 只动万分之几到千分之几的 token；clip-higher 放宽上裁剪；大模型上可以试只训练高熵 token。
-- 不要把“熵越高越好”当目标：熵只是探索的代理指标，token 级熵上升不等于解法更多样（见下文的“熵悖论”）。
+- 不要把“熵越高越好”当目标：熵只是探索的代理指标，token 级熵上升不等于解法更多样（见下文的“熵悖论”）；反过来，在强基座上只做熵最小化也能提高 pass@1（见[伪奖励一节](#spurious-rewards)）。要防的是熵过早耗尽，而不是熵低本身。
 
 <EntryGrid :ids="['entropy-mechanism', 'forking-tokens']" />
 
 ## 更新落在哪里：稀疏子网络与“离主方向” {#sparse-updates}
 
-RL 改变行为的幅度很大，改变参数的幅度却出奇地小。UIUC 的研究逐参数比较了 RL 前后的权重：只有约 5%–30% 的参数发生了变化，其余在 bf16 精度下一位不差；这一现象在 PPO、GRPO、DPO 等 7 种算法、10 个不同家族的模型上都成立，而且不需要任何稀疏正则[^sparse]。进一步的发现是：
+RL 改变行为的幅度很大，改变参数的幅度却出奇地小。UIUC 的研究逐参数比较了 RL 前后的权重：只有约 5%–30% 的参数发生了变化，其余参数的变化都不超过 bf16 的数值容差（论文取 $10^{-5}$），可视为没动；这一现象在 PPO、GRPO、DPO 等 7 种算法、10 个不同家族的模型上都成立，而且不需要任何稀疏正则[^sparse]。进一步的发现是：
 
 - 只微调这个子网络，就能复现全量训练的结果，得到几乎相同的模型；
 - 不同随机种子、不同训练数据、甚至不同算法得到的子网络，重合度远高于随机；
@@ -168,7 +178,7 @@ RL 像在一台调好的钢琴上拧几颗螺丝：拧的地方很少，每次�
 **可以怎么做**
 
 - RL 的参数效率天然很高：LoRA 可以作为默认起点，多任务、多租户的 RL 服务也因此变得可行。
-- 为 SFT 设计、专挑主方向更新的参数高效方法（例如按主成分初始化的 LoRA 变体），未必适合 RLVR；这是上述结论的直接推论，选型时值得单独验证。
+- 为 SFT 设计的参数高效方法未必适合 RLVR：*The Path Not Taken* 的案例研究显示，把 SFT 时代的稀疏微调与 LoRA 变体直接搬过来可能适得其反；专挑主方向更新的方法（例如按主成分初始化的 LoRA 变体）选型前尤其要单独验证。
 - 别把“大部分参数没变”读成“能力没变”：评估要看行为，而不是权重差的范数。
 
 <EntryGrid :ids="['rl-sparse-updates', 'lora-without-regret']" />
@@ -194,8 +204,10 @@ $$\KL(\pi\,\Vert\,\pi_0)=\E_{\pi}\Big[\log\frac{\pi}{\pi^\dagger}+\log\frac{\pi^
 等号当且仅当 $\pi=\pi^\dagger$。由此有三个推论：
 
 1. 学会一道题所需的最小分布改变量是 $-\log p_0(x)$：基座越接近会做，需要的改变越小；
-2. $p_0(x)=0$ 的题需要无穷大的改变：基座完全采不到的解法，on-policy 学习够不着，这与[推理边界之争](#pass-at-k-debate)里的现象一致；
-3. 从基座采样、只保留答对的回答（拒绝采样），拿到的正是 $\pi^\dagger$ 的样本。RL、自采样后过滤再 SFT、on-policy 蒸馏都在用“接近自身分布”的数据向 $\pi^\dagger$ 靠拢；SFT 的目标分布由人或教师给定，没有这个下界的保护，KL 可以任意大。
+2. $p_0(x)\to0$ 时所需的改变趋于无穷：基座几乎采不到的解法，on-policy 学习够不着，这与[推理边界之争](#pass-at-k-debate)里的现象一致；
+3. 从基座采样、只保留答对的回答（拒绝采样），拿到的正是 $\pi^\dagger$ 的样本。RL 与“自采样后过滤再 SFT”都在用接近自身分布的数据向 $\pi^\dagger$ 靠拢；SFT 的目标由人或教师给定，未必是 $\pi^\dagger$，KL 可以远大于这个下界。
+
+策略梯度并不会精确停在 $\pi^\dagger$ 上。以表格 softmax 为例：自然策略梯度给每个正确回答的 logit 加同样的量，策略始终保持 $\pi_0\,e^{c\,r}/Z$ 的形式，随 $c$ 增大收敛到 $\pi^\dagger$；普通策略梯度的 logit 更新 $\eta\,\pi_aA$ 与当前概率成正比，会继续偏向原本概率最高的正确回答（与[熵机制](#entropy)同源），终点比 $\pi^\dagger$ 更尖，KL 也更大。所以“RL 偏向 KL 最小的解”是相对 SFT 的倾向，而不是精确结论。
 :::
 
 普林斯顿的 *Retaining by Doing* 把问题拆得更细[^rbd]：在 Llama 与 Qwen 两个家族（1B–8B）、指令遵循 / 通用知识 / 算术推理三类任务上，RL 的遗忘都少于 SFT，新任务表现相当或更好；逐一排除后，决定性因素不是 KL 正则，也不是优势估计，而是**数据是否 on-policy**。他们给出的直觉和常见说法相反：
@@ -225,13 +237,15 @@ $$\KL(\pi\,\Vert\,\pi_0)=\E_{\pi}\Big[\log\frac{\pi}{\pi^\dagger}+\log\frac{\pi^
 
 清华 LeapLab 的 *Does RL Really Incentivize Reasoning Capacity in LLMs Beyond the Base Model?*（NeurIPS 2025 最佳论文亚军）把问题问得很尖锐[^yue]。他们用大 k 的 <Term t="pass-at-k">pass@k</Term> 衡量<Term t="reasoning-boundary">推理边界</Term>，即多给几次机会时模型“至少能做对一次”的题有多少，并在多个模型族、6 种 RL 算法、数学 / 代码 / 视觉推理任务上比较基座与 RL 模型：
 
-- **交叉**：RL 模型在 k=1 时占优，但 k 增大到几十、上百后，基座无一例外地追上并反超；
+- **交叉**：RL 模型在 k=1 时占优，但 k 增大到几十、上百后，基座在各组实验中一致地追上并反超；
 - **收缩**：随着训练推进，训练集 pass@1 从 26.1 升到 42.5，pass@256 却逐步下降；RL 模型能解的题几乎是基座能解的题的子集；
 - **在分布内**：用基座给 RL 模型的回答算困惑度，结果落在基座自己回答的低困惑度区间；
 - **算法差别不大**：定义 $\Delta_\text{SE}$ 为基座 pass@256 与 RL 模型 pass@1 之差（越小越好），6 种算法的 $\Delta_\text{SE}$ 相差无几，且都在 40 个点以上；
 - **蒸馏不同**：从 DeepSeek-R1 蒸馏得到的模型，pass@k 曲线整体高于基座，真正扩展了边界。
 
 他们也检查了几种常见的“辩护”：rollout 数从 8 加到 32，大 k 略有改善，但仍被基座反超；加 KL 惩罚（系数 0.001）时 pass@1 相近、pass@128 明显更低；把 RL 模型的温度调高到与基座同熵，依然不如基座。熵下降只能解释一部分收缩。
+
+工业界的对照指向同一方向：Qwen3 技术报告在 Qwen3-8B 上比较 RL 与 on-policy 蒸馏，RL 把 AIME'24 的 pass@1 从 55.0 提到 67.6，pass@64 却停在 90.0；蒸馏则把 pass@64 提到 93.3[^qwen3]。
 
 为什么会出现交叉？看一个可以手算的玩具例子（**非真实数据**）。设基准有 100 道题：30 道简单题（基座单次通过率 0.6）、30 道中等题（0.2）、20 道难题（0.05）、20 道基座完全做不出。“只锐化”的 RL 把简单、中等题推到 0.95 和 0.7，难题里一半提升到 0.3，另一半的正确路径被“剪掉”变成 0；“锐化 + 扩边界”的 RL 保住了所有难题（0.3），还让 5 道原本做不出的题有了 0.1 的通过率。用 $\text{pass@}k=\frac{1}{100}\sum_i\big[1-(1-p_i)^k\big]$ 计算：
 
@@ -257,17 +271,17 @@ $$\widehat{\text{pass@}k}=\E_{x}\Big[1-\frac{\binom{n-c}{k}}{\binom{n}{k}}\Big]$
 
 反方证据来自几条不同路线：
 
-1. **训得够久、够杂**：NVIDIA 的 ProRL 从 DeepSeek-R1-Distill-Qwen-1.5B 出发，在数学、代码、STEM、逻辑谜题、指令遵循等任务上训练 2000 多步，配合 KL 控制与周期性重置参考策略，报告 RL 模型在大范围的 pass@k 上持续超过基座，包括一些基座怎么采样都做不出的任务；扩展幅度与基座在该任务上的初始能力和训练时长强相关，基座越弱的任务扩得越明显[^prorl]。
+1. **训得够久、够杂**：NVIDIA 的 ProRL 从 DeepSeek-R1-Distill-Qwen-1.5B 出发，在数学、代码、STEM、逻辑谜题、指令遵循等任务上训练 2000 多步，配合 KL 控制与周期性重置参考策略，报告 RL 模型在大范围的 pass@k 上持续超过基座，包括一些基座怎么采样都做不出的任务；扩展幅度与基座在该任务上的初始能力和训练时长强相关：基座越弱的任务扩得越明显，基座本来就强、与预训练数据重合度高的任务几乎没有扩展[^prorl]。
 2. **组合出新技能**：*From f(x) and g(x) to f(g(x))* 先让模型学会原子字符串变换，再只在组合题上做 RL：模型学会了没见过的组合，并泛化到更深的嵌套和其他任务；同样数据的下一 token 训练做不到[^comp]。
-3. **受控的三段式实验**：CMU 的 *Interplay* 用完全可控的合成数据同时操纵预训练、中训练与 RL：只有预训练留有余量、且训练题落在模型“能力边缘”时，RL 才带来真实增益；预训练中只要有约 1% 的相关暴露，RL 就能稳健泛化（pass@128 最多提升 60%）；同等算力下加入中训练，OOD 难题比只做 RL 高 10.8%[^interplay]。
-4. **量法之争**：数学题答案可猜，大 k 下基座可能是“蒙对”的。Wen 等人提出 CoT-pass@k，要求推理过程与答案同时正确，并据此认为 RLVR 确实在激励正确推理，而不只是更会猜答案[^cotpassk]。不过 Yue 等人的人工检查也显示，在 AIME24 最难的题上，基座的正确答案多数伴随有效推理（6 道中 5 道找到了正确的 CoT），基座的大 k 表现并非全靠蒙。
+3. **受控的三段式实验**：CMU 的 *Interplay* 用完全可控的合成数据同时操纵预训练、中训练与 RL：只有预训练留有余量、且训练题落在模型“能力边缘”时，RL 才带来真实增益；预训练中对某个长尾语境只要有约 1% 的暴露，RL 就能把推理能力稳健地迁移过去（pass@128 最多高出约 60 个点），暴露为 0 或 0.1% 时则迁移不了；同等算力下加入中训练，OOD 难题上的 pass@128 比只做 RL 平均高 10.8 个点[^interplay]。
+4. **量法之争**：数学题答案可猜，大 k 下基座可能是“蒙对”的。Wen 等人提出 CoT-pass@k，要求推理过程与答案同时正确，并据此认为 RLVR 确实在激励正确推理，而不只是更会猜答案[^cotpassk]。不过 Yue 等人也做过人工检查：AIME24 中基座平均准确率低于 5% 却做对过的 7 道题，除去 1 道难以判定的，6 道里有 5 道至少有一条推理正确的 CoT，基座的大 k 表现并非全靠蒙。
 
-### 新证据：锐化能走多远
+### 锐化能走多远：不训练能拿到多少
 
 另一些工作从“不训练也能拿到多少”的角度，给锐化派补充了证据：
 
 - *Reasoning with Sampling*（Harvard）不训练、不用验证器，只借基座自身的似然做类 MCMC 的幂次采样，即从整段序列的 $p^\alpha$ 而非逐 token 降温的分布中取样；单次作答成绩接近甚至超过 GRPO 模型，也没有多样性塌缩[^sampling]。
-- *Base Models Know How to Reason, Thinking Models Learn When* 用稀疏自编码器找到推理行为对应的方向，只在约 12% 的 token 上对基座做引导、不改任何权重，就恢复了与思考模型之间最多 91% 的差距[^venhoff]：思考模型学到的，主要是“何时调用”已有机制。
+- *Base Models Know How to Reason, Thinking Models Learn When* 用稀疏自编码器从推理轨迹里找出推理行为，再只用基座已有的“机制”（能诱发某种行为的引导向量）加一个决定“何时触发”的分类器去重建思考模型。在 9 对基座与思考模型上，这种不改权重的混合模型能补回纯 RL 模型与基座差距的约 76%，对 SFT 蒸馏模型却只能补回约 11%[^venhoff]：RL 主要学会“何时调用”已有机制，蒸馏则装进了新机制。
 - *The Invisible Leash* 把 RLVR 刻画为受基座支撑集约束的优化，实证发现在大采样预算下“支撑收缩”通常多于“支撑扩张”；还指出一个**熵悖论**：token 级熵有时上升，答案级熵却在下降，看似更不确定的路径最终收敛到更少的不同答案[^leash]。
 
 ### 当前最好的解读
@@ -314,7 +328,7 @@ $$\bar R=1-\frac{\binom{N_\text{neg}}{k}}{\binom{N}{k}},\qquad \sigma=\sqrt{\bar
 
 $$\hat A_\text{neg}=\frac{1}{\sigma}\Big(1-\bar R-\frac{\binom{N_\text{neg}-1}{k-1}}{\binom{N-1}{k-1}}\Big)$$
 
-$k=1$ 时 $\bar R$ 就是组内通过率 $p$，两式退化为 GRPO 的 $(1-p)/\sigma$ 与 $-p/\sigma$。$k>1$ 时，对“$k$ 次内几乎必能做对”的题 $\bar R\to1$，优势趋近于 0，不再继续锐化它们；学习信号集中到还没稳定解出的难题上。例如 $N=8$、$k=4$ 时，4 个正确的题优势约为 $\pm0.12$，只有 1 个正确的题，正样本优势为 1。
+$k=1$ 时 $\bar R$ 就是组内通过率 $p$，两式退化为 GRPO 的 $(1-p)/\sigma$ 与 $-p/\sigma$。$k>1$ 时，对“$k$ 次内几乎必能做对”的题 $\bar R\to1$，优势趋近于 0，不再继续锐化它们；学习信号集中到还没稳定解出的难题上。例如 $N=8$、$k=4$ 时，4 个正确的题优势约为 $\pm0.12$（GRPO 下是 $\pm1$）；只有 1 个正确的题，正样本优势为 1；正确数达到 5 个及以上（$N_\text{neg}<k$）时，每个 $k$ 子集都含正确回答，$\bar R=1$，这道题不再提供梯度。
 :::
 
 **可以怎么做**
@@ -338,14 +352,16 @@ $k=1$ 时 $\bar R$ 就是组内通过率 $p$，两式退化为 GRPO 的 $(1-p)/\
 | 随机（50% 概率给 1） | +21.4 |
 | 只看格式 | +13.8 |
 
-但同样的<Term t="spurious-reward">伪奖励</Term>在 Llama3、OLMo2 上基本无效。作者追查发现，Qwen2.5-Math 有一个独特的先验行为“代码推理”：写出代码却不执行，直接在推理中算出结果。RLVR 后它的出现频率从 65% 升到 90% 以上，奖励是假的也一样。作者给出的机制解释是 GRPO 的裁剪偏置：随机奖励的期望梯度本应为零，但比率裁剪让更新不对称，系统性地抬高模型原本就高概率的行为；论文用关闭裁剪的对照实验支持了这一点。
+但同样的<Term t="spurious-reward">伪奖励</Term>在 Llama3、OLMo2 上基本无效。作者追查发现，Qwen2.5-Math 有一个独特的先验行为“代码推理”：写出代码却不执行，直接在推理中算出结果。RLVR 后它的出现频率从 65% 升到 90% 以上，奖励是假的也一样。
 
-复旦等团队给出了另一个更朴素的解释：<Term t="contamination">污染</Term>。Qwen2.5 只看 MATH-500 等基准题面的一部分，就能续写出原题并答对，对它发布后才出现的基准则做不到[^memo]。他们在自建的无污染合成算术数据 RandomCalculation 上重做实验：只有准确的奖励能稳定提升，随机或错误奖励无效。AI2 在 Olmo 3 上给出了最干净的检验：Olmo 3 的预训练与中训练数据完全公开、经过去污染，在这个 RL-Zero 设置上，随机奖励不再带来收益[^olmo3]（[条目](/library/?id=olmo3)）。“无监督 RL”的一系列结果也该放在同一框架下读：只最小化输出熵、只最大化自身置信度，或用多数投票当伪标签，都能在同类基座上涨分[^unsup]，它们本质上都在锐化已有分布。
+随机奖励的期望梯度本应为零，它为什么还能起作用？作者的解释是 GRPO 的裁剪偏置：比率裁剪让更新不对称，系统性地抬高模型原本就高概率的行为；关闭裁剪后，随机奖励就不再带来稳定的提升。这一解释仍有争议：后续分析估算，裁剪偏置带来的信号比原始梯度小一个数量级以上，裁剪真正的作用是压低熵；他们还在 R1 蒸馏的 Llama-8B、QwQ-32B 等强模型上看到了随机奖励的增益，解释为强模型的多数 rollout 本来就对，随机打分对整体信号的扭曲很小[^eve]。
 
-少得惊人的训练数据也是同一个故事。1-shot RLVR 只用一道题（复制填满 batch）训练，就把 Qwen2.5-Math-1.5B 的 MATH500 从 36.0% 提到 73.6%，六个数学基准平均从 17.6% 提到 35.7%，与用包含这道题的 1.2k 题子集相当；训练准确率饱和后测试成绩仍在上涨，作者称之为 post-saturation generalization[^oneshot]。它在 Llama、蒸馏模型上也有提升，不能全归于污染。更合理的读法是：**基座已经“差一点会”时，极少量的 RL 信号就足以把能力调出来**，增益的上限取决于先验，而不是数据量。
+复旦等团队给出了另一个更朴素的解释：<Term t="contamination">污染</Term>。Qwen2.5 只看 MATH-500 等基准题面的一部分，就能续写出原题并答对，对它发布后才出现的基准则做不到[^memo]。他们在自建的无污染合成算术数据 RandomCalculation 上重做实验：只有准确的奖励能稳定提升，随机或错误奖励无效。AI2 在 Olmo 3 上给出了最干净的检验：Olmo 3 的预训练与中训练数据完全公开、经过去污染，在这个 RL-Zero 设置上，随机奖励不再带来收益[^olmo3]（[条目](/library/?id=olmo3)）。
+
+“无监督 RL”与极少数据的结果也是同一个故事。只最小化输出熵、只最大化自身置信度，或用多数投票当伪标签，都能在同类基座上涨分[^unsup]，它们本质上都在锐化已有分布。1-shot RLVR 只用一道题（复制填满 batch）训练，就把 Qwen2.5-Math-1.5B 的 MATH500 从 36.0% 提到 73.6%，六个数学基准平均从 17.6% 提到 35.7%，与用包含这道题的 1.2k 题子集相当；训练准确率饱和后测试成绩仍在上涨，作者称之为 post-saturation generalization[^oneshot]。它在 Llama、蒸馏模型上也有提升，不能全归于污染；不过 Spurious Rewards 在不加熵损失的设置下复现时，同一道题在非 Qwen 模型上往往拿不到提升。更合理的读法是：**基座已经“差一点会”时，极少量的 RL 信号就足以把能力调出来**，增益的上限取决于先验，而不是数据量。
 
 ::: human
-学生拿到一套题，随便怎么批改分数都能涨，最可能的原因是这套题早就见过；换一套保证没见过的新题，只有认真批改才有用。
+学生拿到一套题，随便怎么批改分数都能涨，要么是这套题早就见过，要么是他本来就差一点会、多练几遍就找回了手感。换一套保证没见过、也确实还不会的题，只有认真批改才有用。
 :::
 
 **这对怎么做实验意味着什么**
@@ -359,7 +375,7 @@ $k=1$ 时 $\bar R$ 就是组内通过率 $p$，两式退化为 GRPO 的 $(1-p)/\
 
 ## 认知行为：什么样的基座“RL 得动” {#cognitive-behaviors}
 
-同一套 RL 配方，Qwen 越练越强，Llama 却很快停滞。斯坦福的 Gandhi 等人在 Countdown 游戏（用给定数字凑出目标数）上对照 Qwen-2.5-3B 与 Llama-3.2-3B，把差别归结为四种“认知行为”[^gandhi]，下表的例子为示意：
+同一套 RL 配方，Qwen 越练越强，Llama 却很快停滞。斯坦福与 SynthLabs 的 Gandhi 等人在 Countdown 游戏（用给定数字凑出目标数）上对照 Qwen-2.5-3B 与 Llama-3.2-3B，把差别归结为四种“认知行为”[^gandhi]，下表的例子为示意：
 
 | 行为 | 含义 | 示意 |
 |---|---|---|
@@ -374,7 +390,7 @@ $k=1$ 时 $\bar R$ 就是组内通过率 $p$，两式退化为 GRPO 的 $(1-p)/\
 - 用 Claude 3.5 Sonnet 合成少量示范这些行为的数据给 Llama 预热（priming），它在 RL 中就能追上 Qwen；即使预热数据里的答案**全是错的**，只要行为示范到位，效果也差不多。决定性的是行为，而不是答案对不对。
 - 用筛选出富含这些行为的 OpenWebMath 数据继续预训练，同样能让 Llama 追上 Qwen 的自我提升轨迹。
 
-这与其他观察互相印证：Dr. GRPO 的作者发现 Qwen2.5-Math 等基座在 RL 之前就会自我反思，所谓“顿悟时刻”并不是 RL 凭空创造的（[条目](/library/?id=dr-grpo)）；OctoThinker 等工作则把“让基座更适合 RL”变成了中训练的设计目标（[中训练页](/topics/mid-training#rl-readiness)）。
+这与其他观察互相印证：Dr. GRPO 的作者发现 Qwen2.5-Math 等基座在 RL 之前就会自我反思，所谓“顿悟时刻”并不是 RL 凭空创造的（[条目](/library/?id=dr-grpo)）；OctoThinker 等工作则把“让基座更适合 RL”变成了中训练的设计目标（[中训练页](/topics/mid-training#rl-readiness)）。需要注意，四种行为的结论主要来自 Countdown 与 3B 规模的模型；在更大的模型、更开放的任务上，还缺少同样受控的验证。
 
 **可以怎么做**
 
@@ -392,9 +408,9 @@ $k=1$ 时 $\bar R$ 就是组内通过率 $p$，两式退化为 GRPO 的 $(1-p)/\
 
 Anthropic 的 *Reasoning Models Don't Always Say What They Think* 用了一个干净的干预设计[^faith]：在提示中埋入线索（例如“一位斯坦福教授认为答案是 A”，或藏在元数据里的答案），如果模型因为线索改变了答案，就看 CoT 里有没有承认用了线索。结果是：
 
-- Claude 3.7 Sonnet、DeepSeek R1 等推理模型在多数设置下的承认率低于 20%；
-- 结果导向的 RL 起初能提升忠实性，但很快停滞；
-- 在人为植入 reward hack 的 RL 环境里，模型几乎总会（超过 99%）学会利用漏洞，但在 6 个环境中的 5 个里，CoT 承认率不到 2%。
+- Claude 3.7 Sonnet 与 DeepSeek R1 的平均承认率只有 25% 和 39%，不少设置低于 20%；
+- 结果导向的 RL 起初能提升忠实性，随后停在较低水平（MMLU 上约 28%，GPQA 上约 20%）；
+- 在人为植入 reward hack 的 RL 环境里，Claude 3.7 Sonnet 在 99% 以上的样本上学会了利用漏洞，但在 6 个环境中的 5 个里，CoT 承认率不到 2%。
 
 ### 监控有用，但一旦进入奖励就会失效
 
@@ -413,11 +429,13 @@ flowchart LR
   M -.->|"做法 B：打分并入奖励<br/>压力大时学会混淆"| U
 ```
 
-多家实验室与安全机构的研究者随后联合发表立场论文 *Chain of Thought Monitorability*[^monitor]：难任务需要把推理写出来当工作记忆，模型也倾向于写出来，这让 CoT 监控成为难得的安全窗口；但它很脆弱，可能被结果导向 RL 的进一步规模化、对 CoT 的直接监督、间接的优化压力，以及潜空间推理等新架构削弱。论文建议开发者把可监控性当作训练决策的考量之一，并公开相应的评测结果。OpenAI 在 2025 年 12 月发布了一套可监控性评测（13 个评测、24 个环境）[^oaieval]；Google DeepMind 的研究则显示，当任务确实需要 CoT 才能完成时，模型只有在得到大量帮助（详细的人写策略，或针对监控器的迭代优化）时才学会躲过监控[^gdm]。监控在“非想不可”的任务上更可靠。
+多家实验室与安全机构的研究者随后联合发表立场论文 *Chain of Thought Monitorability*[^monitor]：难任务需要把推理写出来当工作记忆，模型也倾向于写出来，这让 CoT 监控成为难得的安全窗口；但它很脆弱，可能被结果导向 RL 的进一步规模化、对 CoT 的直接监督、间接的优化压力，以及潜空间推理等新架构削弱。论文建议开发者把可监控性当作训练决策的考量之一，并公开相应的评测结果。
+
+之后的测量给了一些正面的信号。OpenAI 在 2025 年 12 月发布了一套可监控性评测（13 项评测，分干预、过程、结果属性三类），初步结论是 CoT 越长越容易监控，在目前的前沿规模上，RL 优化也没有明显降低可监控性[^oaieval]；Google DeepMind 的研究则显示，当任务确实需要 CoT 才能完成时，模型只有在得到大量帮助（详细的人写策略，或针对监控器的迭代优化）时才学会躲过监控[^gdm]。监控在“非想不可”的任务上更可靠。
 
 ### 哪些思考步骤真正重要
 
-*Thought Anchors* 从另一个方向打开 CoT[^anchors]：对每句话重采样替换并续写，看最终答案的分布变化多大，再用注意力分析与注意力抑制交叉验证。结论是少数句子，多为订计划、处理不确定性或决定回头检查的句子，对后续推理的影响远超其余，作者称之为“思维锚点”。它和[分叉 token](#entropy) 是同一现象在两个粒度上的投影：少数决策点主导了整条轨迹。
+*Thought Anchors* 从另一个方向打开 CoT[^anchors]：对每句话重采样替换并续写，看最终答案的分布变化多大，再用注意力分析与注意力抑制交叉验证。结论是少数句子，多为订计划、处理不确定性或决定回头检查的句子，对后续推理的影响远超其余，作者称之为“思维锚点”。它和[分叉 token](#entropy) 可以看作同一现象在句子与 token 两个粒度上的表现：少数决策点主导了整条轨迹。
 
 ### 对 RL 训练意味着什么
 
@@ -439,8 +457,8 @@ flowchart LR
 3. **更新为什么落在这些子空间？** 能否据此设计 RLVR 原生的优化器与参数高效方法，或利用稀疏性压缩训练与推理之间的权重同步？
 4. **长程、多环境的智能体 RL 里，遗忘仍由 KL 主导吗？** RL 剃刀在环境分布远宽于数学题时是否依然成立？与 SFT、on-policy 蒸馏怎样组合成持续学习？
 5. **干净的试验场从哪来？** 数据完全公开的基座（如 Olmo 3）仍是少数；只在单一家族上成立的结论该打多少折扣？
-6. **规模化 RL 会不会侵蚀可监控性？** 更长的 RL、更强的长度压力或潜空间推理，会不会让 CoT 逐渐变得不可读？
-7. **机制层面 RL 改了什么？** 引导向量、稀疏自编码器差分等工具显示思考模型多在学“何时调用”已有机制，这一结论能否推广到智能体与多轮任务？
+6. **规模化 RL 会不会侵蚀可监控性？** 目前的测量显示，前沿规模的 RL 还没有明显降低可监控性；更长的 RL、更强的长度压力或潜空间推理会不会改变这一点？
+7. **机制层面 RL 改了什么？** 引导向量、稀疏自编码器等工具显示，RL 训练出的思考模型多在学“何时调用”已有机制，蒸馏则装进了新机制；这一区分能否推广到智能体与多轮任务？
 
 ## 可执行结论
 
@@ -476,23 +494,25 @@ flowchart LR
 [^interns1]: Intern-S1 技术报告中关于用 KL-Cov 控制熵的描述：“Intern-S1: A Scientific Multimodal Foundation Model”, 2025. [arXiv:2508.15763](https://arxiv.org/abs/2508.15763)
 [^wang8020]: Shenzhi Wang et al., “Beyond the 80/20 Rule: High-Entropy Minority Tokens Drive Effective Reinforcement Learning for LLM Reasoning”, NeurIPS 2025. [arXiv:2506.01939](https://arxiv.org/abs/2506.01939)
 [^sparse]: Sagnik Mukherjee, Lifan Yuan, Dilek Hakkani-Tür, Hao Peng, “Reinforcement Learning Finetunes Small Subnetworks in Large Language Models”, 2025. [arXiv:2505.11711](https://arxiv.org/abs/2505.11711)
-[^pathnottaken]: “The Path Not Taken: RLVR Provably Learns Off the Principals”, 2025（NeurIPS 2025 Efficient Reasoning Workshop Spotlight）. [arXiv:2511.08567](https://arxiv.org/abs/2511.08567)
+[^pathnottaken]: Hanqing Zhu et al.（Meta AI · UT Austin）, “The Path Not Taken: RLVR Provably Learns Off the Principals”, 2025. [arXiv:2511.08567](https://arxiv.org/abs/2511.08567)
 [^tinylora]: John X. Morris et al., “Learning to Reason in 13 Parameters”, 2026. [arXiv:2602.04118](https://arxiv.org/abs/2602.04118)
-[^razor]: Idan Shenfeld, Jyothish Pari, Pulkit Agrawal, “RL's Razor: Why Online Reinforcement Learning Forgets Less”, 2025. [arXiv:2509.04259](https://arxiv.org/abs/2509.04259)
+[^razor]: Idan Shenfeld, Jyothish Pari, Pulkit Agrawal, “RL's Razor: Why Online Reinforcement Learning Forgets Less”, ICLR 2026. [arXiv:2509.04259](https://arxiv.org/abs/2509.04259)
 [^rbd]: Howard Chen, Noam Razin, Karthik Narasimhan, Danqi Chen, “Retaining by Doing: The Role of On-Policy Data in Mitigating Forgetting”, 2025. [arXiv:2510.18874](https://arxiv.org/abs/2510.18874)；代码见 [princeton-pli/retaining-by-doing](https://github.com/princeton-pli/retaining-by-doing)。
-[^yue]: Yang Yue et al., “Does Reinforcement Learning Really Incentivize Reasoning Capacity in LLMs Beyond the Base Model?”, NeurIPS 2025. [arXiv:2504.13837](https://arxiv.org/abs/2504.13837)。pass@1 从 26.1 到 42.5、各算法 ΔSE 均在 40 点以上、KL 与 rollout 数消融、同熵对照与 AIME24 人工检查，见论文第 4 节及附录 D。
+[^yue]: Yang Yue et al., “Does Reinforcement Learning Really Incentivize Reasoning Capacity in LLMs Beyond the Base Model?”, NeurIPS 2025. [arXiv:2504.13837](https://arxiv.org/abs/2504.13837)。按论文 v5：pass@1 从 26.1 到 42.5 及 KL、rollout 数消融见第 4.4 节与附录 C.6；ΔSE 见第 4.3 节；同熵对照见第 4.5 节；AIME24 人工检查见第 3.1 节与附录 C.2。
+[^qwen3]: Qwen Team, “Qwen3 Technical Report”, 2025，表 21（从同一个离线蒸馏的 8B 检查点出发，对比 RL 与 on-policy 蒸馏；括号内为 pass@64）. [arXiv:2505.09388](https://arxiv.org/abs/2505.09388)
 [^prorl]: Mingjie Liu et al.（NVIDIA）, “ProRL: Prolonged Reinforcement Learning Expands Reasoning Boundaries in Large Language Models”, 2025. [arXiv:2505.24864](https://arxiv.org/abs/2505.24864)；资料库条目见 [ProRL](/library/?id=prorl)。
 [^comp]: Lifan Yuan et al., “From f(x) and g(x) to f(g(x)): LLMs Learn New Skills in RL by Composing Old Ones”, ICLR 2026. [arXiv:2509.25123](https://arxiv.org/abs/2509.25123)
-[^interplay]: Charlie Zhang, Graham Neubig, Xiang Yue, “On the Interplay of Pre-Training, Mid-Training, and RL on Reasoning Language Models”, ICML 2026. [arXiv:2512.07783](https://arxiv.org/abs/2512.07783)
+[^interplay]: Charlie Zhang, Graham Neubig, Xiang Yue, “On the Interplay of Pre-Training, Mid-Training, and RL on Reasoning Language Models”, ICML 2026（Spotlight）. [arXiv:2512.07783](https://arxiv.org/abs/2512.07783)；1%、60 个点与 10.8 个点均见论文图 1。
 [^cotpassk]: Xumeng Wen et al., “Reinforcement Learning with Verifiable Rewards Implicitly Incentivizes Correct Reasoning in Base LLMs”, 2025. [arXiv:2506.14245](https://arxiv.org/abs/2506.14245)
 [^sampling]: Aayush Karan, Yilun Du, “Reasoning with Sampling: Your Base Model is Smarter Than You Think”, 2025. [arXiv:2510.14901](https://arxiv.org/abs/2510.14901)
-[^venhoff]: Constantin Venhoff et al., “Base Models Know How to Reason, Thinking Models Learn When”, 2025（NeurIPS 2025 Mechanistic Interpretability Workshop）. [arXiv:2510.07364](https://arxiv.org/abs/2510.07364)
+[^venhoff]: Constantin Venhoff et al., “Base Models Know How to Reason, Thinking Models Learn When”, 2025. [arXiv:2510.07364](https://arxiv.org/abs/2510.07364)；76% 与 11% 为 2026 年 v4 修订版摘要中的数字（早期版本报告的是在约 12% 的 token 上引导、恢复最多 91% 的差距）。
 [^leash]: Fang Wu et al., “The Invisible Leash: Why RLVR May or May Not Escape Its Origin”, 2025. [arXiv:2507.14843](https://arxiv.org/abs/2507.14843)
 [^passk]: Zhipeng Chen et al., “Pass@k Training for Adaptively Balancing Exploration and Exploitation of Large Reasoning Models”, 2025. [arXiv:2508.10751](https://arxiv.org/abs/2508.10751)；解析优势的实现见 [RUCAIBox/Passk_Training](https://github.com/RUCAIBox/Passk_Training)。
 [^nsr]: Xinyu Zhu et al., “The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning”, NeurIPS 2025. [arXiv:2506.01347](https://arxiv.org/abs/2506.01347)；λ = 0.1 为官方仓库 [TianHongZXY/RLVR-Decomposed](https://github.com/TianHongZXY/RLVR-Decomposed) 的推荐值。
-[^spurious]: Rulin Shao et al., “Spurious Rewards: Rethinking Training Signals in RLVR”, 2025. [arXiv:2506.10947](https://arxiv.org/abs/2506.10947)；表中数字为 Qwen2.5-Math-7B 在 MATH-500 上相对基座的绝对提升。
+[^spurious]: Rulin Shao et al., “Spurious Rewards: Rethinking Training Signals in RLVR”, 2025. [arXiv:2506.10947](https://arxiv.org/abs/2506.10947)；表中数字为 Qwen2.5-Math-7B 在 MATH-500 上相对基座的绝对提升；去掉裁剪的对照见论文第 4 节与附录 B。
+[^eve]: Peter Chen et al.（Columbia · CUHK-Shenzhen 等）, “Exploration v.s. Exploitation: Rethinking RLVR through Clipping, Entropy, and Spurious Reward”, ICLR 2026. [arXiv:2512.16912](https://arxiv.org/abs/2512.16912)。按他们的估算，在 Spurious Rewards 的超参下，原始梯度与裁剪修正项的量级之比至少约 17。
 [^memo]: Mingqi Wu et al., “Reasoning or Memorization? Unreliable Results of Reinforcement Learning Due to Data Contamination”, AAAI 2026. [arXiv:2507.10532](https://arxiv.org/abs/2507.10532)
-[^olmo3]: “Olmo 3” 技术报告（AI2），2025，RL-Zero 部分的随机奖励实验。[arXiv:2512.13961](https://arxiv.org/abs/2512.13961)
+[^olmo3]: “Olmo 3” 技术报告（AI2），2025，RL-Zero 一节中“用伪奖励验证评测去污染”的实验。[arXiv:2512.13961](https://arxiv.org/abs/2512.13961)
 [^unsup]: 例如 “The Unreasonable Effectiveness of Entropy Minimization in LLM Reasoning”（[arXiv:2505.15134](https://arxiv.org/abs/2505.15134)）、“Learning to Reason without External Rewards”（[arXiv:2505.19590](https://arxiv.org/abs/2505.19590)）、“TTRL: Test-Time Reinforcement Learning”（[arXiv:2504.16084](https://arxiv.org/abs/2504.16084)）。
 [^oneshot]: Yiping Wang et al., “Reinforcement Learning for Reasoning in Large Language Models with One Training Example”, NeurIPS 2025. [arXiv:2504.20571](https://arxiv.org/abs/2504.20571)
 [^gandhi]: Kanishk Gandhi et al., “Cognitive Behaviors that Enable Self-Improving Reasoners, or, Four Habits of Highly Effective STaRs”, 2025. [arXiv:2503.01307](https://arxiv.org/abs/2503.01307)；priming 数据的生成方式见 [kanishkg/cognitive-behaviors](https://github.com/kanishkg/cognitive-behaviors)。

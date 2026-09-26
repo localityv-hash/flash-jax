@@ -24,8 +24,7 @@ const metrics = computed(() => {
   const out: { label: string; value: string; title: string }[] = []
   if (m.citations) out.push({ label: '引用', value: compact(m.citations), title: `Semantic Scholar 引用数 ${m.citations}` })
   if (m.hf_upvotes) out.push({ label: 'HF 赞', value: compact(m.hf_upvotes), title: `Hugging Face Daily Papers 点赞 ${m.hf_upvotes}` })
-  if (m.stars) out.push({ label: 'Star', value: compact(m.stars), title: `GitHub star ${m.stars}` })
-  if (m.forks) out.push({ label: 'Fork', value: compact(m.forks), title: `GitHub fork ${m.forks}` })
+  if (m.stars) out.push({ label: '★', value: compact(m.stars), title: `GitHub star ${m.stars}${m.forks ? `，fork ${m.forks}` : ''}` })
   return out
 })
 </script>
@@ -59,10 +58,12 @@ const metrics = computed(() => {
         <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="m2.5 6.2 2.2 2.2 4.8-4.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
         {{ EVIDENCE[ev].label }}
       </span>
-      <span v-for="m in metrics" :key="m.label" class="entry-metric" :title="m.title">
-        <span class="entry-metric-label">{{ m.label }}</span>{{ m.value }}
-      </span>
     </div>
+    <p v-if="metrics.length" class="entry-metrics">
+      <span v-for="m in metrics" :key="m.label" :title="m.title">
+        <span class="entry-metric-label">{{ m.label }}</span> {{ m.value }}
+      </span>
+    </p>
 
     <div v-if="expanded" class="entry-more">
       <p class="entry-plain"><span class="entry-plain-label">说人话</span><span v-if="entry.html?.plain" v-html="entry.html.plain" /><template v-else>{{ entry.plain }}</template></p>
@@ -196,8 +197,7 @@ const metrics = computed(() => {
   gap: 6px;
   margin-top: 2px;
 }
-.entry-evidence,
-.entry-metric {
+.entry-evidence {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -211,9 +211,14 @@ const metrics = computed(() => {
   color: var(--vp-c-brand-1);
   background: var(--vp-c-brand-soft);
 }
-.entry-metric {
+.entry-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 0 !important;
+  font-size: 12.5px !important;
+  line-height: 1.6 !important;
   color: var(--vp-c-text-2);
-  background: var(--vp-c-bg-soft);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }

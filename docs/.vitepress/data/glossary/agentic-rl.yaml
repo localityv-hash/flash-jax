@@ -71,7 +71,7 @@
   area: agentic-rl
   plain: "不再给整条轨迹同一个分，而是给每一轮单独算“比平均好多少”。"
   definition: "以一次“生成—环境反馈”回合为单位估计的优势 Â_k，同一轮内的 token 共享该值；可由轮级奖励的组内归一化、轮级价值函数（critic）或同状态分组的回报比较得到，用来替代整条轨迹共享的结果优势。"
-  see: [/topics/agentic-rl#credit-assignment]
+  see: [/topics/agentic-rl#turn-advantage]
 
 - id: sandbox
   term: Sandbox
@@ -79,7 +79,7 @@
   area: agentic-rl
   plain: "给模型一台随时可重置、弄坏了也没关系的隔离电脑，让它放心执行代码和命令。"
   definition: "为智能体执行代码、命令或浏览器操作提供的隔离运行环境（容器、微虚拟机、远程运行时等），需要支持快速创建与重置、资源与时间限制、网络隔离和高并发池化，是代码与 SWE 智能体 RL 的核心基础设施。"
-  see: [/topics/agentic-rl#rollout, /practice/swe-agent]
+  see: [/topics/agentic-rl#sandbox-pool, /practice/swe-agent#infra]
 
 - id: observation
   term: Observation
@@ -119,7 +119,7 @@
   area: agentic-rl
   plain: "轨迹太长塞不进窗口时，决定留下什么、丢掉什么、把什么压缩成笔记。"
   definition: "在长程智能体交互中控制输入上下文的策略：截断旧观察、只保留最近若干轮工具结果、让模型维护摘要或报告作为压缩记忆（马尔可夫式状态重建）等；它改变了策略所见的状态，训练与推理需保持一致。"
-  see: [/topics/agentic-rl#rollout]
+  see: [/topics/agentic-rl#context]
 
 - id: tir
   term: TIR
@@ -136,7 +136,7 @@
   area: agentic-rl
   plain: "包在模型外面的那层程序：定义有哪些工具、提示怎么写、历史怎么拼、什么时候停。"
   definition: "将 LLM 组装成智能体的外层框架（如 OpenHands、mini-swe-agent、R2E-Gym 的编辑智能体），规定动作空间、提示模板、历史处理与终止条件；训练与评测所用脚手架不同会显著影响分数，跨脚手架泛化是智能体 RL 的重要目标。"
-  see: [/practice/swe-agent]
+  see: [/practice/swe-agent#scaffold]
 
 - id: anchor-state
   term: Anchor state
@@ -144,7 +144,7 @@
   area: agentic-rl
   plain: "同一任务的多条轨迹里反复出现的同一个环境状态，可以拿来当“同一起跑线”比较各自的选择。"
   definition: "GiGPO 中用于构造步级分组的重复环境观察：在同一初始状态的一组轨迹里，把观察相同（或相似度超过阈值）的时间步归为一组，用各自的折扣回报做组内归一化得到步级优势。"
-  see: [/topics/agentic-rl#credit-assignment]
+  see: [/topics/agentic-rl#gigpo]
 
 - id: interleaved-thinking
   term: Interleaved thinking
@@ -152,4 +152,4 @@
   area: agentic-rl
   plain: "模型在每次调用工具前后都先想一想，而且这些思考会保留在后续轮次的上下文里。"
   definition: "在多轮工具调用中，模型于每次动作前生成推理内容，并在后续轮次保留历史推理（而非只保留最终回复）；MiniMax-M2、GLM-4.5 之后的 GLM 系列都强调此特性，训练与推理对历史思考的处理方式必须一致。"
-  see: [/topics/agentic-rl#rollout]
+  see: [/topics/agentic-rl#loss-mask, /topics/agentic-rl#industry]

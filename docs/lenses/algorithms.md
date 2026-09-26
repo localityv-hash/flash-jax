@@ -156,7 +156,7 @@ flowchart TD
   D -->|"否"| G2["梯度 = Â_t·ρ_t·∇log π<br/>继续下压"]
 ```
 
-**clip fraction 在量什么。** 它是一个小批量里梯度被裁剪置零的 token 占比，只统计上表第 2、4 行（verl 记为 `actor/pg_clipfrac`，dual-clip 生效的比例另记 `actor/pg_clipfrac_lower`）[^clipfrac]。如果 $\pi_{\theta_\text{old}}$ 由训练引擎重算，第一个小批量上 $\rho\equiv1$，clip fraction 必为 0——严格 on-policy 时 PPO 退化为普通策略梯度。它持续偏高，说明学习率太大、同一批数据复用的轮数（`ppo_epochs`、小批量个数）太多，或者训推不一致严重；长期接近 0，则说明裁剪形同虚设。不同比率定义下的 clip fraction 不能横向比较：GSPO 的序列级裁剪比例比 GRPO 高两个数量级，训练效率反而更高。
+**clip fraction 在量什么。** 它是一个小批量里梯度被裁剪置零的 token 占比，只统计上表第 2、4 行（verl 记为 `actor/pg_clipfrac`，dual-clip 生效的比例另记 `actor/pg_clipfrac_lower`）[^clipfrac]。如果 $\pi_{\theta_\text{old}}$ 由训练引擎重算，第一个小批量上 $\rho\equiv1$，clip fraction 必为 0——严格 on-policy 时 PPO 退化为普通策略梯度。它持续偏高，往往意味着学习率太大、同一批数据复用的轮数（`ppo_epochs`、小批量个数）太多，或者训推不一致严重；长期接近 0，则说明裁剪形同虚设。不同比率定义下的 clip fraction 不能横向比较：GSPO 的序列级裁剪比例比 GRPO 高两个数量级，训练效率反而更高。
 
 ::: human
 PPO 给每个词的调整幅度装了“限位器”：往对的方向调，调过头就停；往错的方向调，永远允许拉回来。clip fraction 就是这一轮有多少个词撞上了限位器。
@@ -289,7 +289,7 @@ $$
 - 所以直接用包含自己的组均值作基线时，$\E\big[(r_i-\bar r)\nabla\log\pi_\theta(y_i\mid x)\big]=\frac{G-1}{G}\nabla J_x$：方向无偏，只是整体缩小一个常数倍。真正改变优化目标的，是下面 GRPO 的“除以组内标准差”。
 :::
 
-留一基线的想法可以追溯到 2019 年 Kool 等人的工作；Cohere 的 RLOO 论文把它带回 RLHF，并主张把整条回答当作一个动作，不做逐 token 的价值估计。它原本是纯 REINFORCE 式的更新，不做比率裁剪。
+留一基线的想法可以追溯到 2019 年 Kool 等人的工作；Cohere 的 RLOO 论文把它带回 RLHF，并主张把整条回答当作一个动作，不做逐 token 的价值估计。原文是 REINFORCE 式的在线更新，并不依赖 PPO 的比率裁剪。
 
 ### GRPO：组内归一化 {#grpo}
 
@@ -425,7 +425,7 @@ $$
 J_\text{CISPO}(\theta)=\E\Bigg[\frac{1}{\sum_{i}\lvert y_i\rvert}\sum_{i=1}^G\sum_{t=1}^{\lvert y_i\rvert}\sg\big(\hat\rho_{i,t}\big)\,\hat A_{i}\,\log\pi_\theta(y_{i,t}\mid s_{i,t})\Bigg]
 $$
 
-每个 token 的梯度是 $\hat\rho_{i,t}\hat A_i\nabla\log\pi_\theta$，只要优势不为零就不会被置零；PPO 则是比率越界即归零。不裁剪时 CISPO 就是带 IS 修正的离策略 REINFORCE（无偏）；裁剪权重引入少量偏差，换来有界的方差。MiniMax 实际上不设下界（把 $\varepsilon^\text{IS}_\text{low}$ 设得很大），只调 $\varepsilon^\text{IS}_\text{high}$；同时沿用 DAPO 的动态采样与长度惩罚，不加 KL。在 Qwen2.5-32B 的 zero-RL 对比中，CISPO 用一半的训练步数追平了 DAPO。
+每个 token 的梯度是 $\hat\rho_{i,t}\hat A_i\nabla\log\pi_\theta$，只要优势不为零就不会被置零；PPO 则是比率越界即归零。不裁剪时，CISPO 退化为带逐 token IS 修正的 REINFORCE，也就是下文“离策略修正”一节里的 token 级代理目标；裁剪权重再引入少量偏差，换来有界的方差。MiniMax 实际上不设下界（把 $\varepsilon^\text{IS}_\text{low}$ 设得很大），只调 $\varepsilon^\text{IS}_\text{high}$；同时沿用 DAPO 的动态采样与长度惩罚，不加 KL。在 Qwen2.5-32B 的 zero-RL 对比中，CISPO 用一半的训练步数追平了 DAPO。
 
 论文还给出一个统一写法：在 CISPO 目标里乘上 token 掩码 $M_{i,t}$，令 $\hat A_{i}>0$ 且 $\rho_{i,t}>1+\varepsilon_\text{high}$、或 $\hat A_{i}<0$ 且 $\rho_{i,t}<1-\varepsilon_\text{low}$ 时 $M_{i,t}=0$，其余为 1，并去掉权重裁剪，就恰好复现了 PPO 信任域隐含的那个掩码。这说明 **PPO 与 CISPO 的差别只在“越界 token 的梯度是丢掉，还是封顶保留”**。Meta 的 [ScaleRL](/library/?id=scale-rl) 等后续工作也采用了 CISPO 损失。
 
@@ -475,7 +475,7 @@ $\hat{\E}_t$ 表示对从 μ 采样的 token 求经验平均（聚合方式见�
 对 $w_t$ 的处理方式，就是近一年各种方法的分野：
 
 - **TIS**：[Feng Yao 等人的博客](/library/?id=tis-offpolicy)提出<Term t="truncated-is">截断重要性采样</Term>，$w_t\leftarrow\min(w_t,C)$，常用 $C=2$，以少量偏差换有界方差[^tis]。
-- **序列级 IS**：$w=\min\big(\prod_t w_t,\,C\big)$ 广播到整条回答，没有逐 token 近似的偏差，但方差随长度指数增长。
+- **序列级 IS**：$w=\min\big(\prod_t w_t,\,C\big)$ 广播到整条回答，没有逐 token 近似带来的偏差（截断本身仍有偏差），但方差随长度指数增长。
 - **掩码 IS（MIS）**：比率越界的整条序列直接丢弃而不是截断，$M=\mathbb 1\big[C_\text{low}\le\prod_tw_t\le C_\text{high}\big]$；几何平均版本 $\big(\prod_tw_t\big)^{1/T}$ 与长度无关，阈值要设得很紧（verl 文档的典型值是 0.999 到 1.001）[^mis]。
 - **token 级区间掩码**（IcePop）：比率落在 $[C_\text{low},C_\text{high}]$ 之外的 token 权重置零，GLM-5 的训练中使用过[^skyrl]。
 - **DeepSeek-V3.2 的离策略序列掩码**：只对负优势且偏离过大的序列置零，即 $\hat A_i<0$ 且 $\frac1{\lvert y_i\rvert}\sum_t\log\frac{\pi_{\theta_\text{old}}(y_{i,t}\mid s_{i,t})}{\pi_\theta(y_{i,t}\mid s_{i,t})}>\delta$ 时 $M_i=0$[^dsv32]。直觉上，去压低一条当前策略本来就不太会生成的回答，信息量小而方差大。

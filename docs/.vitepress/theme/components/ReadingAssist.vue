@@ -109,7 +109,8 @@ function isInternal(a: HTMLAnchorElement): boolean {
 
 /** 在正文、页内目录、侧边栏、组件里点击站内链接时记录返回点。 */
 function onClick(event: MouseEvent): void {
-  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+  // 注意：VitePress 路由会在 window 捕获阶段对站内链接 preventDefault，所以这里不能以 defaultPrevented 为条件。
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
   const a = (event.target as HTMLElement | null)?.closest?.('a') as HTMLAnchorElement | null
   if (!a || !isInternal(a) || a.closest('.atlas-return, .VPNavBar, .VPLocalNav, .atlas-resume')) return
   if (!a.closest('.vp-doc, .VPDocAside, .VPSidebar, .atlas-keep-return')) return

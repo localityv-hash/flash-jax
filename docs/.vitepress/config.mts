@@ -190,11 +190,17 @@ export default defineConfig({
         detailedView: true,
         miniSearch: {
           options: {
-            // 中文按词切分（Intl.Segmenter），英文按单词；函数会被序列化到浏览器端，因此必须自包含。
+            // 中文切成重叠的二元组，英文按整词。建索引（Node）和搜索（浏览器）必须切得完全一样，
+            // 所以不用各环境词典不同的 Intl.Segmenter。函数会被序列化到浏览器端，必须自包含。
             tokenize: (text: string) => {
               const out: string[] = []
-              const seg = new Intl.Segmenter('zh', { granularity: 'word' })
-              for (const s of seg.segment(text)) if (s.isWordLike) out.push(s.segment)
+              for (const m of text.matchAll(/[㐀-鿿豈-﫿]+|[A-Za-z0-9_@+-]+/g)) {
+                const s = m[0]
+                if (/[㐀-鿿豈-﫿]/.test(s[0])) {
+                  if (s.length === 1) out.push(s)
+                  else for (let i = 0; i < s.length - 1; i++) out.push(s.slice(i, i + 2))
+                } else out.push(s)
+              }
               return out
             },
           },

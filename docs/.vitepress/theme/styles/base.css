@@ -276,6 +276,46 @@ body {
   margin-bottom: 16px;
 }
 
+/* 竖排时间线 */
+.vp-doc .timeline {
+  margin: 24px 0;
+}
+.vp-doc .timeline > ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 22px;
+  border-left: 2px solid var(--vp-c-divider);
+}
+.vp-doc .timeline > ul > li {
+  position: relative;
+  margin: 0 0 18px;
+  padding-left: 4px;
+}
+.vp-doc .timeline > ul > li::before {
+  content: '';
+  position: absolute;
+  left: -30px;
+  top: 7px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--vp-c-bg);
+  border: 2.5px solid var(--vp-c-brand-2);
+}
+.vp-doc .timeline > ul > li > p:first-child > strong:first-child,
+.vp-doc .timeline > ul > li > strong:first-child {
+  display: inline-block;
+  min-width: 52px;
+  margin-right: 6px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vp-c-brand-1);
+}
+.vp-doc .timeline li li {
+  margin: 4px 0;
+  font-size: 15px;
+}
+
 /* VitePress 自带 tip/warning 与站内风格统一 */
 .vp-doc .custom-block {
   border-radius: var(--radius-md);

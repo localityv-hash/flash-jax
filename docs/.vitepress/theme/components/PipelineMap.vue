@@ -127,6 +127,7 @@ const lenses = [
 <style scoped>
 .pm {
   margin: 8px 0 0;
+  container-type: inline-size;
 }
 .pm-flow {
   display: grid;
@@ -264,7 +265,7 @@ a.pm-stage:hover {
   border-color: var(--vp-c-brand-2);
 }
 
-@media (max-width: 1100px) {
+@container (max-width: 980px) {
   .pm-flow {
     grid-template-columns: 1fr;
     gap: 0;
@@ -288,8 +289,26 @@ a.pm-stage:hover {
   .pm-branch {
     flex-direction: row;
   }
+  .pm-flow > .pm-stage,
+  .pm-branch .pm-stage {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 12px;
+    align-items: baseline;
+    padding: 14px 16px;
+  }
+  .pm-no {
+    grid-row: span 2;
+  }
+  .pm-plain,
+  .pm-keys {
+    grid-column: 2;
+  }
+  .pm-keys {
+    padding-top: 6px;
+  }
 }
-@media (max-width: 560px) {
+@container (max-width: 520px) {
   .pm-branch {
     flex-direction: column;
   }

@@ -28,6 +28,13 @@ export function containers(md: MarkdownIt): void {
     })
   }
 
+  // 竖排时间线：列表项以 **年份** 开头
+  md.use(container, 'timeline', {
+    render(tokens: any[], idx: number) {
+      return tokens[idx].nesting === 1 ? '<div class="timeline">\n' : '</div>\n'
+    },
+  })
+
   // 推导默认折叠，避免正文信息过载；想看细节的读者自己展开。
   md.use(container, 'derive', {
     render(tokens: any[], idx: number) {

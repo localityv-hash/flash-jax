@@ -225,7 +225,7 @@
   arxiv: "2508.10751"
   repo: RUCAIBox/Passk_Training
   areas: [rl-llm]
-  facets: [algorithm]
+  facets: [algorithm, theory]
   tier: rec
   evidence: [ablation, open-source]
   evidence_note: "在 7B / 32B、稠密与 MoE、Qwen 与 Seed 模型以及文本与多模态任务上验证；给出 pass@k 优势的解析解，并与全采样、自助采样两种估计版本对照；代码公开。"
@@ -296,7 +296,7 @@
   venue: AAAI 2026
   arxiv: "2507.10532"
   areas: [rl-llm]
-  facets: [eval, data]
+  facets: [eval, data, theory]
   tier: rec
   evidence: [ablation, community]
   evidence_note: "先用“只给部分题面，看能否续写出原题”检测污染，再在自建的无污染合成数据 RandomCalculation 上对照真实、随机与错误奖励；AAAI 2026 收录，与 Spurious Rewards、Olmo 3 的去污染实验相互印证。"
@@ -453,7 +453,7 @@
   links:
     - { label: "Anthropic PDF", url: "https://assets.anthropic.com/m/74342f2c96095771/original/Natural-emergent-misalignment-from-reward-hacking-paper.pdf" }
   areas: [rl-llm, agentic-rl]
-  facets: [env, eval]
+  facets: [env, eval, theory]
   tier: rec
   evidence: [ablation, community]
   evidence_note: "实验直接在 Anthropic 真实的生产编码 RL 环境上完成，并对三类缓解手段（阻止 hack、多样化的 RLHF 安全训练、接种提示）做了对照；发布后在对齐与 RL 社区引发大量讨论。"

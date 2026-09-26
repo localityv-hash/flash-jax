@@ -149,7 +149,7 @@ flowchart TB
 
 <EntryGrid :ids="['entropy-mechanism', 'forking-tokens']" />
 
-## 更新落在哪里：稀疏、低秩与“离主方向” {#sparse-updates}
+## 更新落在哪里：稀疏子网络与“离主方向” {#sparse-updates}
 
 RL 改变行为的幅度很大，改变参数的幅度却出奇地小。UIUC 的研究逐参数比较了 RL 前后的权重：只有约 5%–30% 的参数发生了变化，其余在 bf16 精度下一位不差；这一现象在 PPO、GRPO、DPO 等 7 种算法、10 个不同家族的模型上都成立，而且不需要任何稀疏正则[^sparse]。进一步的发现是：
 
@@ -205,7 +205,7 @@ $$\KL(\pi\,\Vert\,\pi_0)=\E_{\pi}\Big[\log\frac{\pi}{\pi^\dagger}+\log\frac{\pi^
 
 更实用的是，不必完整跑 RL：**近似 on-policy** 的数据，比如用当前模型自采样、过滤出正确答案再 SFT，也能减轻遗忘，而且获取成本低得多。
 
-这也给 [SFT 与 RL 的分工](/topics/sft#sft-vs-rl)提供了一个更具体的解释：两者的差别主要不在损失函数，而在数据来自谁的分布。[On-policy 蒸馏](/topics/opd#reverse-kl)用学生自己的采样、以教师的逐 token 反向 KL 为信号，同时拿到“少遗忘”与“密集信号”；Thinking Machines 的 on-policy 蒸馏博客也讨论了用它在持续学习中找回退化的能力（[条目](/library/?id=tm-opd)）。
+这也给 [SFT 与 RL 的分工](/topics/sft#sft-vs-rl)提供了一个更具体的解释：两者的差别主要不在损失函数，而在数据来自谁的分布。[On-policy 蒸馏](/topics/opd#reverse-kl)用学生自己的采样、以教师的逐 token 反向 KL 为信号，同时拿到“少遗忘”与“密集信号”；Thinking Machines 的 on-policy 蒸馏博客还演示了：领域微调“洗掉”的聊天能力，可以用微调前的模型当教师跑一轮 on-policy 蒸馏找回来（[条目](/library/?id=tm-opd)）。
 
 ::: human
 学新东西时，在自己的笔记上改，比照抄别人的整本笔记更不容易把原来会的东西覆盖掉。RL 天然就是在“改自己的笔记”。
@@ -296,6 +296,8 @@ flowchart TB
 - 两边都依赖有限 k 下的 pass@k 估计，$n$、$k$ 与温度的选择都会移动交叉点。
 :::
 
+<EntryGrid :ids="['rl-limit-pass-k', 'prorl', 'rl-compositionality', 'interplay-pt-mt-rl', 'reasoning-with-sampling']" />
+
 ### 能做什么：为探索付费
 
 如果你在乎的不只是 pass@1（比如下游要多次采样、搜索或 best-of-n），可以直接把“探索”写进目标：
@@ -321,7 +323,7 @@ $k=1$ 时 $\bar R$ 就是组内通过率 $p$，两式退化为 GRPO 的 $(1-p)/\
 - 按当前模型的通过率挑“边缘题”（0 < pass rate < 1，尤其偏低的那部分）：这里的 RL 信号最强，也是扩边界的前提（[数据页](/lenses/data#difficulty)）。
 - 需要保住多样性时，加入 pass@k 奖励、调低正样本权重或保熵手段；想要真正的新能力，先补先验，再用需要组合的题做 RL。
 
-<EntryGrid :ids="['rl-limit-pass-k', 'reasoning-with-sampling', 'prorl', 'rl-compositionality', 'interplay-pt-mt-rl', 'pass-k-training', 'negative-reinforcement']" />
+<EntryGrid :ids="['pass-k-training', 'negative-reinforcement']" />
 
 ## 伪奖励与数据污染：你的实验结论可信吗 {#spurious-rewards}
 

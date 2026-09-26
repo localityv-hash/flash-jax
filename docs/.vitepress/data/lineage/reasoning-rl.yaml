@@ -80,10 +80,10 @@ nodes:
     note: "把价值模型请回来：价值预训练与解耦、长度自适应 GAE 修好了长 CoT 上的价值偏差。"
     entry: vapo
   - id: seed-thinking-1-5
-    label: Seed1.5-Thinking
+    label: Seed-Thinking
     date: 2025-04
     lane: industry
-    note: "VAPO 与 DAPO 进入工业模型；用会推理的验证器替代原则型验证器，减少误判与奖励黑客。"
+    note: "VAPO 与 DAPO 进入工业模型；用会推理的验证器替代原则型验证器，减少误判与奖励作弊。"
     href: "#recipes"
     entry: seed-thinking-1-5
   - id: qwen3

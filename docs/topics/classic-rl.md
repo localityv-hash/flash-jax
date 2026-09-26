@@ -137,7 +137,7 @@ flowchart TD
 | 调试指标 `approx_kl`（k1）与更好的 k3 估计 | k3 $=r-1-\log r$ 成了 GRPO 类方法 KL 惩罚的事实标准（见 <Term t="kl-estimator">KL 估计量</Term>） |
 | Adam 的 ε 等“看不见”的超参数 | HF 发现 PyTorch 与 TensorFlow 的 Adam 实现差异会让 RLHF 早期更新过猛[^4] |
 | 算 logprob 前按采样温度缩放 logits、禁用 dropout、取 γ=1 | 出自 OpenAI 2019 年的 RLHF 代码；漏掉温度缩放，KL 涨得比预期快、效果变差[^4] |
-| 熵奖励 | LLM RL 大多不加；熵塌缩改用 Clip-Higher 等手段处理 |
+| 熵奖励 | LLM RL 中常设为 0 或很小；熵塌缩多改用 Clip-Higher 等手段处理 |
 
 ::: insight 细节就是算法的一部分
 在 LLM RL 里，损失如何在 token 间聚合、优势按组还是按批归一化、裁剪上下界是否对称，同样会左右结论（见 [Dr. GRPO](/lenses/algorithms#dr-grpo) 与 [DAPO](/lenses/algorithms#dapo)）。比较两个算法之前，先把这些细节对齐。
@@ -208,7 +208,7 @@ $$\max_\phi\ \E_s\,\E_{a\sim\mu(\cdot\mid s)}\Big[\frac{\exp\big(Q(s,a)/\beta\bi
 这一个公式，在后训练里至少以四种面目出现：
 
 1. **AWR 与 IQL**：如上，按 $\exp(A/\beta)$ 加权模仿数据里的动作。
-2. **DPO**：把状态换成提示 $x$、动作换成整条回答 $y$、行为策略换成参考模型 $\pi_\text{ref}$、价值换成奖励 $r(x,y)$，得到 $\pi^*(y\mid x)\propto\pi_\text{ref}(y\mid x)\exp\big(r(x,y)/\beta\big)$。反解出 $r=\beta\log\frac{\pi^*}{\pi_\text{ref}}+\beta\log Z(x)$ 代入 Bradley–Terry 偏好模型，$Z(x)$ 恰好消掉，就是 DPO 的损失（见 [DPO 推导](/lenses/algorithms#dpo)）。DPO 论文推导这一步时引用的，正是 reward-weighted regression 与 AWR 这条经典 RL 路线[^8]。
+2. **DPO**：把状态换成提示 $x$、动作换成整条回答 $y$、行为策略换成参考模型 $\pi_\text{ref}$、价值换成奖励 $r(x,y)$，得到 $\pi^*(y\mid x)\propto\pi_\text{ref}(y\mid x)\exp\big(r(x,y)/\beta\big)$。反解出 $r=\beta\log\big(\pi^*/\pi_\text{ref}\big)+\beta\log Z(x)$ 代入 Bradley–Terry 偏好模型，$Z(x)$ 恰好消掉，就是 DPO 的损失（见 [DPO 推导](/lenses/algorithms#dpo)）。DPO 论文推导这一步时引用的，正是 reward-weighted regression 与 AWR 这条经典 RL 路线[^8]。
 3. **<Term t="rejection-sampling">拒绝采样</Term>微调**：奖励只有 0/1 时让 $\beta\to0$，$\pi^*$ 退化为“参考模型在答对条件下的分布”，投影就变成只在答对样本上做 SFT。STaR、ReST、ReST-EM 都是它的迭代版本，ReST 论文直接自称受 growing batch RL 启发[^9]。
 4. **ILQL**：把 IQL 搬到 token 级，再加 CQL 式正则压低没出现过的 token；解码时把 $\beta(Q-V)$ 加到语言模型的 logits 上，正是在从 $\pi^*$ 采样[^10]。
 
@@ -287,12 +287,12 @@ flowchart LR
 之后的改进都围绕“更省”展开：
 
 - **Sampled MuZero**（2021）：动作空间太大或连续时，只从策略里采样 $K$ 个候选动作，在子集上搜索并做相应修正[^20]。
-- **Gumbel MuZero**（ICLR 2022）：原版在模拟次数很少、根节点没访问遍所有动作时可能改进不了策略；改用 Gumbel-Top-k 无放回采样候选、sequential halving 分配模拟次数，在动作价值估计准确时保证策略改进[^21]。DeepMind 的 JAX 搜索库 mctx 默认推荐它。
+- **Gumbel MuZero**（ICLR 2022）：原版在模拟次数很少、根节点没访问遍所有动作时可能改进不了策略；改用 Gumbel-Top-k 无放回采样候选、sequential halving 分配模拟次数，在动作价值估计准确时保证策略改进[^21]。DeepMind 的 JAX 搜索库 mctx 推荐优先使用它。
 - **EfficientZero**（NeurIPS 2021）：加入自监督时间一致性、价值前缀、基于模型的离策略修正，在 Atari 100k（约两小时游戏经验）上达到人类平均分的 194.3%、中位数 109.0%；消融显示一致性损失最关键[^22]。
 
 ### Dreamer：在想象里练习
 
-DreamerV3（2023 年初发布，2025 年发表于 Nature）学习世界模型，在想象出的轨迹上训练 actor-critic。卖点不是某个任务的最高分，而是**一套固定超参数**通用于 8 个领域、150 多个任务，并首次在不借助人类数据与课程的情况下从零在 Minecraft 挖到钻石[^23]。支撑这一点的是一组尺度鲁棒的技巧：对输入与预测目标做 symlog 变换；用第 5 到第 95 百分位的范围 $S$ 归一化回报，且只缩小不放大（除以 $\max(1,S)$）。论文特别指出，按标准差归一化在稀疏奖励下会因标准差接近 0 而放大噪声——这与 [Dr. GRPO](/lenses/algorithms#dr-grpo) 对组内标准差归一化的批评遥相呼应。2025 年 9 月的 Dreamer 4 更进一步：只用离线数据训练世界模型，完全在模型内部训练策略，也在 Minecraft 挖到了钻石[^24]。
+DreamerV3（2023 年初发布，2025 年发表于 Nature）学习世界模型，在想象出的轨迹上训练 actor-critic。卖点不是某个任务的最高分，而是**一套固定超参数**通用于 8 个领域、150 多个任务，并首次在不借助人类数据与课程的情况下从零在 Minecraft 挖到钻石[^23]。支撑这一点的是一组尺度鲁棒的技巧：对输入与预测目标做 symlog 变换；用第 5 到第 95 百分位的范围 $S$ 归一化回报，且只缩小不放大（除以 $\max(1,S)$）。论文特别指出，按标准差归一化在稀疏奖励下会因标准差接近 0 而放大噪声——这与 [Dr. GRPO](/lenses/algorithms#dr-grpo) 对组内标准差归一化的批评遥相呼应。2025 年 9 月的 Dreamer 4（预印本）更进一步：只用离线数据训练世界模型，完全在模型内部训练策略，也在 Minecraft 挖到了钻石[^24]。
 
 ### 与 LLM 测试时搜索的类比：哪里成立，哪里不成立 {#search-analogy}
 

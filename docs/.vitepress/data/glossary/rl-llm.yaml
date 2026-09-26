@@ -214,7 +214,7 @@
   zh: 奖励模型
   area: rl-llm
   plain: "一个学会了人类口味的“打分员”模型，能给任意回答打分，代替人来评判。"
-  definition: "输入 (x, y)、输出标量奖励 r_φ(x, y) 的模型，通常以 SFT 模型加标量头初始化，在偏好对上用 Bradley–Terry 损失训练；也可以是生成式的（先写评语再给分或比较）。它只是真实偏好的代理，被过度优化时会出现奖励黑客。"
+  definition: "输入 (x, y)、输出标量奖励 r_φ(x, y) 的模型，通常以 SFT 模型加标量头初始化，在偏好对上用 Bradley–Terry 损失训练；也可以是生成式的（先写评语再给分或比较）。它只是真实偏好的代理，被过度优化时会出现奖励作弊。"
   see: [/topics/rl-for-llm#reward-design]
 
 - id: generative-reward-model
@@ -254,9 +254,9 @@
   see: [/topics/rl-for-llm#reward-design]
 
 - id: reward-hacking
-  term: 奖励黑客
+  term: 奖励作弊
   full: Reward Hacking
-  zh: 奖励投机 / 钻空子
+  zh: 奖励黑客（钻奖励的空子）
   area: rl-llm
   plain: "模型找到了“拿高分但没把事做好”的捷径：写得更长、讨好评委、偷偷改测试。"
   definition: "策略利用奖励函数或验证器的缺陷获得高奖励，却没有完成预期任务，是 Goodhart 定律在 RL 中的体现。常见形态有长度膨胀、讨好、格式投机、答案可猜、篡改测试；优化学到的奖励模型时，真实质量随 KL 距离先升后降（奖励过优化）。"
@@ -295,7 +295,7 @@
   zh: 思考预算（推理强度）
   area: rl-llm
   plain: "给模型规定“最多想多少字”：简单题少想、难题多想，在效果与成本之间取舍。"
-  definition: "对推理模型思维链长度的控制。推理时可以直接截断思考（Qwen3 的 thinking budget）；训练时可以对超出按题预算的回答给负奖励（Kimi K2.5 的 Toggle、Kimi K3 的推理强度 RL），得到不同强度档位的模型。"
+  definition: "对推理模型思维链长度的控制。推理时可以直接截断思考（Qwen3 的 thinking budget）；训练时可以让超出按题预算的回答拿不到奖励（Kimi K2.5 的 Toggle，只在该题正确率已够高时生效）或直接记 −1（Kimi K3 的推理强度 RL），得到不同强度档位的模型。"
   see: [/topics/rl-for-llm#frontier]
 
 - id: bradley-terry

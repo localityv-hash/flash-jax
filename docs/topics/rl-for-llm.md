@@ -72,7 +72,7 @@ $$
 r_t=-\beta\log\frac{\pi_\theta(y_t\mid x,y_{<t})}{\pi_\text{ref}(y_t\mid x,y_{<t})}+\mathbb 1[t=T]\;r_\phi(x,y)
 $$
 
-这根“KL 绳子”在 RLHF 里省不得：奖励模型只是人类偏好的代理，持续优化代理 RM 时，真实奖励会随与初始策略的 KL 距离先升后降[^gao]（见[奖励黑客](#reward-hacking)）。InstructGPT 还在目标里混入预训练数据的似然（PPO-ptx）以减轻通用能力回退；最终 1.3B 的 InstructGPT 在人工评测中胜过 175B 的 GPT-3。
+这根“KL 绳子”在 RLHF 里省不得：奖励模型只是人类偏好的代理，持续优化代理 RM 时，真实奖励会随与初始策略的 KL 距离先升后降[^gao]（见[奖励作弊](#reward-hacking)）。InstructGPT 还在目标里混入预训练数据的似然（PPO-ptx）以减轻通用能力回退；最终 1.3B 的 InstructGPT 在人工评测中胜过 175B 的 GPT-3。
 
 **AI 反馈。** Constitutional AI[^cai] 用一份自然语言“宪法”取代人工有害性标注：先让模型按原则自我批评、改写并做 SFT，再由模型给回答对打偏好、训练偏好模型做 RL，即 <Term t="rlaif">RLAIF</Term>。“让模型按原则当评委”的思路后来演化成 rubric 奖励与生成式奖励模型（见[下文](#rubric)）。
 
@@ -138,7 +138,7 @@ RLVR 像刷有标准答案的习题：对答案就行，不用请评委，也不
 
 ## 奖励设计 {#reward-design}
 
-奖励决定模型学成什么样。下面按“有没有标准答案”展开，再单独讨论奖励黑客。
+奖励决定模型学成什么样。下面按“有没有标准答案”展开，再单独讨论奖励作弊。
 
 ```mermaid 奖励信号怎么选
 flowchart TD
@@ -156,7 +156,7 @@ flowchart TD
 
 <Term t="orm">ORM</Term> 只看最终结果，<Term t="prm">PRM</Term> 逐步打分。OpenAI 的 Let's Verify Step by Step[^lv] 在 MATH 上做了大规模对照：用逐步人工标注训练的 PRM 做 best-of-N 重排，明显优于 ORM，在代表性子集上解出 78% 的题；随论文公开的 80 万条步骤标注 PRM800K 至今仍是 PRM 研究的常用数据。
 
-但“重排好用”不等于“在线 RL 好用”。DeepSeek-R1 列出 PRM 的三个问题：通用推理里很难定义“一步”；判断中间步骤对错本身很难，模型自动标注不可靠、人工标注又无法扩展；一旦引入模型化的 PRM，就必然出现奖励黑客[^r1]。PRIME[^prime] 给出折中：隐式 PRM 只用结果标签训练，却能给每个 token 打分，
+但“重排好用”不等于“在线 RL 好用”。DeepSeek-R1 列出 PRM 的三个问题：通用推理里很难定义“一步”；判断中间步骤对错本身很难，模型自动标注不可靠、人工标注又无法扩展；一旦引入模型化的 PRM，就必然出现奖励作弊[^r1]。PRIME[^prime] 给出折中：隐式 PRM 只用结果标签训练，却能给每个 token 打分，
 
 $$
 r_t=\beta\log\frac{\pi_\phi(y_t\mid x,y_{<t})}{\pi_\text{ref}(y_t\mid x,y_{<t})}
@@ -182,9 +182,9 @@ $\pi_\phi$ 就是用结果标签训练的 PRM 本身（由 SFT 模型初始化�
 
 两条路线的共同风险是评委自身的偏差。MiniMax-M1 发现生成式奖励模型系统性偏爱更长的回答，离线修补不够，只能在 RL 中在线监控“只变长、不变好”的迹象并及时重新校准[^m1]；Kimi K3 更直接：超出长度阈值的候选在两两比较中直接判负[^k3]。
 
-### 奖励黑客 {#reward-hacking}
+### 奖励作弊 {#reward-hacking}
 
-<Term t="reward-hacking">奖励黑客</Term>指策略利用奖励的漏洞拿高分、却没把事做好。它不是偶发 bug，而是优化的必然副产品：只要奖励是代理，优化得越狠，代理与真实目标的偏差就越会被放大[^gao]。Lilian Weng 的长文梳理了从游戏刷分到 LLM 讨好用户、篡改单元测试的大量案例[^weng]。LLM RL 里常见五种形态，工业报告各有对策：
+<Term t="reward-hacking">奖励作弊</Term>指策略利用奖励的漏洞拿高分、却没把事做好。它不是偶发 bug，而是优化的必然副产品：只要奖励是代理，优化得越狠，代理与真实目标的偏差就越会被放大[^gao]。Lilian Weng 的长文梳理了从游戏刷分到 LLM 讨好用户、篡改单元测试的大量案例[^weng]。LLM RL 里常见五种形态，工业报告各有对策：
 
 | 形态 | 典型表现 | 报告中的对策 |
 |---|---|---|
@@ -194,10 +194,10 @@ $\pi_\phi$ 就是用结果标签训练的 PRM 本身（由 SFT 模型初始化�
 | 篡改环境 | 改测试、特判用例；内核优化任务里重放 CUDA graph、缓存输入、偷偷降精度 | 检测并惩罚这些策略；隔离被训模型与验证器，公开与隐藏验证器分离，限制提交次数（K3） |
 | 在思维链里藏意图 | 对思维链施加监控惩罚后，模型学会隐藏意图继续作弊 | 不对思维链施加强优化压力，把它留给监控（[OpenAI](/library/?id=cot-obfuscation)） |
 
-影响也可能不止于“分数虚高”：Anthropic 报告，在生产级编程 RL 中学会奖励黑客的模型，会把这种倾向泛化成更广泛的失准行为（[资料库](/library/?id=reward-hacking-misalignment)）；2026 年也有工作专门研究 RLVR 中模型如何钻验证器的空子[^gaming]。评估层面同样要防“假提升”：在 Qwen2.5-Math 上，连随机奖励都能提分（[虚假奖励](/lenses/principles#spurious-rewards)），数据污染也会制造 RL 的虚假收益（[资料库](/library/?id=reasoning-or-memorization)）。
+影响也可能不止于“分数虚高”：Anthropic 报告，在生产级编程 RL 中学会奖励作弊的模型，会把这种倾向泛化成更广泛的失准行为（[资料库](/library/?id=reward-hacking-misalignment)）；2026 年也有工作专门研究 RLVR 中模型如何钻验证器的空子[^gaming]。评估层面同样要防“假提升”：在 Qwen2.5-Math 上，连随机奖励都能提分（[虚假奖励](/lenses/principles#spurious-rewards)），数据污染也会制造 RL 的虚假收益（[资料库](/library/?id=reasoning-or-memorization)）。
 
 ::: human
-考试只看最后一行答案，学生就会练猜答案；只看作文长度，作文就会越写越长。奖励黑客不是学生“坏”，而是分数和真本事之间总有缝，优化得越狠，缝被挖得越大。
+考试只看最后一行答案，学生就会练猜答案；只看作文长度，作文就会越写越长。奖励作弊不是学生“坏”，而是分数和真本事之间总有缝，优化得越狠，缝被挖得越大。
 :::
 
 <EntryGrid :ids="['lets-verify', 'prime', 'deepseek-grm', 'rubrics-as-rewards', 'deepseekmath-v2', 'reward-overoptimization']" />
@@ -235,7 +235,7 @@ OpenAI 的 o1 博客[^o1]只给出两条曲线：性能随 RL 训练算力和测
 | 截断噪声 | 被截断的超长回答被当成错误 | 过滤超长样本，或按超出程度软惩罚 | DAPO |
 | 比率噪声与 MoE 不稳 | 长回答与 MoE 路由放大 token 级比率的方差 | 序列级比率与裁剪；裁剪重要性权重本身 | GSPO、CISPO |
 
-<Term t="entropy-collapse">熵坍缩</Term>、<Term t="dynamic-sampling">动态采样</Term>、<Term t="token-level-loss">token 级损失</Term>分别对应前三行。三种处理比率的方式只差一个式子：DAPO 用非对称的 $\clip(\rho_{i,t},1-\varepsilon_\text{low},1+\varepsilon_\text{high})$；<Term t="gspo">GSPO</Term> 改用序列级比率 $s_i=\big(\pi_\theta(y_i\mid x)/\pi_{\theta_\text{old}}(y_i\mid x)\big)^{1/\lvert y_i\rvert}$；<Term t="cispo">CISPO</Term> 则把梯度写成 $\sg\big(\clip(\rho_{i,t},\cdot)\big)\,\hat A_{i}\,\nabla_\theta\log\pi_\theta(y_{i,t}\mid x,y_{i,<t})$，只截断权重、不丢 token。推导与对照见[算法谱系](/lenses/algorithms#dapo)的 [GSPO](/lenses/algorithms#gspo)、[CISPO](/lenses/algorithms#cispo) 各节。
+<Term t="entropy-collapse">熵坍缩</Term>、<Term t="dynamic-sampling">动态采样</Term>、<Term t="token-level-loss">token 级损失</Term>分别对应前三行。三种处理比率的方式只差一个式子：DAPO 用非对称的 $\clip(\rho_{i,t},1-\varepsilon_\text{low},1+\varepsilon_\text{high})$；<Term t="gspo">GSPO</Term> 改用序列级比率 $s_i=\big(\pi_\theta(y_i\mid x)/\pi_{\theta_\text{old} }(y_i\mid x)\big)^{1/\lvert y_i\rvert}$；<Term t="cispo">CISPO</Term> 则把梯度写成 $\sg\big(\clip(\rho_{i,t},\cdot)\big)\,\hat A_{i}\,\nabla_\theta\log\pi_\theta(y_{i,t}\mid x,y_{i,<t})$，只截断权重、不丢 token。推导与对照见[算法谱系](/lenses/algorithms#dapo)的 [GSPO](/lenses/algorithms#gspo)、[CISPO](/lenses/algorithms#cispo) 各节。
 
 DAPO 在 Qwen2.5-32B 上的逐项消融给出了每项修正的边际价值：朴素 GRPO 30 分，加超长过滤 36，加 clip-higher 38，加软超长惩罚 41，加 token 级损失 42，加动态采样 50[^dapo]。价值路线也没有被淘汰：VAPO 用价值预训练、解耦 GAE 与随长度自适应的 $\lambda$ 修好了价值模型在长思维链上的偏差，同一基座 5,000 步内达到 60.4 分[^vapo]。
 

@@ -1,0 +1,185 @@
+id: policy-gradient
+title: 策略梯度家族：每一次修正在修什么
+description: 纵向是时间，每一列是一类问题。悬停或点击节点，看它修了前任的什么问题，并高亮上下游；节点链接到本页对应推导或资料库条目。
+lanes:
+  - { id: classic, label: 经典策略梯度 }
+  - { id: critic, label: 有 Critic 的 LLM RL }
+  - { id: critic-free, label: 无 Critic }
+  - { id: stability, label: 稳定性与离策略 }
+  - { id: pref, label: 偏好与蒸馏 }
+nodes:
+  - id: reinforce
+    label: REINFORCE
+    date: 1992-05
+    lane: classic
+    note: "对数导数技巧加基线：只靠采样和奖励就能估计策略梯度，代价是方差很大。"
+    href: /lenses/algorithms#reinforce
+  - id: trpo
+    label: TRPO
+    date: 2015-02
+    lane: classic
+    note: "用平均 KL 约束每步更新幅度，换来单调改进保证；代价是二阶优化。"
+    href: /lenses/algorithms#trpo
+    entry: trpo
+  - id: gae
+    label: GAE
+    date: 2015-06
+    lane: classic
+    note: "用 λ 在单步 TD（低方差、有偏）与蒙特卡洛回报（无偏、高方差）之间连续折中。"
+    href: /lenses/algorithms#gae
+    entry: gae
+  - id: a3c
+    label: A3C
+    date: 2016-02
+    lane: classic
+    note: "学一个价值网络做基线并自举，多线程异步采样；奠定深度 Actor-Critic 的工程范式。"
+    href: /lenses/algorithms#gae
+  - id: ppo
+    label: PPO
+    date: 2017-07
+    lane: classic
+    note: "用裁剪的一阶代理目标替代 TRPO 的 KL 约束，同一批数据可以多轮小批量更新。"
+    href: /lenses/algorithms#ppo
+    entry: ppo
+  - id: instructgpt
+    label: InstructGPT
+    date: 2022-03
+    lane: critic
+    note: "把 PPO 搬到 LLM：奖励模型打分加逐 token KL 惩罚，价值网络与策略同等规模。"
+    href: /lenses/algorithms#kl
+    entry: instructgpt
+  - id: dpo
+    label: DPO
+    date: 2023-05
+    lane: pref
+    note: "利用 KL 正则目标的闭式最优解，把 RLHF 变成离线分类损失，不再需要在线采样。"
+    href: /lenses/algorithms#dpo
+    entry: dpo
+  - id: gkd
+    label: GKD
+    date: 2023-06
+    lane: pref
+    note: "学生自己采样、教师给逐 token 分布监督：把蒸馏从离线示范搬到 on-policy。"
+    href: /topics/opd#gkd
+    entry: gkd
+  - id: remax
+    label: ReMax
+    date: 2023-10
+    lane: critic-free
+    note: "去掉价值网络，用贪心解码回答的奖励做基线，省显存也少了一批超参数。"
+    href: /lenses/algorithms#remax
+    entry: remax
+  - id: grpo
+    label: GRPO
+    date: 2024-02
+    lane: critic-free
+    note: "同题采样 G 个回答，用组内均值与标准差归一化奖励，代替价值网络。"
+    href: /lenses/algorithms#grpo
+    entry: grpo
+  - id: rloo
+    label: RLOO
+    date: 2024-02
+    lane: critic-free
+    note: "每个样本用其余 G−1 个样本的平均奖励做基线，严格无偏；整条回答当作一个动作。"
+    href: /lenses/algorithms#rloo
+    entry: rloo
+  - id: reinforce-pp
+    label: REINFORCE++
+    date: 2025-01
+    lane: critic-free
+    note: "在全局批次上做优势归一化，避免小组内归一化带来的偏差与过拟合。"
+    href: /lenses/algorithms#reinforce-pp
+    entry: reinforce-pp
+  - id: dr-grpo
+    label: Dr. GRPO
+    date: 2025-03
+    lane: critic-free
+    note: "指出 1/|o| 与 std 归一化分别带来长度偏置和难度偏置，二者都去掉。"
+    href: /lenses/algorithms#dr-grpo
+    entry: dr-grpo
+  - id: dapo
+    label: DAPO
+    date: 2025-03
+    lane: critic-free
+    note: "Clip-Higher、动态采样、token 级损失、超长奖励塑形四项修正，全部开源可复现。"
+    href: /lenses/algorithms#dapo
+    entry: dapo
+  - id: vapo
+    label: VAPO
+    date: 2025-04
+    lane: critic
+    note: "回到带价值网络的 PPO：价值预训练、解耦 GAE 与长度自适应 GAE，长 CoT 下更稳。"
+    href: /lenses/algorithms#gae
+    entry: vapo
+  - id: cispo
+    label: CISPO
+    date: 2025-06
+    lane: stability
+    note: "裁剪重要性权重本身并停止其梯度，而不是把越界 token 的梯度整个丢掉。"
+    href: /lenses/algorithms#cispo
+    entry: minimax-m1
+  - id: gspo
+    label: GSPO
+    date: 2025-07
+    lane: stability
+    note: "比率与裁剪都放到序列级（长度归一化的几何平均），MoE 不再依赖 Routing Replay。"
+    href: /lenses/algorithms#gspo
+    entry: gspo
+  - id: tis
+    label: TIS
+    date: 2025-08
+    lane: stability
+    note: "推理引擎与训练引擎算出的概率不一致：给每个 token 乘上截断的重要性权重。"
+    href: /lenses/algorithms#off-policy
+    entry: tis-offpolicy
+  - id: mis
+    label: 序列级 IS / 掩码
+    date: 2025-09
+    lane: stability
+    note: "从偏差-方差角度改用序列级比率，并直接丢弃比率越界的样本而不是截断。"
+    href: /lenses/algorithms#off-policy
+  - id: opd
+    label: On-Policy 蒸馏
+    date: 2025-10
+    lane: pref
+    note: "在 RL 训练框架里把优势换成负的逐 token 反向 KL：信号稠密、仍是 on-policy。"
+    href: /lenses/algorithms#unified-view
+    entry: tm-opd
+  - id: formulation
+    label: 一阶近似视角
+    date: 2025-12
+    lane: stability
+    note: "token 级代理目标只是序列级目标的一阶近似：训推差异与策略陈旧都必须很小。"
+    href: /lenses/algorithms#off-policy
+    entry: stabilizing-rl-llm
+  - id: dsv32
+    label: DeepSeek-V3.2
+    date: 2025-12
+    lane: critic-free
+    note: "给 k3 乘上 π_θ/π_old 得到无偏的 KL 梯度，并掩掉负优势且偏离过大的序列。"
+    href: /lenses/algorithms#kl
+    entry: deepseek-v3-2
+edges:
+  - { from: reinforce, to: trpo, label: 限制每步步长 }
+  - { from: reinforce, to: a3c, label: 学一个价值基线 }
+  - { from: trpo, to: ppo, label: 裁剪代替 KL 约束 }
+  - { from: gae, to: ppo, label: 优势估计 }
+  - { from: a3c, to: ppo, label: Actor-Critic 框架 }
+  - { from: ppo, to: instructgpt, label: 搬到 LLM }
+  - { from: instructgpt, to: dpo, label: 闭式解，去掉 RL }
+  - { from: instructgpt, to: remax, label: 去掉价值网络 }
+  - { from: ppo, to: grpo, label: 组内基线代替 Critic }
+  - { from: instructgpt, to: rloo, label: 回到 REINFORCE + 留一基线 }
+  - { from: ppo, to: reinforce-pp, label: 全局优势归一化 }
+  - { from: grpo, to: dr-grpo, label: 去掉两种偏置 }
+  - { from: grpo, to: dapo, label: 四项工程修正 }
+  - { from: dapo, to: vapo, label: 借用 Clip-Higher 等 }
+  - { from: instructgpt, to: vapo, label: 修价值网络 }
+  - { from: dapo, to: cispo, label: 保留越界 token 梯度 }
+  - { from: grpo, to: gspo, label: 序列级比率 }
+  - { from: grpo, to: tis, label: 训推不一致 }
+  - { from: tis, to: mis, label: 截断改为掩码 }
+  - { from: gspo, to: formulation, label: token 级何时可行 }
+  - { from: tis, to: formulation, label: IS 修正 }
+  - { from: grpo, to: dsv32, label: 修正 KL 估计 }
+  - { from: gkd, to: opd, label: 反向 KL 当逐 token 优势 }

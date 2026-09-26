@@ -1,0 +1,67 @@
+# 算法横切视角（/lenses/algorithms）的条目。
+# 经典基石：TRPO、GAE；以及推导离策略修正时必需、但未在其他专题登记的工作。
+
+- id: trpo
+  title: "Trust Region Policy Optimization"
+  short: TRPO
+  kind: paper
+  org: UC Berkeley
+  authors: "John Schulman et al."
+  date: 2015-02
+  venue: ICML 2015
+  arxiv: "1502.05477"
+  areas: [classic-rl, rl-llm]
+  facets: [algorithm, theory]
+  tier: rec
+  evidence: [community, ablation]
+  evidence_note: "策略优化“信任域”思想的奠基论文、PPO 的直接前身，被引极高；论文在 MuJoCo 运动控制与 Atari 上做了系统对比。LLM 训练几乎不直接用 TRPO（要共轭梯度与线搜索），但 PPO/GRPO 的裁剪与 KL 约束都可以看成它的一阶替代。"
+  summary: "从策略改进下界出发，把每步更新限制在旧策略附近的平均 KL 球内，最大化重要性采样的代理目标；用共轭梯度求自然梯度方向再做线搜索，让大网络策略也能稳定地单调改进。"
+  plain: "每次只在“信得过的小范围”里改策略：先用旧数据估计改完会不会更好，同时保证新旧策略差得不远，免得一步迈太大把模型改坏。"
+  takeaways:
+    - "把 PPO/GRPO 的裁剪当成 TRPO 信任域的廉价替代来理解：ε 越大，每步允许偏离旧策略越远。"
+    - "训练发散时先看新旧策略之间的 KL（如 verl 的 actor/ppo_kl）是否失控，而不只看奖励曲线。"
+  tags: [信任域, 代理目标, 自然梯度]
+
+- id: gae
+  title: "High-Dimensional Continuous Control Using Generalized Advantage Estimation"
+  short: GAE
+  kind: paper
+  org: UC Berkeley
+  authors: "John Schulman et al."
+  date: 2015-06
+  venue: ICLR 2016
+  arxiv: "1506.02438"
+  areas: [classic-rl, rl-llm]
+  facets: [algorithm, theory]
+  tier: rec
+  evidence: [adopted, community, ablation]
+  evidence_note: "LLM 上 PPO 的标准优势估计器：verl（algorithm.adv_estimator 默认 gae）与 OpenRLHF 都以它实现 PPO；ByteDance Seed 的 VAPO 在其上提出解耦 GAE 与长度自适应 GAE。原论文在连续控制任务上系统比较了不同 γ、λ，经典 RL 中被引极高。"
+  summary: "提出广义优势估计：把 TD 误差按 (γλ)^l 几何加权求和，Â_t = Σ_l (γλ)^l δ_{t+l}，用 λ 在单步 TD（低方差、有偏）与蒙特卡洛回报（无偏、高方差）之间连续调节，配合信任域更新在高维控制上稳定学习。"
+  plain: "评价一步棋好不好，可以只看下一步的局面估值（快，但估值不准就会看走眼），也可以等整盘下完再算（准，但运气成分大）。GAE 用一个旋钮 λ 在两者之间折中。"
+  takeaways:
+    - "LLM 上的 PPO 通常取 γ=1：回答级奖励只在结尾出现，打折会让靠前的 token 几乎收不到信号。"
+    - "λ<1 会让终局奖励向前传播时指数衰减（0.95^100≈0.006）；价值网络不准时，至少让 critic 用 λ=1 的回报做回归目标。"
+    - "显存或稳定性吃紧时，考虑用 GRPO、RLOO 这类组内基线替代“GAE + 价值网络”。"
+  builds_on: [trpo]
+  tags: [优势估计, Actor-Critic, 偏差-方差]
+
+- id: stabilizing-rl-llm
+  title: "Stabilizing Reinforcement Learning with LLMs: Formulation and Practices"
+  short: RL 稳定性公式化
+  kind: paper
+  org: Alibaba Qwen
+  authors: "Chujie Zheng et al."
+  date: 2025-12
+  arxiv: "2512.01374"
+  areas: [rl-llm]
+  facets: [algorithm, theory]
+  tier: ref
+  evidence: [ablation]
+  evidence_note: "Qwen 团队出品，在 30B MoE 模型上做了累计数十万 GPU 小时的对照实验；把 IS 修正、裁剪与 Routing Replay 统一到“一阶近似何时成立”这一个条件下解释。发布不足一年，外部复现与工业采用仍待观察。"
+  summary: "说明 token 级代理目标是序列级 IS 目标的一阶近似，只在训推差异与策略陈旧都很小时成立；据此解释 IS 修正、裁剪与 MoE Routing Replay 的作用，并发现 on-policy 时带 IS 修正的基础策略梯度最稳。"
+  plain: "把整条回答的“换分布修正”拆成每个词各自修正，是一种近似：只有采样用的模型和正在训练的模型几乎一样时才靠得住。所以要尽量消除训练与推理的数值差异，也别用太旧的数据。"
+  takeaways:
+    - "排查训练不稳定时，把“训推概率差”和“策略陈旧度”分开监控：两者都会让 token 级目标偏离真实目标。"
+    - "MoE 上训推路由不一致会直接破坏这个近似：要么用 Routing Replay 让两边走同样的专家，要么改用对单个 token 不敏感的序列级比率（GSPO）。"
+  builds_on: [gspo, tis-offpolicy]
+  tags: [token 级目标, 重要性采样, MoE, Routing Replay]

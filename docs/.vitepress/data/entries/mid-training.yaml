@@ -271,7 +271,7 @@
   facets: [data]
   tier: rec
   evidence: [industrial, ablation, open-source, community]
-  evidence_note: "Hugging Face 正式发布 3B 模型时附带的完整配方：各阶段配比、学习率、长上下文与推理中训练、模型合并都写明，训练配置公开，是 2025 年传播最广的全开源训练手册之一。消融多在 3B、50B–100B token 规模上完成。"
+  evidence_note: "Hugging Face 正式发布 3B 模型时附带的完整配方：各阶段配比、学习率、长上下文与推理中训练、模型合并都写明，训练配置公开，是被广泛转引的全开源训练手册。消融多在 3B、50B–100B token 规模上完成。"
   summary: "3B 模型约 11T token 三阶段预训练（WSD，衰减期上调代码与数学）；随后的长上下文适配（4K→64K，共 100B）与推理中训练（约 140B token）被统称为中训练，后者损伤的长文能力靠模型合并补回。"
   plain: "一份小模型的完整菜谱：主餐三道，收尾再加两道专项小灶（读长文、学推理）；小灶吃伤了长文胃口，就用“合并模型”调回来。"
   takeaways:

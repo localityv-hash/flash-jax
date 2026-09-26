@@ -19,11 +19,11 @@ prereq:
 形式上，中训练与预训练优化的是同一个目标，变的只有数据分布和学习率：
 
 $$
-\mathcal L_{\text{mid}}(\theta)=-\,\E_{x\sim\mathcal D_{\text{mid}}}\Bigl[\sum_{t}\log\pi_\theta(x_t\mid x_{<t})\Bigr],\qquad
-\mathcal D_{\text{mid}}=\sum_k w_k\,\mathcal D_k
+\mathcal L_{\text{mid} }(\theta)=-\,\E_{x\sim\mathcal D_{\text{mid} } }\Bigl[\sum_{t}\log\pi_\theta(x_t\mid x_{\lt t})\Bigr],\qquad
+\mathcal D_{\text{mid} }=\sum_k w_k\,\mathcal D_k
 $$
 
-$x$ 是一段训练文本，$x_{<t}$ 是它的前缀；$\mathcal D_k$ 是各数据源（高质量网页、代码、数学、QA、指令、推理轨迹……），$w_k$ 是<Term t="data-mixture">数据配比</Term>。几个常被混用的说法，边界如下：
+$x$ 是一段训练文本，$x_{\lt t}$ 是它的前缀；$\mathcal D_k$ 是各数据源（高质量网页、代码、数学、QA、指令、推理轨迹……），$w_k$ 是<Term t="data-mixture">数据配比</Term>。几个常被混用的说法，边界如下：
 
 | 说法 | 典型数据 | 学习率 | 主要目的 | 例子 |
 |---|---|---|---|---|
@@ -77,7 +77,7 @@ $s$ 是当前步数，$W$ 是预热结束步，$T$ 是稳定段结束步，$S$ �
 2. 衰减段约占总 token 的 **10%** 就够，2.5% 不够；
 3. 稳定期检查点可以反复“分叉”：接着用高学习率训练，或随时衰减出一个成品。
 
-第 3 点让缩放律实验便宜了一个量级：跑一条长的恒定学习率曲线，在不同位置做冷却，就得到不同训练长度的结果；EPFL 与 Hugging Face 的系统对比也表明“恒定 + 冷却”的表现可预测地与余弦相当[^cooldown]。工业界随之采用：Kimi K2 在 15.5T token 上用 WSD（10T 恒定 + 5.5T 余弦衰减），再接 400B token 退火与 60B token 的 32K 长上下文激活[^k2]；DeepSeek-V3 恒定学习率到 10T，再用 4.3T 余弦衰减，最后 500B 分两段常数[^dsv3]；SmolLM3 在最后 10% 步数线性降到 0[^smollm3]。
+第 3 点让缩放律实验便宜了一个量级：跑一条长的恒定学习率曲线，在不同位置做冷却，就得到不同训练长度的结果；EPFL 与 Hugging Face 的系统对比也表明“恒定 + 冷却”的表现可预测地与余弦相当[^cooldown]。工业界随之采用：Kimi K2 注明引用 MiniCPM，在 15.5T token 上用 WSD（10T 恒定 + 5.5T 余弦衰减），再接 400B token 退火与 60B token 的 32K 长上下文激活[^k2]；SmolLM3 在最后 10% 步数线性降到 0[^smollm3]。DeepSeek-V3 的曲线也是“长恒定 + 末段衰减”的形状：恒定学习率到 10T，再用 4.3T 余弦衰减，最后 500B 分两段常数[^dsv3]。
 
 ::: derive 为什么一降学习率，损失就骤降？
 用最简单的模型看清机制。设一维二次损失 $\mathcal L(w)=\tfrac{h}{2}w^2$，随机梯度 $g_t=hw_t+\xi_t$，噪声 $\xi_t$ 零均值、方差 $\sigma^2$，且与 $w_t$ 独立。SGD 更新为
@@ -232,7 +232,7 @@ $$
 转不满一圈（$r\lt\alpha$）的低频维度完全插值；转过很多圈（$r\gt\beta$）的高频维度保持原样；中间线性过渡。此外，上下文变长后注意力分布会变“平”，YaRN 再给 logit 乘一个温度系数：
 
 $$
-\operatorname{softmax}\!\Bigl(\frac{\mathbf q_m^{\top}\mathbf k_n}{t\sqrt{d}}\Bigr),\qquad \sqrt{1/t}=0.1\ln s+1 .
+\operatorname{softmax}\!\Bigl(\frac{\mathbf q_m^{\top}\mathbf k_n}{t\sqrt{d} }\Bigr),\qquad \sqrt{1/t}=0.1\ln s+1 .
 $$
 
 Llama 系推荐 $\alpha=1$、$\beta=32$；微调只需约 0.1% 的预训练 token（论文中为 400 步）[^yarn]。
@@ -249,7 +249,7 @@ flowchart TD
 ```
 
 ::: derive 代入数字：Llama 形状的模型与 DeepSeek-V3
-**分组**。取 $b=10000$、$d=128$、$L=4096$。$r_i\lt 1$ 等价于 $\lambda_i\gt L$，即 $2\pi\cdot 10^{8i/128}\gt 4096$，解得 $i\ge 46$：18 组完全插值。$r_i\gt 32$ 等价于 $\lambda_i\lt 128$，解得 $i\le 20$：21 组保持不变。其余 25 组（$i=21,\dots,45$）按斜坡混合。
+**分组**。取 $b=10000$、$d=128$、$L=4096$。$r_i\lt 1$ 等价于 $\lambda_i\gt L$，即 $2\pi\cdot 10^{i/16}\gt 4096$，解得 $i\ge 46$：18 组完全插值。$r_i\gt 32$ 等价于 $\lambda_i\lt 128$，解得 $i\le 20$：21 组保持不变。其余 25 组（$i=21,\dots,45$）按斜坡混合。
 
 **温度**。DeepSeek-V3 取 $s=40$、$\alpha=1$、$\beta=32$，YaRN 只作用在 MLA 中解耦出来的 64 维 RoPE 分量上[^dsv3]。此时 $0.1\ln 40+1\approx1.369$，logit 被放大约 $1.369^2\approx1.87$ 倍；官方推理代码正是把 softmax 缩放乘以这个系数的平方。若按同一公式，$s=8$（例如 8K 扩到 64K）时系数约为 $1.208^2\approx1.46$。
 
@@ -351,10 +351,10 @@ CMU 的 Midtraining Bridges 用从零预训练的小模型做控制实验，把�
 | Phi-4（2024-12） | 约 10T → 250B 中训练 | 峰值降为 1/10 | 4K→16K；30% 新长文本 + 70% 回放[^phi4] |
 | DeepSeek-V3（2024-12） | 14.8T，末 500B 两段常数 → YaRN 两段各 1000 步 | 恒定 → 余弦 → 分段常数 | 提高数学与代码比例；4K→32K→128K[^dsv3] |
 | Qwen3（2025-05） | 30T+ → 推理阶段约 5T → 长上下文数千亿 | 推理阶段加快衰减 | 上调 STEM、代码、推理与合成数据[^qwen3] |
+| OctoThinker（2025-06 报告） | Llama-3.2 上 200B 恒定 + 20B 衰减 | Stable-then-Decay | MegaMath-Web-Pro、QA 式 CoT、指令数据[^octo] |
 | Kimi K2（2025-07） | 15.5T → 退火 400B + 长上下文 60B | WSD，退火 2e-5 → 7e-6 | 知识与数学改写；YaRN 扩到 128K[^k2] |
 | GLM-4.5（2025-07） | 15T + 7T → 中训练 500B + 500B + 100B | 余弦，降到 2.5e-5 | 仓库级代码、合成推理、长上下文与智能体轨迹[^glm45] |
 | SmolLM3（2025-07） | 约 11T → 长上下文 100B → 推理 140B | WSD，末 10% 降到 0 | 衰减期代码 24%、数学 13%；模型合并补长文能力[^smollm3] |
-| OctoThinker（2025-06） | Llama-3.2 上 200B 恒定 + 20B 衰减 | Stable-then-Decay | MegaMath-Web-Pro、QA 式 CoT、指令数据[^octo] |
 | Olmo 3 7B（2025-11） | 5.93T → 中训练 100B → 长上下文 50B | 线性降到 0 | 数学、代码、QA、指令、思维链，全部去污染[^olmo3] |
 | GLM-5（2026-02） | 27T → 32K（1T）→ 128K（500B）→ 200K（50B） | 中训练 4e-5 线性降到 1e-5 | 约 1000 万 issue–PR 对；后期上采样长文档与智能体轨迹[^glm5] |
 | Kimi K3（2026-07） | 预训练 8K→64K → 冷却期 256K→1M | 余弦（对照中优于 WSD） | 沿用 K2 改写；NoPE，无需改位置编码[^k3] |

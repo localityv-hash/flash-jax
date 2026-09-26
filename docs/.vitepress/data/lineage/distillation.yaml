@@ -85,6 +85,7 @@ nodes:
     lane: industry
     note: "顺序做完推理/智能体/通用 RL 后，用前面各阶段的检查点当老师做跨阶段 OPD，找回被覆盖的能力。"
     href: "#industrial"
+    entry: glm-5
   - id: dsv4
     label: DeepSeek-V4
     date: 2026-04

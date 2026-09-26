@@ -46,7 +46,7 @@ DAPO 在 Qwen2.5-32B 基座上的逐项消融（AIME 2024 avg@32）：朴素 GRP
 **最常用：Qwen2.5-Math-1.5B/7B。** 数学先验强、社区结果多，便于对照。但有三个坑要提前知道：
 
 - **上下文短**。它的原生上下文只有 4k，Dr. GRPO 的示例把生成上限设为 3000 token；verl 的 DAPO 7B 测试脚本特意提示下载后要把 `max_position_embeddings` 改成 32768。回答上限不宜一开始就开得很长。
-- **“随机奖励也涨分”**。Spurious Rewards 发现，在 Qwen2.5-Math 上，随机奖励、只看格式的奖励甚至错误标签，都能明显提升 MATH-500，而这些奖励在 Llama3、OLMo2 上基本无效；也有工作怀疑 Qwen2.5 在公开数学基准上存在数据污染。**只在 Qwen2.5-Math 上成立的结论，不足以证明你的算法或奖励有效**——详见 [伪奖励之争](/lenses/principles#spurious-rewards)。
+- **“随机奖励也涨分”**。Spurious Rewards 发现，在 Qwen2.5-Math 上，随机奖励、只看格式的奖励甚至错误标签，都能明显提升 MATH-500，而同样的奖励在 Llama3、OLMo2 上往往带不来提升；也有工作怀疑 Qwen2.5 在公开数学基准上存在数据污染。**只在 Qwen2.5-Math 上成立的结论，不足以证明你的算法或奖励有效**——详见 [伪奖励之争](/lenses/principles#spurious-rewards)。
 - **模板敏感**。Dr. GRPO 发现，不匹配的提示模板（例如在 Qwen2.5-Math-1.5B 上套 R1 模板）会先破坏模型的推理能力，RL 再把它“修回来”，表面上的提升因此被夸大[^drgrpo]。
 
 **通用基座**：DAPO 用的是 Qwen2.5-32B Base；SimpleRL-Zoo 在 Llama3 8B、Mistral 7B/24B、DeepSeekMath 7B、Qwen2.5 0.5B–32B 等 10 个基座上跑过同一套配方，是跨模型家族对照的好参考[^simplerl]。
@@ -106,7 +106,7 @@ def compute_score(data_source, solution_str, ground_truth, extra_info=None):
 
 参考实现用 [verl](/library/?id=verl)：GRPO 在主仓库里（`verl.trainer.main_ppo`），DAPO 的完整配方在 verl-project/verl-recipe 的 `dapo` 目录。下面所有配置项都取自 verl 的示例脚本与 DAPO 复现脚本[^dapo-verl]，数值是起步建议，按你的算力调整。
 
-**第一步：朴素 GRPO 基线。** 刻意使用原始 GRPO 的设定（序列级聚合、std 归一化、k3 KL 损失），作为后续消融的起点：
+**第一步：朴素 GRPO 基线。** 刻意使用原始 GRPO 的设定（序列级聚合、std 归一化、k3 KL 损失），作为后续消融的起点。下面的命令按单机 8 卡、Qwen2.5-Math-7B 设计，提示加回答控制在原生 4k 上下文之内：
 
 ```bash
 python3 -m verl.trainer.main_ppo \
@@ -115,8 +115,9 @@ python3 -m verl.trainer.main_ppo \
   data.train_files=$HOME/verl/data/dapo-math-17k.parquet \
   data.val_files=$HOME/verl/data/aime-2024.parquet \
   data.train_batch_size=128 \
-  data.max_prompt_length=2048 \
-  data.max_response_length=8192 \
+  data.max_prompt_length=1024 \
+  data.max_response_length=3072 \
+  data.filter_overlong_prompts=True \
   actor_rollout_ref.model.path=Qwen/Qwen2.5-Math-7B \
   actor_rollout_ref.actor.optim.lr=1e-6 \
   actor_rollout_ref.actor.ppo_mini_batch_size=32 \
@@ -146,7 +147,9 @@ python3 -m verl.trainer.main_ppo \
 
 几个容易踩的细节：
 
-- **入口不同**：动态采样需要 DAPO recipe 自己的入口 `recipe.dapo.main_dapo`；只用前四项时，主仓库的 `verl.trainer.main_ppo` 也能跑（verl-recipe 里的 7B 测试脚本就是这样做的，超长惩罚写在 `reward_model.reward_kwargs.overlong_buffer_cfg` 下）。
+- **入口不同**：动态采样需要 DAPO recipe 自己的入口 `recipe.dapo.main_dapo`；只用前四项时，主仓库的 `verl.trainer.main_ppo` 也能跑（verl-recipe 里的 7B 测试脚本就是这样做的，超长惩罚以 `+` 前缀追加在 `reward_model.reward_kwargs.overlong_buffer_cfg` 下）。
+- **缓冲区按比例缩**：DAPO 的 4096 缓冲区对应 20k 的回答上限；回答上限只有 3k–8k 时，缓冲区相应缩到几百到一两千 token，否则大部分正常长度的回答都会挨罚。
+- **长上下文要显式放开**：verl-recipe 的 7B 测试脚本在 Qwen2.5-Math-7B 上跑 8k 回答时，额外加了 `+actor_rollout_ref.model.override_config.max_position_embeddings=32768`；这属于超出原生长度的外推，收益与风险都要自己验证。
 - **版本钉死**：论文结果的复现要用 recipe 指定的 verl 提交；主干代码在持续演进，配置项名字可能变化。
 - **其余超参数**（取自 DAPO 32B 脚本）：学习率 1e-6、预热 10 步、weight decay 0.1、梯度裁剪 1.0、不加熵正则；每步 512 道题 × 16 个回答，小批量 32 道题，即每批 rollout 做 16 次梯度更新；训练采样温度 1.0、top-p 1.0，验证时 top-p 0.7。
 
@@ -159,6 +162,16 @@ python3 -m verl.trainer.main_ppo \
 5. **逐项加修正**：按“去 KL → Clip-Higher → token 级损失 → 软超长惩罚 → 动态采样”的顺序，每次只改一项、固定种子，保存每次的曲线与验证分数。
 6. **放大**：分阶段加长回答上限、加大批次或换更大的模型；每次放大都重新看一遍监控曲线。
 7. **最终评测**：多种子、avg@k、去污染检查，见下文评测协议。
+
+每加一项修正，应该在曲线上看到对应的变化；看不到，往往说明配置没生效或者问题不在这里。下表的“预期”对应 DAPO 论文中的消融曲线：
+
+| 这一步 | 预期看到的变化 | 如果没看到 |
+|---|---|---|
+| 去掉 KL | 奖励上升更快；与参考模型的偏离不再受约束，RLVR 下通常无害 | 确认 `use_kl_loss` 与 `use_kl_in_reward` 都已关闭 |
+| Clip-Higher | 熵下降变慢或回升，同题回答更多样 | 查 `clip_ratio_high` 是否生效；熵仍塌缩时降低学习率 |
+| token 级损失 | 熵与长度的增长更平稳，错误回答不再无谓变长 | 确认 `loss_agg_mode` 为 `token-mean` |
+| 软超长惩罚 | 截断比例下降，长度在上限前被“软挡住” | 缓冲区是否按回答上限缩放 |
+| 动态采样 | 每步有效提示数恒定，同样步数下提升更快；单步生成时间变长 | 看 `train/num_gen_batches` 是否频繁触顶，题目可能太易或太难 |
 
 ```mermaid 一步 RLVR 训练里发生了什么
 flowchart TD

@@ -162,7 +162,7 @@ $$
 
 ### 轮级优势：把奖励切到每一轮 {#turn-advantage}
 
-<Term t="turn-level-advantage">轮级优势</Term>让同一轮内的 token 共享一个值，但不同轮可以不同。三种常见来源：
+所谓<Term t="turn-level-advantage">轮级优势</Term>，是让同一轮内的 token 共享一个值，而不同轮可以不同。三种常见来源：
 
 - **轮级可验证奖励。** 以“先检索、后作答”的两轮任务为例，MT-GRPO 给第一轮 token 的优势是“第一轮奖励（如工具是否被正确调用并成功执行）的组内优势 $+\lambda\times$ 结果奖励的组内优势”，第二轮只用结果优势：$\hat A_{i,1}=\hat A^\text{turn}_i+\lambda\hat A^\text{out}_i,\ \hat A_{i,2}=\hat A^\text{out}_i$[^15]。
 - **按步数衰减的结果奖励。** Kimi-Researcher 对正确轨迹的第 $k$ 步给 $r_{i,k}=\gamma^{\,T_i-k}R_i$（$0<\gamma<1$，$T_i$ 为总步数）。两条都答对的轨迹最终奖励一样，但更短那条的早期动作分到更多功劳，从而鼓励更高效的探索[^6]。
@@ -250,7 +250,7 @@ $$
 
 ### 工具延迟与沙箱池 {#sandbox-pool}
 
-<Term t="sandbox">沙箱</Term>与工具服务决定了环境吞吐。Kimi K2 的两条经验是：把重环境部署成可独立扩容的服务；用大量并发 rollout 摊薄昂贵交互的等待时间。其 SWE 环境基于 Kubernetes，支持 1 万个以上并发沙箱实例[^4]。Qwen3-Coder 在阿里云上搭建了能并行运行 2 万个独立环境的系统[^8]。沙箱的冷启动、镜像拉取与回收，常常比 GPU 更早成为瓶颈，[SWE 实践单元](/practice/swe-agent)有具体配置。
+环境吞吐由<Term t="sandbox">沙箱</Term>与工具服务决定。Kimi K2 的两条经验是：把重环境部署成可独立扩容的服务；用大量并发 rollout 摊薄昂贵交互的等待时间。其 SWE 环境基于 Kubernetes，支持 1 万个以上并发沙箱实例[^4]。Qwen3-Coder 在阿里云上搭建了能并行运行 2 万个独立环境的系统[^8]。沙箱的冷启动、镜像拉取与回收，常常比 GPU 更早成为瓶颈，[SWE 实践单元](/practice/swe-agent)有具体配置。
 
 ### 超时、最大轮数与截断轨迹 {#max-turns}
 

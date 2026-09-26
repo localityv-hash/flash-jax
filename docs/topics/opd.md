@@ -124,9 +124,9 @@ $$-\E_{y_t\sim\pi_\theta(\cdot\mid s_t)}\big[r_t\,\nabla_\theta\log\pi_\theta(y_
 
 **第 5 步：写成损失。** 只保留当前项（折扣 $\gamma=0$）时，对一条学生样本最小化
 
-$$\mathcal L(\theta)=-\frac{1}{\lvert y\rvert}\sum_{t}\sg\big[r_t\big]\,\log\pi_\theta(y_t\mid s_t)$$
+$$\mathcal L(\theta)=-\sum_{t}\sg\big[r_t\big]\,\log\pi_\theta(y_t\mid s_t)$$
 
-它的梯度是“在学生访问的状态上，逐 token 反向 KL 的梯度（按长度平均）”的无偏单样本估计，但**丢掉了当前选择对未来状态的影响**，因此相对序列级反向 KL 是有偏的。保留折扣 $\gamma\in(0,1]$ 的未来项，就回到 MiniLLM 的完整形式。
+把状态 $s_t$ 视为固定，它的梯度是 $\sum_t\nabla_\theta\KL\big(\pi_\theta(\cdot\mid s_t)\,\Vert\,\pi_T(\cdot\mid s_t)\big)$ 的无偏单样本估计；实现里常再除以 token 数取平均，相当于给不同长度的回答重新加权。它**丢掉了当前选择对未来状态的影响**，因此相对序列级反向 KL 是有偏的。保留折扣 $\gamma\in(0,1]$ 的未来项，就回到 MiniLLM 的完整形式。
 :::
 
 ### 精确与近似：主流实现各省掉了什么 {#approximations}
@@ -142,6 +142,8 @@ $$\mathcal L(\theta)=-\frac{1}{\lvert y\rvert}\sum_{t}\sg\big[r_t\big]\,\log\pi_
 | 归一化 | 按序列求和 | 按 token 平均，或按剩余长度归一化 | 改变长短回答的相对权重；MiniLLM 用长度归一化抵消对短回答的偏好 |
 
 单样本估计有 k1、k2、k3 等写法（见 [KL 近似](/library/?id=kl-approx)与<Term t="kl-estimator">KL 估计器</Term>），OPD 常用的就是 k1，即 $-r_t$。
+
+单样本与全词表之间还有折中：采样 token 上的负优势只会压低这个 token，却没告诉学生概率该挪到哪里。Asymmetric OPD 因此把学生轨迹上的位置分成两类：优势为正的位置保留原来的强化式更新，优势非正的位置改为对教师分布做局部的散度最小化；数学推理上比标准 OPD 平均高 4.09（强初始化）和 8.34（弱初始化）[^aopd]。
 
 还要注意：**并非所有 OPD 都是反向 KL。** GKD 允许在学生样本上最小化前向 KL 或 JSD；TRL 的 `DistillationTrainer` 用 `beta` 在前向 KL（0）与反向 KL（1）之间插值，默认 1.0；verl 的“GKD OPD”模式用教师 top-k 上的前向 KL；SDFT 的作者也说明论文结果实际用的是逐 token 前向 KL[^sdft]。学生样本上的前向 KL 不再是某个序列级散度的梯度，而更接近 DAgger：在学生访问的状态上，让学生拟合教师的整张分布。
 
@@ -383,4 +385,5 @@ TRL 已收录 SDFT、SDPO 训练器，tinker-cookbook 也复现了 SDFT。同期
 [^th]: Tiapkin et al.，*On Teacher Hacking in Language Model Distillation*。https://arxiv.org/abs/2502.02671
 [^skd]: Xu et al.，*Speculative Knowledge Distillation: Bridging the Teacher-Student Gap Through Interleaved Sampling*，ICLR 2025。https://arxiv.org/abs/2410.11325
 [^verl]: verl 文档 *On-Policy Distillation (OPD)*。https://github.com/verl-project/verl/blob/main/docs/algo/opd.md
+[^aopd]: Jia et al.，*Asymmetric On-Policy Distillation: Bridging Exploitation and Imitation at the Token Level*（2026-05）。https://arxiv.org/abs/2605.06387
 [^sdft]: SDFT 代码仓库 2026-04-07 更新说明。https://github.com/idanshen/Self-Distillation

@@ -227,7 +227,7 @@
   tier: rec
   evidence: [industrial, ablation, open-source]
   evidence_note: "阿里淘天未来生活实验室与 AI Engine 团队开发，阿里的 ROME 智能体模型在其 ROCK + ROLL 生态中训练；后续论文 ROLL Flash 报告异步化在 RLVR 上最高 2.24 倍、agentic 任务上最高 2.72 倍加速，RollPacker 处理同步训练的长尾；文档对 R3 路由回放的实现与限制写得很细。"
-  summary: "基于 Ray 的多角色 RL 库：训练后端覆盖 Megatron-Core、DeepSpeed、FSDP2，推理支持 vLLM 与 SGLang；提供 RLVR、agentic、蒸馏流水线，ROLL Flash 进一步加入 rollout 与训练解耦的异步训练。"
+  summary: "基于 Ray 的多角色 RL 库：训练后端覆盖 Megatron-Core、DeepSpeed、FSDP2，推理支持 vLLM 与 SGLang；提供 RLVR、agentic、蒸馏流水线，ROLL Flash 又加入了异步训练。"
   plain: "阿里开源的一站式 RL 训练库：数学题、多轮 agent、蒸馏都有现成流水线，规模大了还能让出题和改卷两边异步跑。"
   takeaways:
     - "agent 任务先把环境交互做成环境级异步（一个慢环境不拖住整批），再叠加 rollout 与训练的解耦。"

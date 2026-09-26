@@ -86,7 +86,7 @@ $$
 **LLM 上 γ、λ 怎么取。** 经典控制里常用 $\gamma=0.99$、$\lambda=0.95$（PPO 论文的 MuJoCo 设置）；LLM 框架的默认值则是 $\gamma=\lambda=1$（verl 的 `algorithm.gamma`、`algorithm.lam`，OpenRLHF 的 `--algo.advantage.gamma`、`--algo.advantage.lambd`）[^gae-defaults]。原因有二：
 
 - **γ=1**：回答级奖励只在最后一个 token 出现。$\gamma<1$ 时第 $t$ 个 token 收到的信号按 $\gamma^{T-t}$ 衰减，几千 token 的长 CoT 开头几乎收不到信号，还隐含了“越短越好”的偏好。
-- **λ 接近 1**：终局奖励传到第 $t$ 个 token 要乘 $(\gamma\lambda)^{T-t}$。$\lambda=0.95$ 时往前 100 个 token 只剩 $0.95^{100}\approx0.006$，其余全靠价值网络自举——而 LLM 的价值网络恰恰最难学准（稀疏终局奖励、从奖励模型初始化）。[VAPO](/library/?id=vapo) 因此让 critic 用 $\lambda=1$ 的无偏回报训练、actor 用更小的 λ 降方差（Decoupled-GAE），并让 actor 的 λ 随回答长度自适应（Length-Adaptive GAE）。
+- **λ 接近 1**：终局奖励传到第 $t$ 个 token 要乘 $(\gamma\lambda)^{T-t}$。$\lambda=0.95$ 时往前 100 个 token 只剩 $0.95^{100}\approx0.006$，其余全靠价值网络自举——而 LLM 的价值网络恰恰最难学准（稀疏终局奖励、从奖励模型初始化）。[VAPO](/library/?id=vapo) 一系的做法因此是：先用固定策略的蒙特卡洛回报预训练价值网络，再让 critic 与 actor 用不同的 λ（Decoupled-GAE，如 $\lambda_\text{value}=1$、$\lambda_\text{policy}=0.95$），并让 actor 的 λ 随回答长度 $l$ 自适应（Length-Adaptive GAE，$\lambda_\text{policy}=1-\frac{1}{\alpha l}$）[^vapo]。
 
 ::: human
 γ 决定“未来的奖励打几折”，λ 决定“多信价值网络的估计，还是多信真实拿到的分数”。LLM 只在结尾给分、价值网络又难学，所以通常不打折（γ=1），也尽量相信真实分数（λ 接近 1）。
@@ -599,6 +599,7 @@ flowchart LR
 
 [^williams]: R. J. Williams, "Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning", *Machine Learning* 8, 1992. <https://doi.org/10.1007/BF00992696>
 [^gae-defaults]: verl `verl/trainer/config/ppo_trainer.yaml`（`gamma: 1.0`、`lam: 1.0`）：<https://github.com/verl-project/verl/blob/main/verl/trainer/config/ppo_trainer.yaml>；OpenRLHF `openrlhf/cli/train_ppo_ray.py`（`--algo.advantage.gamma`、`--algo.advantage.lambd` 默认均为 1）：<https://github.com/OpenRLHF/OpenRLHF/blob/main/openrlhf/cli/train_ppo_ray.py>。PPO 论文的 MuJoCo 超参数见 [PPO 条目](/library/?id=ppo)。
+[^vapo]: Seed1.5-Thinking 技术报告第 3 节对这几项技术的描述（Value-Pretraining、Decoupled-GAE、Length-adaptive GAE），见 [Seed1.5-Thinking 条目](/library/?id=seed-thinking-1-5) 与 [VAPO 条目](/library/?id=vapo)。
 [^dualclip]: Dual-clip PPO 出自 "Mastering Complex Control in MOBA Games with Deep Reinforcement Learning"（arXiv 1912.09729）。verl 默认值见 `verl/trainer/config/actor/actor.yaml`；DAPO 复现脚本：<https://github.com/verl-project/verl-recipe/tree/main/dapo>。
 [^clipfrac]: verl `compute_policy_loss_vanilla`：<https://github.com/verl-project/verl/blob/main/verl/trainer/ppo/core_algos.py>；GSPO 的裁剪比例对比见 Qwen 博客 "GSPO: Towards Scalable Reinforcement Learning for Language Models"：<https://qwenlm.github.io/blog/gspo/>。
 [^kl-papers]: "Rethinking KL Regularization in RLHF: From Value Estimation to Gradient Optimization"（arXiv 2510.01555，指出“k3 当损失”只是有偏的一阶近似）：<https://arxiv.org/abs/2510.01555>；"On a few pitfalls in KL divergence gradient estimation for RL"（arXiv 2506.09477）：<https://arxiv.org/abs/2506.09477>；"A Comedy of Estimators: On KL Regularization in RL Training of LLMs"（arXiv 2512.21852）：<https://arxiv.org/abs/2512.21852>；Xihuai Wang 的博客 "Choosing KL Estimators in RL: From Value Unbiasedness to Gradient Correctness"：<https://xihuai18.github.io/reinforcement-learning/2025/12/01/kl-estimators-en.html>。

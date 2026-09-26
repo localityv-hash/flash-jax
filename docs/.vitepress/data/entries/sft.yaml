@@ -1,0 +1,493 @@
+# SFT 专题（/topics/sft）的条目：指令数据、合成数据、长 CoT 蒸馏、SFT 与 RL 的关系、LoRA。
+# 字段均按纯文本渲染；条件竖线用 ∣（U+2223），公式用 Unicode 书写。
+
+# ---------- 指令数据与合成数据 ----------
+
+- id: flan-2022
+  title: "The Flan Collection: Designing Data and Methods for Effective Instruction Tuning"
+  short: Flan 2022
+  kind: paper
+  org: Google Research
+  authors: "Shayne Longpre et al."
+  date: 2023-01
+  venue: ICML 2023
+  arxiv: "2301.13688"
+  repo: google-research/FLAN
+  links:
+    - { label: "Scaling Flan（Flan-T5 / Flan-PaLM）", url: "https://arxiv.org/abs/2210.11416" }
+  areas: [sft]
+  facets: [data]
+  tier: must
+  evidence: [industrial, adopted, ablation, open-source, community]
+  evidence_note: "Google 用这套数据训练并发布了 Flan-T5 与 Flan-PaLM；AI2 的 Tulu 系列把 FLAN v2 纳入 SFT 混合（open-instruct 至今保留其转换脚本），微软 Orca 也以 FLAN-v2 为指令来源。论文对模板混合、输入反转、任务配比逐项消融，被引极高。"
+  summary: "汇集 Flan 2021、P3、Super-NI、CoT 与对话数据成 Flan 2022，以零样本/少样本/CoT 多模板混合训练；消融显示模板混合、任务配平与输入反转最关键，Flan-T5 作下游微调起点收敛更快。"
+  plain: "把上千种 NLP 任务都改写成“指令→答案”，再用多种题型模板混着练。结论是：题型要多样、任务要配平，练过指令的模型再学新任务也更快。"
+  takeaways:
+    - "指令数据不要只用一种模板：零样本、少样本、带 CoT 的写法混着给，三种设置都会受益。"
+    - "混合数据先定配比再扩规模：配比失衡时，扩数据只会让大任务把小任务淹没。"
+  tags: [指令微调, 数据混合, 模板多样性]
+
+- id: self-instruct
+  title: "Self-Instruct: Aligning Language Models with Self-Generated Instructions"
+  short: Self-Instruct
+  kind: paper
+  org: 华盛顿大学 · AI2 等
+  authors: "Yizhong Wang et al."
+  date: 2022-12
+  venue: ACL 2023
+  arxiv: "2212.10560"
+  repo: yizhongw/self-instruct
+  links:
+    - { label: Stanford Alpaca 博客, url: "https://crfm.stanford.edu/2023/03/13/alpaca.html" }
+  areas: [sft]
+  facets: [data]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "合成指令数据的开山之作，被引极高；Stanford Alpaca 沿用其流程、换用 text-davinci-003，以不到 500 美元生成 5.2 万条数据，掀起开源对话模型浪潮。作者抽查 200 条样本约 46% 有问题，说明早期合成数据噪声很大。"
+  summary: "从 175 条人工种子任务出发，让 GPT-3 自举生成新指令与输入输出实例，经相似度去重与启发式过滤回灌任务池，得到 5.2 万条指令、8.2 万个实例；微调后的 GPT-3 指令遵循能力接近 InstructGPT-001。"
+  plain: "先人工写一百多道示范题，再让模型照葫芦画瓢自己出题、自己作答，筛掉重复和明显不对的，就攒出了几万条训练数据。"
+  takeaways:
+    - "合成指令时先用相似度阈值（如 ROUGE-L）去重、再做格式过滤，这是成本最低的质量保障。"
+    - "合成数据先抽样人工审查几百条，估出错误率再决定用多少、怎么过滤。"
+  tags: [合成数据, 自举, 指令数据]
+
+- id: lima
+  title: "LIMA: Less Is More for Alignment"
+  short: LIMA
+  kind: paper
+  org: Meta AI · CMU 等
+  authors: "Chunting Zhou et al."
+  date: 2023-05
+  venue: NeurIPS 2023
+  arxiv: "2305.11206"
+  links:
+    - { label: 数据集, url: "https://huggingface.co/datasets/GAIR/lima" }
+  areas: [sft]
+  facets: [data, theory]
+  tier: must
+  evidence: [adopted, ablation, open-source, community]
+  evidence_note: "SFT 方向被引最多的论文之一；AI2 的 Tulu 2 SFT 混合直接纳入了 LIMA 数据（open-instruct 保留其转换脚本），“少而精”的思路被 LIMO、s1 推广到推理。结论由人工偏好评测与数量/质量/多样性消融支撑，但只在 65B 模型、以单轮为主的对话上验证。"
+  summary: "只用 1000 条精选提示—回答（750 条社区问答 + 250 条手写）对 LLaMA-65B 做 SFT，不做 RLHF；人工评测中 43% 的情况与 GPT-4 持平或更好。提出“浅层对齐假说”：能力来自预训练，对齐只教格式与风格。"
+  plain: "只给模型看一千份精心挑选的范文，它就学会了像样地回答问题。说明模型的本事早在预训练时就有了，SFT 主要教它“怎么说”。"
+  takeaways:
+    - "SFT 数据先保证质量和多样性，再谈数量：同分布的数据翻倍往往没有收益。"
+    - "要新增一种行为（如多轮对话），先用几十条高质量示范小批量试，常常就够。"
+  tags: [少即是多, 浅层对齐假说, 数据质量]
+
+- id: magpie
+  title: "Magpie: Alignment Data Synthesis from Scratch by Prompting Aligned LLMs with Nothing"
+  short: Magpie
+  kind: paper
+  org: 华盛顿大学 · AI2
+  authors: "Zhangchen Xu et al."
+  date: 2024-06
+  venue: ICLR 2025
+  arxiv: "2406.08464"
+  repo: magpie-align/magpie
+  areas: [sft]
+  facets: [data]
+  tier: rec
+  evidence: [adopted, ablation, open-source, community]
+  evidence_note: "Argilla 用 Magpie 流程基于 Llama-3.1-405B-Instruct 生成 magpie-ultra，被 Hugging Face 收入 SmolLM2 的指令数据 SmolTalk（smollm 仓库可查）；论文在同一底座上与多个公开指令集对比，数据与脚本全部开源。"
+  summary: "只给对齐模型输入聊天模板里用户轮之前的前缀，它会自回归地“补出”一个用户问题，再把问题喂回得到回答。用 Llama-3-Instruct 合成 400 万对、筛出 30 万条，SFT 后的 8B 基座在对齐评测上接近官方 Instruct。"
+  plain: "对齐过的模型见惯了“用户：……”的格式，只给它开头，它就会自己编出一个用户问题。把这些问题收集起来再让它回答，就得到了几乎免费的指令数据。"
+  takeaways:
+    - "合成指令后先打标签（任务类别、难度、质量、安全）再按分布重采样，否则题目会扎堆在教师最常见的话题上。"
+    - "用 embedding 最近邻距离做语义去重，比只做精确去重更能保住多样性。"
+  builds_on: [self-instruct]
+  tags: [合成数据, 自合成, 指令数据]
+
+- id: numinamath
+  title: "NuminaMath: The Largest Public Dataset in AI4Maths with 860k Pairs of Competition Math Problems and Solutions"
+  short: NuminaMath
+  kind: dataset
+  org: Numina · Hugging Face · Mistral AI 等
+  authors: "Jia Li et al."
+  date: 2024-07
+  url: https://github.com/project-numina/aimo-progress-prize/blob/main/report/numina_dataset.pdf
+  repo: project-numina/aimo-progress-prize
+  links:
+    - { label: 夺冠复盘博客, url: "https://huggingface.co/blog/winning-aimo-progress-prize" }
+    - { label: 数据集合集, url: "https://huggingface.co/collections/AI-MO/numinamath-6697df380293bcfdbc1d978c" }
+  areas: [sft]
+  facets: [data]
+  tier: rec
+  evidence: [adopted, open-source, community]
+  evidence_note: "用它微调的 NuminaMath-7B-TIR 赢得首届 AIMO 进步奖（私有测试集 50 题解出 29 题）；Hugging Face Open-R1 的 OpenR1-Math-220k 在新版 NuminaMath 上蒸馏 R1 轨迹，s1、DFT 等工作也以它为题源。技术报告以数据说明为主，系统消融较少。"
+  summary: "从中国高中习题到国际奥赛收集约 86 万道数学题，经 OCR、切分、翻译后由 GPT-4o 统一改写为 CoT 解答；另用 GPT-4 系列生成约 7 万条工具集成推理（TIR）轨迹。两阶段 SFT（先 CoT 后 TIR）加自一致性解码赢得 AIMO-1。"
+  plain: "把网上的数学考卷和竞赛题扫描、翻译、整理成统一格式的“题目 + 分步解答”，规模接近百万道，成了后来许多推理数据集的题库。"
+  takeaways:
+    - "做数学 SFT/RL 数据时把“题源”当最稀缺的资产：先整理、去重、去污染题目，再换不同教师生成解答。"
+    - "工具集成推理数据可参考其两阶段做法：先学文字推理，再在第二阶段学调用代码。"
+  tags: [竞赛数学, 数据集, TIR]
+
+- id: tulu3
+  title: "Tulu 3: Pushing Frontiers in Open Language Model Post-Training"
+  short: Tulu 3
+  kind: paper
+  org: AI2 · 华盛顿大学
+  authors: "Nathan Lambert et al."
+  date: 2024-11
+  arxiv: "2411.15124"
+  repo: allenai/open-instruct
+  links:
+    - { label: SFT 混合数据, url: "https://huggingface.co/datasets/allenai/tulu-3-sft-mixture" }
+  areas: [sft, rl-llm]
+  facets: [data, algorithm, eval]
+  tier: must
+  evidence: [industrial, adopted, ablation, open-source, community]
+  evidence_note: "AI2 以此配方发布 Tulu 3 8B/70B（后续 405B），并延续到 OLMo 系列的后训练；数据、训练代码、评测与中间检查点全部公开。RLVR（可验证奖励强化学习）一词由它提出并被后续工作广泛沿用；Thinking Machines 的 LoRA Without Regret 以 Tulu 3 SFT 混合作为指令微调主实验集。"
+  summary: "完全公开的后训练配方：按技能整理数据（含 persona 合成）并去污染 → 近百万条混合 SFT → 长度归一化 DPO → 可验证奖励 RL（RLVR）；逐阶段给出消融与开源评测，在 Llama 3.1 上超过官方 Instruct。"
+  plain: "把大模型从“会续写”调成“好用的助手”的全部步骤、数据和代码都摊开：先 SFT 学格式，再用偏好数据学分寸，最后在能自动判对错的题上做强化学习。"
+  takeaways:
+    - "梯度累积下 SFT 损失要按 token 聚合（Tulu 3 发布的命令用 sum 损失），否则长短样本的权重会被悄悄改掉。"
+    - "按技能补数据（数学、精确指令遵循、代码）前先去污染，再用独立评测集确认每类数据的边际收益。"
+  builds_on: [flan-2022, lima]
+  tags: [SFT, DPO, RLVR, 开放配方]
+
+# ---------- 长 CoT：冷启动与蒸馏 ----------
+
+- id: s1
+  title: "s1: Simple test-time scaling"
+  short: s1
+  kind: paper
+  org: Stanford · 华盛顿大学 · AI2 等
+  authors: "Niklas Muennighoff et al."
+  date: 2025-01
+  arxiv: "2501.19393"
+  repo: simplescaling/s1
+  areas: [sft]
+  facets: [data, algorithm]
+  tier: rec
+  evidence: [ablation, open-source, community]
+  evidence_note: "模型、数据（s1K 与 5.9 万条候选全集）、训练与评测代码全部开源；对选题准则（质量/难度/多样性）与测试时控制方法都做了对照。社区复现与讨论热度很高，后续 s1.1 改用 R1 轨迹进一步提升。"
+  summary: "从 5.9 万道题按质量、难度、多样性筛出 1000 道配长推理轨迹（s1K）微调 Qwen2.5-32B-Instruct；推理时用 budget forcing（欲停时追加 “Wait”、超预算强制收尾）控制思考长度，竞赛数学超过 o1-preview。"
+  plain: "只挑一千道又难又杂的题配上高手的解题草稿来微调，考试时再“不许太早交卷”，模型就会想得更久、答得更准。"
+  takeaways:
+    - "小数据长 CoT SFT 的关键是挑题：同时满足难、杂、轨迹质量高；随机抽 1K 或只挑最长的都明显更差。"
+    - "需要可控的思考长度时，先试 budget forcing 这类解码期手段，再考虑用 RL 训练长度控制。"
+  builds_on: [lima]
+  tags: [长 CoT, 小数据, test-time scaling]
+
+- id: limo
+  title: "LIMO: Less is More for Reasoning"
+  short: LIMO
+  kind: paper
+  org: 上海交通大学 GAIR 等
+  authors: "Yixin Ye et al."
+  date: 2025-02
+  venue: COLM 2025
+  arxiv: "2502.03387"
+  repo: GAIR-NLP/LIMO
+  areas: [sft]
+  facets: [data, theory]
+  tier: rec
+  evidence: [ablation, open-source, community]
+  evidence_note: "数据（v1 为 817 条，v2 为 800 条）、模型与评测脚本开源；论文对题目难度、推理链质量、底座知识量做了对照。结论依赖 Qwen2.5-32B-Instruct 这类数学知识充足的底座，换成弱底座不能直接套用。"
+  summary: "从大规模题库中层层筛出 817 道难题，挑选带自我验证、探索与细致推导的高质量推理链做 SFT，Qwen2.5-32B-Instruct 在 AIME 与 MATH 上大幅提升；提出“少即是多推理假说”：底座知识充足时，少量精准的认知模板即可激发复杂推理。"
+  plain: "只要模型在预训练里已经学过足够的数学知识，给它几百道精挑细选的示范解题过程，它就能学会像高手那样思考。"
+  takeaways:
+    - "底座没有做过充分的数学/推理中训练时，别指望几百条示范就能激发长推理：先评估底座知识再定数据量。"
+    - "挑推理链看过程质量：会自我验证、回头检查、步骤完整的轨迹，比答案对但推导跳步的更有价值。"
+  builds_on: [lima]
+  tags: [长 CoT, 小数据, 少即是多]
+
+- id: small-models-struggle
+  title: "Small Models Struggle to Learn from Strong Reasoners"
+  short: 小模型学习鸿沟
+  kind: paper
+  org: 华盛顿大学 · CMU 等
+  authors: "Yuetai Li et al."
+  date: 2025-02
+  arxiv: "2502.12143"
+  repo: Small-Model-Gap/Small-Model-Learnability-Gap
+  areas: [sft, opd]
+  facets: [data, theory]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "在 Qwen2.5 0.5B–32B 与 Llama 3.x 1B–70B 上对照长/短 CoT、强/弱教师，训练数据与各尺寸模型均已开源；结论主要基于数学任务。"
+  summary: "发现“小模型可学性鸿沟”：3B 及以下的模型直接学长 CoT 或更强教师的推理，效果常不如学短 CoT 或较小教师；提出 Mix Distillation，把长/短 CoT（或强/弱教师数据）按 1:4 混合，显著提升小模型推理。"
+  plain: "让小学生直接背博士生的草稿反而学不会；把难的和浅显的示范掺在一起教，小模型才跟得上。"
+  takeaways:
+    - "给 3B 及以下模型做推理蒸馏时，别只用最强教师的最长轨迹：混入短 CoT 或小教师数据（如 1:4）。"
+    - "离线蒸馏之后再做在线蒸馏或 RL，让学生在自己的分布上补齐与教师的差距。"
+  builds_on: [deepseek-r1]
+  tags: [蒸馏, 容量差距, 小模型]
+
+- id: demystifying-long-cot
+  title: "Demystifying Long Chain-of-Thought Reasoning in LLMs"
+  short: 长 CoT 解密
+  kind: paper
+  org: CMU 等
+  authors: "Edward Yeo et al."
+  date: 2025-02
+  venue: ICML 2025
+  arxiv: "2502.03373"
+  repo: eddycmu/demystify-long-cot
+  areas: [sft, rl-llm]
+  facets: [theory, algorithm]
+  tier: rec
+  evidence: [adopted, ablation, open-source, community]
+  evidence_note: "Hugging Face TRL 直接实现了论文附录中的余弦长度奖励与 n-gram 重复惩罚；实验覆盖 SFT 与 RL（PPO / REINFORCE++）多种设置，数据集与检查点开源。"
+  summary: "系统研究长 CoT 如何出现：长 CoT SFT 的上限高于短 CoT，且让后续 RL 更容易提升；RL 中 CoT 长度增长不稳定，需要余弦长度奖励与重复惩罚整形；带噪但大规模的网页可验证数据有助于 RL；纠错等能力在基座中已潜在存在。"
+  plain: "先用长推理示范做 SFT 再做 RL，比直接 RL 更省事、上限也更高；RL 里思考长度容易失控，要用奖励管住它，别让模型靠啰嗦刷分。"
+  takeaways:
+    - "推理 RL 前用长 CoT（而不是短 CoT）做冷启动 SFT：短 CoT SFT 很快饱和，也更难被 RL 继续推高。"
+    - "RL 中长度失控时，用按长度缩放的奖励加 n-gram 重复惩罚，而不只是截断最大长度。"
+  builds_on: [deepseek-r1]
+  tags: [长 CoT, 奖励整形, 机制分析]
+
+- id: light-r1
+  title: "Light-R1: Curriculum SFT, DPO and RL for Long COT from Scratch and Beyond"
+  short: Light-R1
+  kind: paper
+  org: 奇虎 360
+  authors: "Liang Wen et al."
+  date: 2025-03
+  venue: ACL 2025 Industry Track
+  arxiv: "2503.10460"
+  repo: Qihoo360/Light-R1
+  areas: [sft]
+  facets: [data, algorithm]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "发布首日即开源全部 SFT/DPO 数据与训练脚本（基于 360-LLaMA-Factory），逐阶段报告 AIME24/25 与 GPQA 的增益；评测取 64 次采样平均，并用精确匹配（忽略数字）加 32-gram 做了去污染。"
+  summary: "从无长 CoT 能力的 Qwen2.5-32B-Instruct 出发：7.6 万条按难度筛选的 R1 轨迹做第一阶段 SFT，3 千条最难样本做第二阶段，再做半在线 DPO 与模型合并，AIME24/25 超过 R1-Distill-Qwen-32B。"
+  plain: "像上学一样先易后难：先用几万道中等题学会长推理的套路，再用几千道难题拔高，最后用“自己做错 vs 老师做对”的对比再修一轮。"
+  takeaways:
+    - "长 CoT 蒸馏可以分两段课程：大而中等难度的数据打底，小而极难的数据收尾，第二段往往有可观增益。"
+    - "只训数学会让科学类能力（如 GPQA）小幅遗忘，发布前要加测非目标领域。"
+  builds_on: [deepseek-r1, s1, limo]
+  tags: [长 CoT, 课程学习, DPO]
+
+- id: openmathreasoning
+  title: "AIMO-2 Winning Solution: Building State-of-the-Art Mathematical Reasoning Models with OpenMathReasoning dataset"
+  short: OpenMathReasoning
+  kind: paper
+  org: NVIDIA
+  authors: "Ivan Moshkov et al."
+  date: 2025-04
+  arxiv: "2504.16891"
+  repo: NVIDIA-NeMo/Skills
+  links:
+    - { label: 数据集, url: "https://huggingface.co/datasets/nvidia/OpenMathReasoning" }
+  areas: [sft]
+  facets: [data]
+  tier: rec
+  evidence: [industrial, ablation, open-source]
+  evidence_note: "NVIDIA 以此训练并发布 OpenMath-Nemotron 1.5B–32B，是 AIMO-2 冠军方案（私有集 50 题解出 34 题）；数据、模型与 NeMo-Skills 流水线以商用友好许可开源，后续 Nemotron-Math 直接复用其 AoPS 题源。"
+  summary: "从 AoPS 论坛用 LLM 抽题、判题型、提取答案、改写证明题并去污染；用 DeepSeek-R1 与 QwQ-32B 生成 320 万条长 CoT 与 170 万条工具集成推理（TIR）轨迹，并训练生成式解选择（GenSelect）。"
+  plain: "把数学论坛上的真题系统地“挖”出来，让最强的推理模型每题写很多遍解答、挑对的留下，再教小模型写解答、用代码算、从多个答案里挑最好的。"
+  takeaways:
+    - "题目缺标准答案时，可用强模型多次解答的多数票补答案，再用 LLM 判定器只比对最终答案。"
+    - "推理预算充足时，训练一个“从多个候选里挑最优”的生成式选择器，往往比简单多数投票更好。"
+  builds_on: [numinamath, deepseek-r1]
+  tags: [竞赛数学, TIR, 数据集]
+
+- id: phi-4-reasoning
+  title: "Phi-4-reasoning Technical Report"
+  short: Phi-4-reasoning
+  kind: report
+  org: Microsoft
+  date: 2025-04
+  arxiv: "2504.21318"
+  areas: [sft]
+  facets: [data]
+  tier: rec
+  evidence: [industrial, open-source]
+  evidence_note: "微软以开放权重发布 Phi-4-reasoning 与 Phi-4-reasoning-plus；报告详述提示筛选与训练配方，并在数学、科学、代码、规划等多类基准上评测。"
+  summary: "对 14B 的 Phi-4 做 SFT：精选难度处在模型能力边缘、覆盖面广的“可教”提示，用 o3-mini 生成推理示范；再加一小段结果奖励 RL 得到 plus 版。两者均超过 DeepSeek-R1-Distill-Llama-70B。"
+  plain: "挑题只挑模型“跳一跳够得着”的，再请强老师写解题过程来教；14B 的模型因此打赢了 70B 的蒸馏模型，最后再用一点 RL 锦上添花。"
+  takeaways:
+    - "SFT 选题以“当前模型做不稳、但强教师能做对”为准，太易与太难的题都在浪费预算。"
+    - "SFT 已经很强时，短而精的 RL（少量可验证题）仍能进一步拉长推理并提分。"
+  builds_on: [phi-4]
+  tags: [数据策展, 可教提示, 长 CoT]
+
+- id: llama-nemotron
+  title: "Llama-Nemotron: Efficient Reasoning Models"
+  short: Llama-Nemotron
+  kind: report
+  org: NVIDIA
+  authors: "Akhiad Bercovich et al."
+  date: 2025-05
+  arxiv: "2505.00949"
+  links:
+    - { label: 后训练数据集, url: "https://huggingface.co/datasets/nvidia/Llama-Nemotron-Post-Training-Dataset" }
+  areas: [sft, rl-llm]
+  facets: [data, infra]
+  tier: must
+  evidence: [industrial, adopted, ablation, open-source]
+  evidence_note: "NVIDIA 以商用许可发布 Nano 8B / Super 49B / Ultra 253B，并开放完整后训练数据与训练代码（NeMo、NeMo-Aligner、Megatron-LM）；AI2 的 open-instruct 收录了该数据集的 SFT 转换脚本。报告逐阶段给出 SFT 与 RL 的效果。"
+  summary: "从 Llama 3 做架构搜索与蒸馏得到高吞吐的 8B/49B/253B 推理模型；以 R1 等教师的推理轨迹与非推理回答混合 SFT，用系统提示 “detailed thinking on/off” 切换推理，Ultra 再经大规模 RL 部分超过教师。"
+  plain: "同一个模型既能深思熟虑也能快问快答，靠系统提示里的一句开关切换；SFT 先把两种模式都教会，最大的版本再用 RL 练到比老师还强。"
+  takeaways:
+    - "想要推理开关，就在 SFT 数据里为同类提示同时准备“开/关”两种回答，并用固定的系统提示区分。"
+    - "蒸馏只能逼近教师；想超过教师，需要在蒸馏之后接大规模 RL。"
+  builds_on: [deepseek-r1]
+  tags: [推理开关, 蒸馏, 工业配方]
+
+- id: openthoughts
+  title: "OpenThoughts: Data Recipes for Reasoning Models"
+  short: OpenThoughts
+  kind: paper
+  org: Bespoke Labs · Stanford · UC Berkeley · 华盛顿大学 等
+  authors: "Etash Guha et al."
+  date: 2025-06
+  arxiv: "2506.04178"
+  repo: open-thoughts/open-thoughts
+  links:
+    - { label: 项目主页, url: "https://www.open-thoughts.ai/" }
+    - { label: OpenThoughts3-1.2M, url: "https://huggingface.co/datasets/open-thoughts/OpenThoughts3-1.2M" }
+  areas: [sft]
+  facets: [data]
+  tier: must
+  evidence: [adopted, ablation, open-source, community]
+  evidence_note: "Thinking Machines 在 LoRA Without Regret 中以 OpenThoughts3 作推理 SFT 主实验集，TRL 的官方复现指南沿用其数据；奇虎 360 的 Light-R1 SFT 数据含 OpenThoughts-114k，仓库列出的下游模型数以百计。1000+ 次受控实验覆盖流水线每一步，数据、模型、生成与评测代码全部开源。"
+  summary: "把推理 SFT 数据流水线拆成题源、过滤、去重、每题采样数、答案过滤、教师选择等环节，做了 1000+ 次对照实验；据此以 QwQ-32B 为教师构建 120 万条 OpenThoughts3，7B 学生显著超过 R1-Distill-Qwen-7B。"
+  plain: "把“怎么做一份好的推理训练数据”拆成六七道工序，每道都做对比实验。最意外的发现是：分数最高的模型不一定是最好的老师，答案对不对的校验也没想象中重要。"
+  takeaways:
+    - "扩数据先“每题多采几条回答”（如 16 条）：比找新题便宜，收益稳定。"
+    - "换教师前做小规模对照：OpenThoughts 中 QwQ-32B 当老师优于基准分更高的 DeepSeek-R1。"
+    - "题源宁少而精；题目按 LLM 标注的难度或回答长度过滤，效果好于 embedding/fastText 这类预训练式过滤。"
+  builds_on: [deepseek-r1, s1]
+  tags: [长 CoT, 蒸馏, 数据配方]
+
+- id: acereason-1-1
+  title: "AceReason-Nemotron 1.1: Advancing Math and Code Reasoning through SFT and RL Synergy"
+  short: AceReason 1.1
+  kind: paper
+  org: NVIDIA
+  date: 2025-06
+  arxiv: "2506.13284"
+  areas: [sft, rl-llm]
+  facets: [data, algorithm]
+  tier: rec
+  evidence: [industrial, ablation]
+  evidence_note: "NVIDIA 发布 AceReason-Nemotron-1.1-7B；论文对 SFT 数据的两个扩展维度（提示数、每题回答数）以及 RL 采样温度做了系统对照，结论可直接指导 SFT→RL 的衔接。"
+  summary: "研究 SFT 与 RL 的协同：扩大提示数量与每题回答数都能提升 SFT，前者收益更大；更强的 SFT 起点在大规模 RL 后仍更好，但差距明显缩小；RL 采样温度应使“温度调整后的熵”约为 0.3，以平衡探索与利用。"
+  plain: "SFT 打底越好，RL 之后成绩越好，但 RL 会把起点差距抹平一大截；RL 采样温度要调到让模型既不太保守也不太随机。"
+  takeaways:
+    - "扩 SFT 数据优先加新题，其次才是每题多采样回答。"
+    - "RL 会缩小起点差距：SFT 做到“足够好”即可把预算转给 RL，但更强的 SFT 起点最终仍占优。"
+    - "RL 开始前按“温度调整后的熵约 0.3”选采样温度，并在训练中持续盯住熵。"
+  builds_on: [acereason-nemotron]
+  tags: [SFT+RL, 冷启动, 数据规模]
+
+- id: nemotron-math
+  title: "Nemotron-Math: Efficient Long-Context Distillation of Mathematical Reasoning from Multi-Mode Supervision"
+  short: Nemotron-Math
+  kind: paper
+  org: NVIDIA
+  authors: "Wei Du et al."
+  date: 2025-12
+  arxiv: "2512.15489"
+  links:
+    - { label: 数据集, url: "https://huggingface.co/datasets/nvidia/Nemotron-Math-v2" }
+    - { label: 复现流程（NeMo-Skills）, url: "https://github.com/NVIDIA-NeMo/Skills/tree/main/docs/releases/nemotron-math-v2" }
+  areas: [sft]
+  facets: [data, infra]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "数据集与 NeMo-Skills 复现流程公开；论文在相同 AoPS 题上与 OpenMathReasoning 对比监督质量，并对照了是否加入 StackExchange 数据、分桶训练与全长训练，在 Qwen3-8B 与 Qwen3-30B-A3B 上验证。发布不足一年，外部采用仍待观察。"
+  summary: "用 gpt-oss-120b 的高/中/低三档推理强度（各带或不带 Python）为约 35 万道数学题生成 750 万条最长 128K 的轨迹并滤掉易题；按长度分桶从 16K 训到 128K，提速 2–3 倍、精度差 1–3%。"
+  plain: "同一道题让老师分别用精讲、略讲、速答三种详略写解答，学生既学会解题，也学会按需控制想多久；超长样本放到最后一段集中训练，省下一大半算力。"
+  takeaways:
+    - "要让模型学会控制思考长度，就在 SFT 数据里提供同一题的多档推理强度示范，并在每个训练阶段保持各档比例。"
+    - "长上下文 SFT 可按长度分桶、由短到长训练以省算力，但最后的长桶里要混入少量中/低档样本，否则各档都会变得冗长。"
+  builds_on: [openmathreasoning]
+  tags: [多档推理, 长上下文, 竞赛数学]
+
+# ---------- SFT 与 RL：目标函数、泛化与遗忘 ----------
+
+- id: sft-memorizes-rl-generalizes
+  title: "SFT Memorizes, RL Generalizes: A Comparative Study of Foundation Model Post-training"
+  short: SFT 记忆·RL 泛化
+  kind: paper
+  org: HKU · UC Berkeley · Google DeepMind · NYU 等
+  authors: "Tianzhe Chu et al."
+  date: 2025-01
+  venue: ICML 2025
+  arxiv: "2501.17161"
+  repo: LeslieTrue/SFTvsRL
+  areas: [sft, rl-llm]
+  facets: [theory]
+  tier: rec
+  evidence: [ablation, open-source, community]
+  evidence_note: "引发“SFT 与 RL 各自学到什么”的广泛讨论；环境、训练与评测脚本、SFT 数据与检查点开源。实验限于纸牌算术（GeneralPoints）与导航（V-IRL）两类可控任务，外推到开放域需谨慎。"
+  summary: "在规则可变的纸牌算术 GeneralPoints 与视觉导航 V-IRL 上对比：以结果奖励训练的 RL 能泛化到未见过的规则与视觉变体，SFT 则倾向记住训练规则、分布外性能下降；但 SFT 仍是 RL 的必要前置，用来稳定输出格式。"
+  plain: "SFT 像背标准答案，规则一变就露馅；RL 像自己刷题对答案，学到的是解法。不过得先靠 SFT 教会答题格式，RL 才练得起来。"
+  takeaways:
+    - "评估 SFT 效果时一定加规则或分布变体的 OOD 测试，训练分布内的分数会高估真实能力。"
+    - "RL 前的 SFT 以“格式稳定、能拿到奖励”为目标，不必训到训练集饱和。"
+  tags: [泛化, SFT vs RL, 可控实验]
+
+- id: math-reasoning-transfer
+  title: "Does Math Reasoning Improve General LLM Capabilities? Understanding Transferability of LLM Reasoning"
+  short: 数学推理可迁移性
+  kind: paper
+  org: CMU · 华盛顿大学 等
+  authors: "Maggie Huan et al."
+  date: 2025-07
+  arxiv: "2507.00432"
+  repo: ReasoningTransfer/Transferability-of-LLM-Reasoning
+  areas: [sft, rl-llm]
+  facets: [theory, eval]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "评测 20 多个开源推理模型，并在同一底座、同一批数学数据上对照 SFT 与 RL；代码与模型开源。结论与“在线学习遗忘更少”的一系列工作相互印证。"
+  summary: "提出迁移性指标，发现数学提升能否迁移取决于训练方式而非模型大小：RL 调优的模型在其他推理与非推理任务上保持甚至提升，SFT 调优的模型在非推理任务上明显退化；表示与 token 分布分析显示 SFT 大范围扰动了与任务无关的 token。"
+  plain: "同样用数学题训练，RL 练出来的模型别的本事没丢，SFT 练出来的却偏科：数学涨了，聊天、指令遵循反而退步。"
+  takeaways:
+    - "用领域数据做 SFT 后，必测一组非目标任务（对话、指令遵循、事实性）来监控遗忘。"
+    - "已有可验证奖励时，领域能力的提升尽量交给 RL，SFT 只负责格式与冷启动。"
+  builds_on: [sft-memorizes-rl-generalizes]
+  tags: [遗忘, 迁移, SFT vs RL]
+
+- id: dft
+  title: "On the Generalization of SFT: A Reinforcement Learning Perspective with Reward Rectification"
+  short: DFT
+  kind: paper
+  org: 东南大学 · UC Merced 等
+  authors: "Yongliang Wu et al."
+  date: 2025-08
+  venue: ICLR 2026
+  arxiv: "2508.05629"
+  repo: yongliang-wu/DFT
+  areas: [sft]
+  facets: [algorithm, theory]
+  tier: rec
+  evidence: [adopted, ablation, open-source, community]
+  evidence_note: "TRL（loss_type 设为 dft）、LLaMA-Factory、ms-swift 已内置该损失；实验集中在 7B 及以下的数学、代码与多模态推理。作者在仓库中说明：在答案唯一、推理近乎确定（低熵）的任务上效果较弱，社区也反馈过文学、金融等场景的失败案例。"
+  summary: "证明 SFT 梯度等价于一种策略梯度，其隐式奖励是“是否等于示范”再乘以 1/π_θ：模型越没把握的样本权重越大，方差大、泛化差。DFT 把每个 token 的损失乘以自身概率（停止梯度），一行代码即在多个数学基准上显著优于 SFT。"
+  plain: "普通 SFT 对模型最没把握的字用力最猛，容易死记硬背；DFT 按模型自己的把握程度给每个字的损失打折，更像 RL 那样顺着自己的分布学。"
+  takeaways:
+    - "示范存在多种合理解法（数学 CoT、复杂代码）时，可以把 DFT 当作 SFT 的低成本替换做 A/B。"
+    - "答案高度确定（低熵）的任务保留标准 NLL：作者自己报告 DFT 在这类任务上偏弱。"
+  builds_on: [sft-memorizes-rl-generalizes]
+  tags: [SFT 目标函数, 奖励修正, SFT vs RL]
+
+# ---------- 参数高效微调 ----------
+
+- id: lora-without-regret
+  title: "LoRA Without Regret"
+  short: LoRA Without Regret
+  kind: blog
+  org: Thinking Machines Lab
+  authors: "John Schulman et al."
+  date: "2025-09-29"
+  url: https://thinkingmachines.ai/blog/lora/
+  links:
+    - { label: TRL 复现指南, url: "https://huggingface.co/docs/trl/en/lora_without_regret" }
+  areas: [sft, rl-llm]
+  facets: [algorithm, infra]
+  tier: must
+  evidence: [industrial, adopted, ablation, community]
+  evidence_note: "出自 Thinking Machines，其 Tinker 训练服务以 LoRA 为训练接口，cookbook 里 LoRA 学习率直接取全参的 10 倍；Hugging Face TRL 发布官方复现指南并复现了 RL 曲线。在 Llama 3 与 Qwen3（含 MoE）上系统扫了 rank、学习率与批大小，发布后被广泛转引讨论。"
+  summary: "系统比较 LoRA 与全参：中小规模后训练数据上高 rank LoRA 与全参曲线几乎重合，数据超出容量才落后；应挂满所有层（尤其 MLP/MoE）；对大批量更敏感；RL 用 rank 1 即可匹配全参；最优学习率约为全参 10 倍。"
+  plain: "设置对了，LoRA 在多数后训练场景不比全参差：挂满所有层、学习率调大约十倍、批次别太大；做 RL 时连 rank 1 都够用。"
+  takeaways:
+    - "LoRA 挂到所有线性层（all-linear），不要只挂注意力；学习率从全参最优值的约 10 倍起扫。"
+    - "RL 用低 rank（1–32）即可；SFT 数据规模越大越需要高 rank，超出容量时改用全参。"
+    - "LoRA 下别盲目加大批次：大批次带来的损失惩罚无法靠提高 rank 弥补。"
+  tags: [LoRA, 参数高效微调, 超参]

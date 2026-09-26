@@ -1,0 +1,144 @@
+id: classic-rl
+title: 经典 RL 五年：哪些思想流进了后训练
+description: 纵向是时间，五列是五条主线。悬停或点击节点，看它修了前任的什么问题，并跳到正文或资料库；DQN、AlphaZero、MuZero 等更早的奠基工作只作为起点出现。
+lanes:
+  - { id: online, label: 在线 RL 与工程 }
+  - { id: offline, label: 离线 RL }
+  - { id: model, label: 模型与搜索 }
+  - { id: seq, label: 序列建模 }
+  - { id: discovery, label: 发现与经验 }
+nodes:
+  - id: dqn
+    label: DQN
+    date: 2013-12
+    lane: online
+    note: "卷积网络 + 经验回放 + 目标网络，第一次从像素端到端学会玩 Atari；深度值方法的起点。"
+    href: "#bellman"
+  - id: ppo
+    label: PPO
+    date: 2017-07
+    lane: online
+    note: "裁剪代理目标让同一批数据可以多轮小批量更新；后来成为 RLHF 的默认算法。"
+    href: "#implementation"
+    entry: ppo
+  - id: ppo37
+    label: PPO 37 个细节
+    date: 2022-03
+    lane: online
+    note: "把论文没写的实现细节逐条补齐、给出源码出处并复现官方曲线：细节足以左右结论。"
+    href: "#implementation"
+    entry: ppo-implementation-details
+  - id: bbf
+    label: BBF
+    date: 2023-05
+    lane: online
+    note: "值方法也能样本高效：放大网络，并用周期性重置对抗高回放比带来的可塑性丢失。"
+    href: "#sample-efficiency"
+    entry: bbf
+  - id: awr
+    label: AWR
+    date: 2019-10
+    lane: offline
+    note: "把 KL 约束下的最优策略投影回参数化策略：按 exp(A/β) 加权做最大似然，只用数据里出现过的动作。"
+    href: "#offline-rl"
+  - id: cql
+    label: CQL
+    date: 2020-06
+    lane: offline
+    note: "压低分布外动作的 Q 值，学出策略价值的下界，专治离线训练的乐观高估。"
+    href: "#offline-rl"
+    entry: cql
+  - id: iql
+    label: IQL
+    date: 2021-10
+    lane: offline
+    note: "干脆不查询分布外动作：expectile 回归估计数据内动作价值的上分位，再用 AWR 抽取策略。"
+    href: "#offline-rl"
+    entry: iql
+  - id: dpo
+    label: DPO
+    date: 2023-05
+    lane: offline
+    note: "与 AWR 同一个闭式最优策略 π* ∝ π_ref·exp(r/β)；把固定的偏好数据直接变成策略的分类损失。"
+    href: "#offline-rl"
+    entry: dpo
+  - id: alphazero
+    label: AlphaZero
+    date: 2017-12
+    lane: model
+    note: "不要人类棋谱：MCTS 产出改进策略、网络去模仿它，自我对弈循环往复，也就是专家迭代。"
+    href: "#model-based"
+  - id: muzero
+    label: MuZero
+    date: 2019-11
+    lane: model
+    note: "不给规则也能规划：在学到的隐空间模型里做 MCTS，模型只需预测奖励、价值与策略。"
+    href: "#model-based"
+  - id: efficientzero
+    label: EfficientZero
+    date: 2021-10
+    lane: model
+    note: "给 MuZero 加自监督一致性、价值前缀与离策略修正，两小时游戏量超过人类平均水平。"
+    href: "#model-based"
+    entry: efficientzero
+  - id: dreamerv3
+    label: DreamerV3
+    date: 2023-01
+    lane: model
+    note: "在世界模型的想象轨迹里训练策略，一套超参数通用于 150 多个任务，从零在 Minecraft 挖到钻石。"
+    href: "#model-based"
+    entry: dreamerv3
+  - id: dt
+    label: Decision TF
+    date: 2021-06
+    lane: seq
+    note: "Decision Transformer：把 RL 写成以目标回报为提示的条件生成；简单好训，但不保证能拼接次优轨迹。"
+    href: "#sequence-modeling"
+    entry: decision-transformer
+  - id: tt
+    label: Trajectory TF
+    date: 2021-06
+    lane: seq
+    note: "Trajectory Transformer：用 GPT 建模整条轨迹，再用按奖励打分的束搜索做规划，即序列模型加搜索。"
+    href: "#sequence-modeling"
+    entry: trajectory-transformer
+  - id: alphatensor
+    label: AlphaTensor
+    date: 2022-10
+    lane: discovery
+    note: "把矩阵乘法写成张量分解游戏；模 2 算术下 4×4 只需 47 次乘法，首次改进 Strassen 两层算法。"
+    href: "#discovery"
+    entry: alphatensor
+  - id: alphadev
+    label: AlphaDev
+    date: 2023-06
+    lane: discovery
+    note: "逐条写汇编的游戏，奖励是正确性加实测延迟；发现的排序例程并入 LLVM 的 libc++。"
+    href: "#discovery"
+    entry: alphadev
+  - id: alphaproof
+    label: AlphaProof
+    date: 2024-07
+    lane: discovery
+    note: "在 Lean 中对数百万道自动形式化的题目做 RL，难题再用测试时 RL 练变体；与 AlphaGeometry 2 合计达到 IMO 2024 银牌分数。"
+    href: "#discovery"
+    entry: alphaproof
+  - id: era
+    label: 经验时代
+    date: 2025-04
+    lane: discovery
+    note: "Silver 与 Sutton 的立场文章：人类数据红利见顶，智能体应主要从自身经验中学习，奖励扎根于环境。"
+    href: "#era-of-experience"
+    entry: era-of-experience
+edges:
+  - { from: dqn, to: bbf, label: 值方法一脉：放大网络并定期重置 }
+  - { from: ppo, to: ppo37, label: 补齐论文没写的实现细节 }
+  - { from: awr, to: iql, label: 用 AWR 从数据中抽取策略 }
+  - { from: cql, to: iql, label: 从压低分布外 Q 到不查询分布外动作 }
+  - { from: awr, to: dpo, label: 同一个 KL 约束下的闭式最优策略 }
+  - { from: alphazero, to: muzero, label: 规则未知：改在学到的模型里搜索 }
+  - { from: muzero, to: efficientzero, label: 三项改进换样本效率 }
+  - { from: alphazero, to: alphatensor, label: 搜索 + 学习用于张量分解 }
+  - { from: alphazero, to: alphadev, label: 搜索 + 学习用于写汇编 }
+  - { from: alphazero, to: alphaproof, label: 搜索 + 学习用于 Lean 证明 }
+  - { from: alphaproof, to: era, label: 被用作从经验中学习的例证 }

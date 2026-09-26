@@ -1,0 +1,133 @@
+# 蒸馏谱系。维护者：opd。节点说明写“它修了前任的什么问题”。
+id: distillation
+title: 蒸馏谱系：从模仿教师的样本，到在自己的样本上被教师纠正
+description: 自上而下是时间，四条泳道依次是经典源头、目标与散度、工业配方、2026 年的诊断与变体。悬停节点看它修了什么，点击可跳到正文或资料库。
+lanes:
+  - { id: roots, label: 经典 KD 与模仿学习 }
+  - { id: method, label: 目标与散度 }
+  - { id: industry, label: 工业配方 }
+  - { id: frontier, label: 2026 诊断与变体 }
+nodes:
+  - id: dagger
+    label: DAgger
+    date: 2010-11
+    lane: roots
+    note: "在学习者自己访问的状态上请专家标注，把行为克隆随时长二次增长的累积误差降到线性；OPD 的思想源头。"
+    href: "#exposure-bias"
+  - id: hinton-kd
+    label: Hinton KD
+    date: 2015-03
+    lane: roots
+    note: "用教师的软标签（整张概率分布）训练学生，蒸馏由此得名；但数据是固定的。"
+  - id: seq-kd
+    label: Seq-KD
+    date: 2016-06
+    lane: roots
+    note: "直接在教师生成的序列上做最大似然：简单有效，但只在教师走过的状态上学（离线、前向 KL）。"
+    href: "#reverse-kl"
+  - id: imitkd
+    label: ImitKD
+    date: 2020-09
+    lane: roots
+    note: "把自回归蒸馏当作模仿学习，训练中混入学生生成的序列，由教师给出目标；GKD 的直接前身。"
+  - id: minillm
+    label: MiniLLM
+    date: 2023-06
+    lane: method
+    note: "把前向 KL 换成反向 KL，用策略梯度在学生样本上优化；单步分解降方差、教师混合采样防作弊、长度归一化去偏。"
+    href: "#minillm"
+    entry: minillm
+  - id: gkd
+    label: GKD
+    date: 2023-06
+    lane: method
+    note: "统一框架：学生数据比例 λ × 广义 JSD(β)；系统实验表明只用学生样本几乎总是最好，散度选择依任务而定。"
+    href: "#gkd"
+    entry: gkd
+  - id: distillm
+    label: DistiLLM
+    date: 2024-02
+    lane: method
+    note: "skew KL 让损失有界、训练更稳；学生样本进回放池复用，降低在线采样的成本。"
+    href: "#distillm"
+    entry: distillm
+  - id: distillm-2
+    label: DistiLLM-2
+    date: 2025-03
+    lane: method
+    note: "按数据来源换损失：教师样本用 skew KL，学生样本用 skew 反向 KL，形成对比式蒸馏。"
+    href: "#distillm"
+    entry: distillm-2
+  - id: qwen3
+    label: Qwen3
+    date: 2025-05
+    lane: industry
+    note: "强到弱蒸馏：先离线后在线，用 32B/235B 教师批量做小模型；8B 上以约 1/10 的 GPU 时超过 RL。"
+    href: "#industrial"
+    entry: qwen3
+  - id: tm-opd
+    label: TM OPD 博客
+    date: 2025-10
+    lane: industry
+    note: "把 OPD 写成最简 RL 配方：逐 token 反向 KL 的负值当优势、折扣为 0，直接复用 RL 训练栈。"
+    href: "#compute"
+    entry: tm-opd
+  - id: mimo
+    label: MiMo-V2-Flash
+    date: 2025-12
+    lane: industry
+    note: "多教师在线蒸馏 MOPD：分领域训 RL 专家，再合并进一个学生，可叠加结果奖励优势。"
+    href: "#industrial"
+    entry: mimo-v2-flash
+  - id: glm5
+    label: GLM-5
+    date: 2026-02
+    lane: industry
+    note: "顺序做完推理/智能体/通用 RL 后，用前面各阶段的检查点当老师做跨阶段 OPD，找回被覆盖的能力。"
+    href: "#industrial"
+  - id: dsv4
+    label: DeepSeek-V4
+    date: 2026-04
+    lane: industry
+    note: "用 10 个以上领域专家的多教师 OPD 取代混合 RL 阶段，并改用全词表反向 KL 以降低梯度方差。"
+    href: "#industrial"
+  - id: opsd
+    label: OPSD 自蒸馏
+    date: 2026-01
+    lane: frontier
+    note: "老师换成“看过参考答案的自己”，不需要更大的教师；由此衍生出一大批特权信息自蒸馏工作。"
+    href: "#self-distill"
+    entry: self-distilled-reasoner
+  - id: revisiting
+    label: Revisiting OPD
+    date: 2026-03
+    lane: frontier
+    note: "诊断采样 token 式 OPD 在长程任务上的三种失效，给出教师 top-K 截断反向 KL 等修复。"
+    href: "#when-it-fails"
+    entry: revisiting-opd
+  - id: rethinking
+    label: Rethinking OPD
+    date: 2026-04
+    lane: frontier
+    note: "给出成功条件：思维模式兼容且教师有新能力；其实现改进与诊断指标被 MiniCPM5 和 verl 采用。"
+    href: "#when-it-fails"
+    entry: rethinking-opd
+edges:
+  - { from: hinton-kd, to: seq-kd, label: 软标签 → 教师序列 }
+  - { from: seq-kd, to: imitkd, label: 混入学生样本 }
+  - { from: dagger, to: imitkd, label: 专家在学习者状态上标注 }
+  - { from: imitkd, to: gkd, label: 任意散度 + 学生数据比例 λ }
+  - { from: dagger, to: gkd, label: 交互式模仿学习视角 }
+  - { from: seq-kd, to: minillm, label: 前向 KL → 反向 KL }
+  - { from: minillm, to: distillm, label: skew KL + 回放池 }
+  - { from: gkd, to: distillm, label: 降低在线采样成本 }
+  - { from: distillm, to: distillm-2, label: 按数据来源换损失 }
+  - { from: minillm, to: tm-opd, label: 只保留当前项（折扣 0） }
+  - { from: gkd, to: tm-opd, label: 只用学生样本 + 反向 KL }
+  - { from: qwen3, to: tm-opd, label: 复现并量化成本优势 }
+  - { from: tm-opd, to: mimo, label: 多教师 + 结果奖励 }
+  - { from: mimo, to: glm5, label: 旧检查点当老师 }
+  - { from: tm-opd, to: dsv4, label: 10+ 教师、全词表 }
+  - { from: tm-opd, to: opsd, label: 教师 = 看过答案的自己 }
+  - { from: tm-opd, to: revisiting, label: 诊断采样 token 估计 }
+  - { from: tm-opd, to: rethinking, label: 何时成功、为何失败 }

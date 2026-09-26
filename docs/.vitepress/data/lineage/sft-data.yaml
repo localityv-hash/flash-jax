@@ -1,0 +1,149 @@
+id: sft-data
+title: SFT 数据谱系：从“多任务大杂烩”到“蒸馏长推理”
+description: 纵向是时间，四列分别是人工整理的指令数据、模型合成的数据、长 CoT 蒸馏配方和机制分析。悬停或点击节点，看它修了前任的什么问题；节点链接到本页对应小节或资料库条目。
+lanes:
+  - { id: inst, label: 指令数据 }
+  - { id: synth, label: 合成数据 }
+  - { id: longcot, label: 长 CoT 蒸馏 }
+  - { id: theory, label: 理论与分析 }
+nodes:
+  - id: self-instruct
+    label: Self-Instruct
+    date: 2022-12
+    lane: synth
+    note: "用模型自己生成指令与实例，摆脱对人工标注任务集的依赖；代价是噪声大，抽查约一半样本有问题。"
+    href: "#self-instruct-alpaca"
+    entry: self-instruct
+  - id: flan
+    label: Flan 2022
+    date: 2023-01
+    lane: inst
+    note: "把上千个 NLP 任务统一成指令格式，用零样本/少样本/CoT 多模板混合训练；证明模板多样性与任务配比比单纯堆量更关键。"
+    href: "#flan"
+    entry: flan-2022
+  - id: alpaca
+    label: Alpaca
+    date: 2023-03
+    lane: synth
+    note: "沿用 Self-Instruct 流程、换用更强的 text-davinci-003，以不到 500 美元生成 5.2 万条数据，引爆开源对话模型。"
+    href: "#self-instruct-alpaca"
+  - id: lima
+    label: LIMA
+    date: 2023-05
+    lane: inst
+    note: "1000 条精选示范即可对齐 65B 模型：纠正“SFT 数据越多越好”的直觉，提出浅层对齐假说。"
+    href: "#lima"
+    entry: lima
+  - id: magpie
+    label: Magpie
+    date: 2024-06
+    lane: synth
+    note: "不再需要种子任务和提示工程：只喂模板前缀，让对齐模型自己“吐出”用户问题。"
+    href: "#magpie"
+    entry: magpie
+  - id: numinamath
+    label: NuminaMath
+    date: 2024-07
+    lane: synth
+    note: "把 86 万道竞赛数学题统一成 CoT 格式，补上开源推理数据最缺的“题源”。"
+    href: "#math-data"
+    entry: numinamath
+  - id: tulu3
+    label: Tulu 3
+    date: 2024-11
+    lane: inst
+    note: "把 SFT → DPO → RLVR 的数据、代码、评测全部公开，让“完整后训练配方”第一次可复现。"
+    href: "#tulu3"
+    entry: tulu3
+  - id: r1
+    label: R1 冷启动与蒸馏
+    date: 2025-01
+    lane: longcot
+    note: "用数千条可读长 CoT 冷启动 RL，再把拒绝采样得到的约 80 万条数据蒸馏给小模型：长 CoT SFT 成为标配。"
+    href: "#r1-cold-start"
+    entry: deepseek-r1
+  - id: sft-mem
+    label: SFT 记忆·RL 泛化
+    date: 2025-01
+    lane: theory
+    note: "在规则可变的可控任务上说明：SFT 易记住训练规则，RL 更能泛化；但 SFT 仍是稳定输出格式的前置。"
+    href: "#memorize-generalize"
+    entry: sft-memorizes-rl-generalizes
+  - id: s1
+    label: s1
+    date: 2025-01
+    lane: longcot
+    note: "1000 道难、杂、高质量的题就能教会长推理，并用 budget forcing 在推理时控制思考长度。"
+    href: "#small-data"
+    entry: s1
+  - id: limo
+    label: LIMO
+    date: 2025-02
+    lane: longcot
+    note: "把“少即是多”推广到推理：底座知识充足时，817 条精选推理链足以激发复杂推理。"
+    href: "#small-data"
+    entry: limo
+  - id: demystify
+    label: 长 CoT 解密
+    date: 2025-02
+    lane: theory
+    note: "拆解长 CoT 何时出现：长 CoT SFT 抬高上限、让 RL 更易提升；RL 中长度增长需要奖励整形。"
+    href: "#long-cot-analysis"
+    entry: demystifying-long-cot
+  - id: omr
+    label: OpenMath (OMR)
+    date: 2025-04
+    lane: synth
+    note: "从 AoPS 系统挖题，用 R1 与 QwQ 生成数百万条长 CoT 与工具推理轨迹，把竞赛数学数据推到百万级。"
+    href: "#math-data"
+    entry: openmathreasoning
+  - id: llama-nemotron
+    label: Llama-Nemotron
+    date: 2025-05
+    lane: longcot
+    note: "推理/非推理回答混合 SFT 实现推理开关；最大模型在蒸馏后接大规模 RL，部分基准超过教师。"
+    href: "#industrial-recipes"
+    entry: llama-nemotron
+  - id: openthoughts
+    label: OpenThoughts
+    date: 2025-06
+    lane: longcot
+    note: "1000+ 次对照实验把推理数据配方拆到每道工序：每题多采样、题源少而精、选对教师比选最强教师重要。"
+    href: "#openthoughts"
+    entry: openthoughts
+  - id: dft
+    label: DFT
+    date: 2025-08
+    lane: theory
+    note: "从 RL 视角指出 SFT 隐式奖励带 1/π 放大器，用“损失乘以自身概率”一行代码修正，改善泛化。"
+    href: "#dft"
+    entry: dft
+  - id: lora
+    label: LoRA 无悔
+    date: 2025-09
+    lane: theory
+    note: "说明 LoRA 在多数后训练场景可匹配全参：挂满所有层、学习率约为全参 10 倍、RL 用 rank 1 即可。"
+    href: "#lora"
+    entry: lora-without-regret
+  - id: nemotron-math
+    label: Nemotron-Math
+    date: 2025-12
+    lane: synth
+    note: "同一题给出高/中/低三档推理强度的轨迹，教模型“按需想多久”；按长度分桶让 128K 长上下文 SFT 提速 2–3 倍。"
+    href: "#math-data"
+    entry: nemotron-math
+edges:
+  - { from: self-instruct, to: alpaca, label: 换更强教师 }
+  - { from: alpaca, to: magpie, label: 去掉种子与提示 }
+  - { from: flan, to: tulu3, label: 开放全流程 }
+  - { from: lima, to: s1, label: 千条精选 }
+  - { from: lima, to: limo, label: 推理也少即是多 }
+  - { from: numinamath, to: omr, label: 长 CoT 且规模化 }
+  - { from: omr, to: nemotron-math, label: 多档推理强度 }
+  - { from: r1, to: openthoughts, label: 蒸馏配方系统化 }
+  - { from: r1, to: llama-nemotron, label: 蒸馏后再 RL }
+  - { from: s1, to: openthoughts, label: 从 1K 到 1.2M }
+  - { from: r1, to: demystify, label: 拆解长 CoT }
+  - { from: sft-mem, to: dft, label: 修正隐式奖励 }
+  - { from: tulu3, to: lora, label: 指令 SFT 实验集 }
+  - { from: openthoughts, to: lora, label: 推理 SFT 实验集 }

@@ -1,0 +1,136 @@
+# 训练系统（Infra）术语，对应 /lenses/infra 各节。截断重要性采样（truncated-is）由算法视角维护。
+
+- id: colocate
+  term: 训推共置
+  full: Colocated training and inference
+  zh: 训推共置（同卡分时复用）
+  area: rl-llm
+  plain: "训练和生成轮流用同一批 GPU：生成时训练引擎把显存让出来，训练时推理引擎“睡一觉”。"
+  definition: "actor 训练引擎与 rollout 推理引擎部署在同一组 GPU 上分时复用：生成阶段训练侧卸载参数与优化器状态，训练阶段推理侧释放权重与 KV cache（如 vLLM sleep mode），权重经本地重分片或 CUDA IPC 同步。天然严格 on-policy，但生成与训练无法重叠，长尾会让所有卡一起等。"
+  see: [/lenses/infra#colocate]
+
+- id: disaggregated
+  term: 分离式部署
+  full: Disaggregated rollout and training
+  zh: 训推分离
+  area: rl-llm
+  plain: "出题和改卷各用一组显卡，中间靠网络传样本和新权重；两边可以同时干活，但要调好人手比例。"
+  definition: "推理集群与训练集群物理分开，样本经队列或数据缓冲区流向训练端，权重经 NCCL 广播、P2P（Mooncake、NIXL）或共享存储流回推理端。它是异步 RL 的前提，并允许两边独立扩缩、使用不同硬件；代价是要调节两边的 GPU 配比，否则一侧空转。"
+  see: [/lenses/infra#colocate]
+
+- id: hybrid-engine
+  term: Hybrid Engine
+  full: Hybrid Engine / 3D-HybridEngine
+  zh: 混合引擎
+  area: rl-llm
+  plain: "同一份模型在“训练形态”和“推理形态”之间就地变身，不必同时存两份。"
+  definition: "DeepSpeed-Chat 提出、verl 发展为 3D-HybridEngine 的共置技术：同一份 actor 权重在训练并行布局（ZeRO/FSDP 或 Megatron 的 TP/PP/DP）与推理并行布局之间就地重分片，避免显存中同时保存两份完整权重，并减少模式切换时的通信量。"
+  see: [/lenses/infra#colocate]
+
+- id: rollout-engine
+  term: Rollout 引擎
+  full: Rollout / inference engine
+  zh: 推理引擎（采样引擎）
+  area: rl-llm
+  plain: "RL 里专门负责“做题”的推理服务，比训练框架自带的生成函数快得多。"
+  definition: "RL 中负责采样回答的推理服务，如 vLLM、SGLang：依靠连续批处理、分页 KV cache、前缀缓存与 CUDA graph，吞吐远高于训练框架自带的 generate。代价是其数值实现与训练引擎不同，带来训推不一致；为 RL 还需支持在线权重更新、显存释放与请求中止。"
+  see: [/lenses/infra#anatomy]
+
+- id: async-rl
+  term: 异步 RL
+  full: Asynchronous RL
+  zh: 异步强化学习
+  area: rl-llm
+  plain: "出题和改卷同时进行，不再互相等待；代价是改的卷子可能是旧版本模型出的题。"
+  definition: "生成与训练并行执行、训练使用旧版本策略（或多个版本拼接）生成样本的 RL 训练方式。按允许的版本差从小到大有一步重叠、部分 rollout、有界陈旧的全异步与飞行中权重更新等形态，需要配合重要性采样或 decoupled PPO 修正 off-policy 偏差。"
+  see: [/lenses/infra#async]
+
+- id: weight-sync
+  term: 权重同步
+  full: Weight synchronization
+  zh: 权重同步（refit）
+  area: rl-llm
+  plain: "每次训练完，把新模型送到负责生成的推理引擎手里；模型越大，这一步越像搬家。"
+  definition: "训练更新后把新权重送到推理引擎的过程：共置时在本机经 CUDA IPC 或重分片完成，分离时经 NCCL 广播、P2P 或共享存储完成。大模型通常分桶传输、把拷贝与通信流水化，按接收端并行布局只传所需分片，或只传两次同步间的增量。"
+  see: [/lenses/infra#weight-sync]
+
+- id: partial-rollout
+  term: 部分 rollout
+  full: Partial rollout
+  zh: 部分生成（续写式 rollout）
+  area: rl-llm
+  plain: "答不完的长题先交半张卷，下一轮换新老师接着写，别让它拖住全班。"
+  definition: "不等所有轨迹生成完就开始训练：每轮给生成设 token 预算或在权重更新时中断，未完成的轨迹保存下来、下一轮用新权重接着生成（Kimi k1.5、AReaL、APRIL 等）。同一条轨迹因此可能由多个策略版本拼成，训练时需要按 token 记录行为策略的概率。"
+  see: [/lenses/infra#async]
+
+- id: train-infer-mismatch
+  term: 训推不一致
+  full: Training–inference mismatch
+  zh: 训推不一致（rollout-training mismatch）
+  area: rl-llm
+  plain: "同一个模型，推理引擎和训练引擎算出来的概率不一样，于是“自己出的题”其实成了“别人出的题”。"
+  definition: "同一组权重下，推理引擎采样时的概率 μ 与训练引擎重算的概率 π 不相等，来源包括 kernel 与归约顺序、数值精度（如 BF16）、批大小依赖、并行布局、采样截断处理以及 MoE 路由差异。它让名义上的 on-policy 训练变成 off-policy，需要重要性采样修正或从系统上消除。"
+  see: [/lenses/infra#mismatch, /lenses/algorithms#off-policy]
+
+- id: routing-replay
+  term: 路由回放
+  full: Routing Replay（R2 / R3）
+  zh: 路由回放
+  area: rl-llm
+  plain: "MoE 训练时不重新分诊，而是照抄一份现成的分诊记录，保证训练和采样走的是同一批专家。"
+  definition: "MoE RL 中强制训练前向复用参考路由的做法：R2 回放训练引擎用旧策略算出的路由，缓解梯度步之间的路由漂移；R3 回放推理引擎采样时记录的路由，同时消除训推路由差异。训练端仍用自身 router logits 在回放的专家集合上归一化，路由器照常得到梯度。"
+  see: [/lenses/infra#moe]
+
+- id: fsdp
+  term: FSDP
+  full: Fully Sharded Data Parallel
+  zh: 全分片数据并行
+  area: rl-llm
+  plain: "把模型参数、梯度和优化器状态切碎分给每张卡，用到哪层临时拼起来，用完就扔。"
+  definition: "PyTorch 原生的数据并行方案：参数、梯度与优化器状态分片到各卡，前向与反向时按层 all-gather 参数、用完释放（思路同 DeepSpeed ZeRO-3）；FSDP2 基于 DTensor 按参数分片。易用且兼容 Hugging Face 模型，是 verl、TRL、prime-rl 等的常用训练后端。"
+  see: [/lenses/infra#frameworks]
+
+- id: megatron
+  term: Megatron-LM
+  full: Megatron-LM / Megatron-Core
+  zh: Megatron 训练框架
+  area: rl-llm
+  plain: "英伟达的大模型训练框架，能把一个模型同时按层、按矩阵、按专家切到几千张卡上。"
+  definition: "NVIDIA 的大模型训练框架：组合张量并行、流水线并行、专家并行、上下文并行与数据并行，适合百 B 级稠密模型与大 MoE，通常需要把 Hugging Face 权重转换为其格式。slime、NeMo-RL、ROLL 以及 verl 的 Megatron 后端都基于它。"
+  see: [/lenses/infra#frameworks]
+
+- id: long-tail-rollout
+  term: 长尾 rollout
+  full: Long-tail rollout
+  zh: 生成长尾
+  area: rl-llm
+  plain: "一桌菜上得多快取决于最慢的那道：少数超长回答让整批 GPU 陪着空等。"
+  definition: "同一批 rollout 中少数超长回答决定了生成阶段的墙钟时间：decode 访存受限，批次随短回答结束而变小，GPU 利用率迅速下降，同步训练必须等最长的那条。常见对策有异步训练、部分 rollout、超额采样后中止与按长度调度。"
+  see: [/lenses/infra#long-tail]
+
+- id: batch-invariance
+  term: 批不变性
+  full: Batch invariance
+  zh: 批不变性
+  area: rl-llm
+  plain: "不管和谁拼在一个批里算，同一个输入得到的结果都一模一样。"
+  definition: "kernel 对单个样本的输出不随同批样本的数量与内容变化，要求固定归约顺序（如固定 split-KV 大小、不做随批大小变化的 split-K）。推理引擎具备批不变性后，温度为 0 的输出可复现，这也是训推比特一致、训推 KL 严格为 0 的前提。"
+  see: [/lenses/infra#mismatch]
+
+- id: in-flight-update
+  term: 飞行中权重更新
+  full: In-flight weight update
+  zh: 在线热更新权重
+  area: rl-llm
+  plain: "学生答到一半，老师把新的答题要点塞过来，学生不停笔，接着往下写。"
+  definition: "推理服务器在生成过程中直接加载新权重，不中止也不丢弃正在生成的序列；已算好的 KV cache 可以沿用（PipelineRL）或在更新后重算（AReaL 的可中断 rollout）。它让异步训练的数据尽量新鲜，但同一条序列会混有多个策略版本生成的 token。"
+  see: [/lenses/infra#async]
+
+- id: staleness
+  term: 策略陈旧度
+  full: Policy staleness
+  zh: 数据陈旧度
+  area: rl-llm
+  plain: "拿来训练的样本，是几个版本之前的模型生成的。越旧越便宜，但越不准。"
+  definition: "训练样本的生成策略版本落后于当前训练策略的步数；异步系统用上限（如 AReaL 的 η）控制它。陈旧度越大吞吐越高，但重要性权重方差与目标函数近似误差也越大，需要 decoupled PPO 或 IS 修正配合。"
+  see: [/lenses/infra#async]

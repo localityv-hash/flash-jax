@@ -1,0 +1,129 @@
+id: rl-systems
+title: RL 训练系统：从同卡切换到异步流水与数值对齐
+description: 左两列是推理引擎与同步 / 共置框架，第三列是异步化路线，最右列是 2025 年下半年集中出现的训推不一致与 MoE 路由稳定性工作。悬停或点击节点，查看它修了前任的什么问题。
+lanes:
+  - { id: engine, label: 推理引擎 }
+  - { id: sync, label: 同步 / 共置框架 }
+  - { id: async, label: 异步框架 }
+  - { id: numerics, label: 数值与稳定性 }
+nodes:
+  - id: deepspeed-chat
+    label: DeepSpeed-Chat
+    date: 2023-04
+    lane: sync
+    note: "Hybrid Engine：同一份 actor 在训练与推理模式间切换，把 RLHF 做成一键可跑的系统。"
+    entry: deepspeed-chat
+  - id: vllm
+    label: vLLM
+    date: 2023-06
+    lane: engine
+    note: "分页 KV cache + 连续批处理，生成吞吐从训练框架的 generate 水平跃升到服务级。"
+    entry: vllm
+  - id: openrlhf
+    label: OpenRLHF
+    date: 2023-08
+    lane: sync
+    note: "Ray 编排多个模型、vLLM 专职生成：把生成从训练框架里拆了出去。"
+    entry: openrlhf
+  - id: sglang
+    label: SGLang
+    date: 2023-12
+    lane: engine
+    note: "RadixAttention 跨请求复用前缀，同题多采样与多轮 agent 更省。"
+    entry: sglang
+  - id: verl
+    label: verl
+    date: 2024-09
+    lane: sync
+    note: "混合控制器 + 3D-HybridEngine 就地重分片：共置方案做到灵活又高效。"
+    entry: verl
+  - id: async-rlhf
+    label: 异步 RLHF
+    date: 2024-10
+    lane: async
+    note: "证明生成与训练重叠、用上一步策略的样本训练在 LLM 上可行。"
+    entry: async-rlhf
+  - id: kimi-k1-5
+    label: k1.5 部分 rollout
+    date: 2025-01
+    lane: async
+    note: "每轮生成设 token 预算，超长轨迹存起来下一轮续写，切掉长尾。"
+    entry: kimi-k1-5
+  - id: pipelinerl
+    label: PipelineRL
+    date: 2025-04
+    lane: async
+    note: "飞行中权重更新：每步训练后立即推送新权重，生成不停、旧 KV 沿用。"
+    entry: pipelinerl
+  - id: areal
+    label: AReaL
+    date: 2025-05
+    lane: async
+    note: "全异步 + 陈旧度上限 η + decoupled PPO，异步从工程技巧变成有算法护栏的方案。"
+    entry: areal
+  - id: llamarl
+    label: LlamaRL
+    date: 2025-05
+    lane: async
+    note: "Meta 的单控制器全异步框架，在 405B 策略模型上相对 DeepSpeed-Chat 类同步系统大幅提速。"
+    entry: llamarl
+  - id: slime
+    label: slime
+    date: 2025-06
+    lane: sync
+    note: "Megatron + SGLang 原生，共置 / 分离一键切换，支撑 GLM-4.5 起的 RL 训练。"
+    entry: slime
+  - id: tis-offpolicy
+    label: TIS
+    date: 2025-08
+    lane: numerics
+    note: "点破高效框架“暗中 off-policy”，用截断重要性采样补偿训推差。"
+    entry: tis-offpolicy
+  - id: tm-nondeterminism
+    label: 批不变推理
+    date: 2025-09
+    lane: engine
+    note: "非确定性来自归约顺序随批大小变化；批不变 kernel 让训推 KL 可以严格为 0。"
+    entry: tm-nondeterminism
+  - id: rl-collapse-mismatch
+    label: 序列级 MIS
+    date: 2025-09
+    lane: numerics
+    note: "token 级修正有偏、序列级方差大：超界整条丢弃，并用几何平均避开长度陷阱。"
+    entry: rl-collapse-mismatch
+  - id: rollout-routing-replay
+    label: R3 路由回放
+    date: 2025-10
+    lane: numerics
+    note: "MoE 训推路由不一致是崩溃主因之一：训练复用推理时记录的专家选择。"
+    entry: rollout-routing-replay
+  - id: fp16-mismatch
+    label: FP16 替代 BF16
+    date: 2025-10
+    lane: numerics
+    note: "把根源归到 BF16 舍入误差，训练与推理统一用 FP16 即可大幅降低训推差。"
+    entry: fp16-mismatch
+  - id: true-on-policy
+    label: 训推比特一致
+    date: 2025-11
+    lane: engine
+    note: "vLLM×TorchTitan、slime/Miles 用批不变 kernel 与统一算子让训推 KL 严格为 0，代价是吞吐。"
+    href: "#mismatch"
+  - id: stabilizing-rl-llm
+    label: 一阶近似框架
+    date: 2025-12
+    lane: numerics
+    note: "Qwen：token 级目标只在训推差与陈旧度都小时成立，统一解释 IS 修正、裁剪与路由回放。"
+    entry: stabilizing-rl-llm
+edges:
+  - { from: deepspeed-chat, to: verl, label: 同卡切换→就地重分片 }
+  - { from: vllm, to: openrlhf, label: 生成交给推理引擎 }
+  - { from: sglang, to: slime, label: SGLang 原生 }
+  - { from: async-rlhf, to: pipelinerl, label: 重叠→飞行中更新 }
+  - { from: async-rlhf, to: areal, label: 一步→有界陈旧 }
+  - { from: kimi-k1-5, to: areal, label: 部分 rollout→可中断续写 }
+  - { from: tis-offpolicy, to: rl-collapse-mismatch, label: token 级→序列级 }
+  - { from: tis-offpolicy, to: fp16-mismatch, label: 算法补偿→消除根源 }
+  - { from: tm-nondeterminism, to: true-on-policy, label: 批不变 kernel }
+  - { from: rollout-routing-replay, to: stabilizing-rl-llm, label: R2/R3 纳入统一解释 }
+  - { from: tis-offpolicy, to: stabilizing-rl-llm, label: IS 修正的理论位置 }

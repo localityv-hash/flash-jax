@@ -1,0 +1,109 @@
+# Mid-training 专题（/topics/mid-training）的术语。字段按纯文本渲染，公式用 Unicode 书写。
+
+- id: mid-training
+  term: Mid-training
+  full: Mid-training / Midtraining
+  zh: 中训练
+  area: mid-training
+  plain: "预训练的“收尾加餐”：主体预训练之后、SFT 与 RL 之前，用一批精选数据（高质量网页、数学代码、问答、推理轨迹）继续做下一个词预测，给后训练打地基。"
+  definition: "位于大规模预训练与后训练之间的阶段：目标仍是 next-token 交叉熵，但数据换成规模中等（约 10⁹–10¹² token）、面向目标能力的高质量混合（常含指令与推理格式数据），并常伴随学习率退火、上下文扩展与模型汤。与继续预训练的区别在于它通常与通用数据混合，服务于后续的后训练而非单一领域。"
+  see: [/topics/mid-training#definition]
+
+- id: continued-pretraining
+  term: 继续预训练
+  full: Continued Pretraining (CPT)
+  zh: 继续预训练 / 持续预训练
+  area: mid-training
+  plain: "拿一个训好的模型，接着用新语料做预训练，常用来补领域知识（医学、代码）、新语言或智能体行为。"
+  definition: "从已有检查点出发，以同样的语言建模目标在新语料上继续训练。与中训练相比，它往往只用或主要用目标领域数据，更容易遗忘通用能力，常用混入回放数据、重新预热再衰减学习率来缓解。智能体继续预训练（Agentic CPT）是它在智能体轨迹数据上的变体。"
+  see: [/topics/mid-training#definition, /topics/mid-training#agentic]
+
+- id: annealing
+  term: 退火
+  full: Learning-Rate Annealing / Cooldown
+  zh: 学习率退火（冷却）
+  area: mid-training
+  plain: "训练最后把学习率降下来，让模型从“到处晃”变成“稳稳落进谷底”；这段时间喂什么数据，影响格外大。"
+  definition: "训练末段把学习率逐步降到很小（常降到 0 或峰值的约 10%），损失随之明显下降。常与数据切换结合：Llama 3 在最后 40M token 线性退火并上采样最高质量数据，OLMo 2 与 Olmo 3 的中训练就是一次带新配比、学习率线性降到 0 的退火。也可以用“短退火”低成本评估新数据源。"
+  see: [/topics/mid-training#annealing]
+
+- id: wsd
+  term: WSD
+  full: Warmup-Stable-Decay
+  zh: 预热-稳定-衰减调度
+  area: mid-training
+  plain: "学习率先升、再长时间不变、最后快速下降；因为不必提前定总步数，随时可以从中途“分叉”出一个收尾版本。"
+  definition: "η(s) = η_max·s/W（s < W）；η_max（W ≤ s < T）；η_max·f(s−T)（T ≤ s ≤ S），f 从 1 单调递减。MiniCPM 提出，发现衰减段约占总 token 的 10% 即可。优点是可复用稳定期检查点、便于缩放律实验、便于在衰减期换数据；但 GLM-4.5、Kimi K3 各自的对照实验更偏向余弦调度。"
+  see: [/topics/mid-training#annealing]
+
+- id: data-mixture
+  term: 数据配比
+  full: Data Mixture
+  zh: 数据配比 / 混合比例
+  area: mid-training
+  plain: "每批训练数据里网页、代码、数学、问答各占多少；配比随训练阶段变化，是中训练最主要的“旋钮”。"
+  definition: "训练语料中各数据源（或类别）的采样权重，它同时决定每个源被重复多少轮。中训练通常在退火期上调代码、数学、QA、指令与推理数据的权重，同时保留一部分通用数据防遗忘；配比常用小模型消融或“微退火”（microanneal）逐项确定。"
+  see: [/topics/mid-training#data]
+
+- id: long-context-extension
+  term: 长上下文扩展
+  full: Long-Context Extension
+  zh: 长上下文扩展
+  area: mid-training
+  plain: "预训练时只见过几千个 token 的模型，要学会读几十万个 token：先改位置编码的“刻度”，再用少量长文本训练去适应。"
+  definition: "在短上下文预训练之后，修改 RoPE（调大基频、位置插值或 YaRN），并用长序列数据（天然长文档 + 一定比例短数据）继续训练，把可用上下文从 4K–8K 分阶段扩到 32K–1M。验收要同时看短文本能力是否恢复、目标长度上的下游任务是否达标。"
+  see: [/topics/mid-training#long-context]
+
+- id: rope
+  term: RoPE
+  full: Rotary Position Embedding
+  zh: 旋转位置编码
+  area: mid-training
+  plain: "把每个位置编码成一组转速不同的指针角度，两个词之间的注意力只取决于它们的相对距离。"
+  definition: "把 query 与 key 的第 d 对维度按位置 m 旋转角度 m·θ_d，θ_d = b^(−2d/|D|)（b 常取 10000），使内积只依赖 m−n。第 d 对维度的波长 λ_d = 2π/θ_d；位置超出训练长度时，低频维度会转到训练中没见过的角度，这是直接外推失败的根源。"
+  see: [/topics/mid-training#long-context]
+
+- id: abf
+  term: ABF
+  full: Adjusted Base Frequency
+  zh: 调大 RoPE 基频
+  area: mid-training
+  plain: "把 RoPE 的基频 b 调大，所有“指针”都转得更慢，同样的角度范围就能覆盖更长的距离。"
+  definition: "把 RoPE 的 b 从 10,000 调大后在长序列上继续训练：Qwen2.5、Qwen3 与 GLM-4.5 在扩到 32K 时调到 1,000,000，ProLong 用 8×10⁶ 与 1.28×10⁸，Llama 3 预训练就用 500,000。它整体降低各维旋转频率，是最简单常用的扩展手段，常与 YaRN 叠加用于推理期外推。"
+  see: [/topics/mid-training#long-context]
+
+- id: yarn
+  term: YaRN
+  full: Yet another RoPE extensioN
+  zh: YaRN 位置编码扩展
+  area: mid-training
+  plain: "扩上下文时区别对待转得快和转得慢的“指针”：快的不动，慢的按比例放慢，再让注意力稍微“专注”一点。"
+  definition: "设扩展倍数 s = L′/L、r(d) = L/λ_d。r < α 的低频维度频率除以 s（纯插值），r > β 的高频维度保持不变，中间按斜坡 γ(r) 线性混合（NTK-by-parts）；同时把注意力 logit 乘以 (0.1·ln s + 1)²。Llama 系推荐 α = 1、β = 32；DeepSeek-V3 取 s = 40。"
+  see: [/topics/mid-training#yarn]
+
+- id: quality-classifier
+  term: 质量分类器
+  full: Quality Classifier
+  zh: 数据质量分类器
+  area: mid-training
+  plain: "请大模型给一小批文档打分，再训练一个便宜的小模型按同样标准给海量文档打分，用来筛选或分桶。"
+  definition: "用强模型标注（如 FineWeb-Edu 让 Llama-3-70B-Instruct 给教育价值打 0–5 分）或以高质量文本为正样本（如 DCLM 以 OpenHermes 2.5 与 ELI5 为正例训练 fastText），训练轻量分类器给全量语料打分，再按分数过滤、分桶或决定上采样倍数。Nemotron-CC 用多个分类器集成分桶。"
+  see: [/topics/mid-training#data]
+
+- id: rephrasing
+  term: 改写
+  full: Rephrasing / Rewriting
+  zh: 数据改写
+  area: mid-training
+  plain: "请模型把原文换种说法、换个风格重写，或改成问答、学习笔记；同一知识多几种写法，模型学得更牢。"
+  definition: "用 LLM 在保持事实的前提下重写预训练文本（风格、视角、格式），以提升 token 利用率或“救回”低质量数据。Kimi K2 在 SimpleQA 上发现“改写 10 次、各训 1 轮”优于“原文重复 10 轮”；Physics of LMs 3.1 从机制上解释了知识为何需要多种表述才能被提取。需做保真校验，防止引入幻觉。"
+  see: [/topics/mid-training#rephrasing]
+
+- id: model-soup
+  term: 模型汤
+  full: Model Soup / Checkpoint Averaging
+  zh: 模型汤（权重平均）
+  area: mid-training
+  plain: "同一个起点、换几种数据顺序各训一遍，再把几份权重直接取平均，结果往往比其中任何一份都好。"
+  definition: "对若干共享初始化、落在同一损失盆地的模型或检查点做逐参数平均。中训练里常见两种用法：OLMo 2 与 Olmo 3 把多次不同数据顺序的退火结果平均；Llama 3 在退火期对检查点做 Polyak 平均。直观上它是在盆地内进一步“降噪”，作用与继续退火相近。"
+  see: [/topics/mid-training#soup]

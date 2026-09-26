@@ -1,0 +1,521 @@
+# 训练系统横切视角（/lenses/infra）的条目：推理引擎、RL 训练框架、异步方案，
+# 以及 2025 年下半年集中出现的训推不一致（mismatch）与 MoE 路由稳定性工作。
+# 事实来源：各仓库 README / 文档、论文 arXiv 页面、作者博客；不手填任何指标。
+
+# ---------- 推理引擎 ----------
+
+- id: vllm
+  title: "Efficient Memory Management for Large Language Model Serving with PagedAttention"
+  short: vLLM
+  kind: paper
+  org: UC Berkeley
+  authors: "Woosuk Kwon et al."
+  date: 2023-06
+  venue: SOSP 2023
+  arxiv: "2309.06180"
+  repo: vllm-project/vllm
+  links:
+    - { label: 发布博客, url: https://blog.vllm.ai/2023/06/20/vllm.html }
+    - { label: Sleep Mode 文档, url: https://github.com/vllm-project/vllm/blob/main/docs/features/sleep_mode.md }
+  areas: [rl-llm]
+  facets: [infra]
+  tier: must
+  evidence: [industrial, adopted, open-source, community]
+  evidence_note: "生产级开源推理引擎，也是 RL 框架最常用的 rollout 后端：OpenRLHF、verl、TRL、prime-rl、NeMo-RL、SkyRL 都用它生成样本；为 RL 专门提供了 sleep mode（释放权重与 KV cache）、在线权重更新接口和批不变推理模式（VLLM_BATCH_INVARIANT）。"
+  summary: "用分页式 KV cache（PagedAttention）消除显存碎片并支持连续批处理，同等延迟下吞吐比当时的主流系统高 2–4 倍；在 RL 中负责生成 rollout，并通过 sleep/wake 与在线权重更新和训练引擎配合。"
+  plain: "像操作系统管内存那样按页管理 KV cache，一张卡能同时服务更多请求。RL 里它就是“做题”的那一半：负责又快又多地生成回答。"
+  takeaways:
+    - "共置训练时开启 sleep mode：全量同步权重用 level 2（直接丢弃权重与 KV），只更新 LoRA 等部分权重时用 level 1。"
+    - "要做重要性采样修正，就让引擎返回经温度与截断处理后的 logprob（processed logprobs），否则修正的分母本身就是错的。"
+  tags: [推理引擎, PagedAttention, rollout]
+
+- id: sglang
+  title: "SGLang: Efficient Execution of Structured Language Model Programs"
+  short: SGLang
+  kind: paper
+  org: LMSYS（Stanford · UC Berkeley 等）
+  authors: "Lianmin Zheng et al."
+  date: 2023-12
+  arxiv: "2312.07104"
+  repo: sgl-project/sglang
+  links:
+    - { label: 确定性推理与可复现 RL, url: https://lmsys.org/blog/2025-09-22-sglang-deterministic/ }
+  areas: [rl-llm, agentic-rl]
+  facets: [infra]
+  tier: must
+  evidence: [industrial, adopted, open-source, community]
+  evidence_note: "生产级推理引擎；slime 只用 SGLang 做 rollout，支撑智谱 GLM-4.5 起的 RL 训练；AReaL 以它为默认推理后端，verl、Miles 深度集成。为 RL 新增了 /abort_request（与 AReaL 团队共同设计，用于动态采样与部分 rollout）、分桶权重更新、返回 MoE 路由专家与确定性推理。"
+  summary: "以 RadixAttention 在请求之间自动复用 KV 前缀，配合高效调度与结构化生成；同题多采样与多轮 agent 的前缀高度重叠，使它成为 RL rollout 的主流引擎之一。"
+  plain: "同一道题采样 8 次、多轮对话每轮都带着前文——这些重复的开头只算一次、大家共用，生成自然就快了。"
+  takeaways:
+    - "多轮 agent rollout 配合会话亲和路由，让同一条轨迹的各轮落在同一实例上复用前缀缓存。"
+    - "需要动态采样或部分 rollout 时，用 abort 接口中止请求并回收已生成内容，而不是等整批跑完。"
+  tags: [推理引擎, RadixAttention, rollout]
+
+# ---------- RL 训练框架 ----------
+
+- id: deepspeed-chat
+  title: "DeepSpeed-Chat: Easy, Fast and Affordable RLHF Training of ChatGPT-like Models at All Scales"
+  short: DeepSpeed-Chat
+  kind: report
+  org: Microsoft DeepSpeed
+  authors: "Zhewei Yao et al."
+  date: 2023-04
+  arxiv: "2308.01320"
+  url: https://github.com/deepspeedai/DeepSpeedExamples/tree/master/applications/DeepSpeed-Chat
+  areas: [rl-llm]
+  facets: [infra]
+  tier: rec
+  evidence: [industrial, open-source, community]
+  evidence_note: "微软 DeepSpeed 团队的生产级系统，2023 年开源后是 RLHF 系统的早期参照；LlamaRL 论文仍以“DeepSpeed-Chat 类系统”为对比基线。它的 Hybrid Engine 是后来训推共置设计的源头之一。如今新项目已很少直接采用，作为历史节点收录。"
+  summary: "端到端复现 InstructGPT 三阶段（SFT、奖励模型、PPO）；Hybrid Engine 让同一份 actor 权重在 ZeRO 训练模式与张量并行推理模式之间切换，缓解 PPO 生成阶段的低效。"
+  plain: "第一批把 ChatGPT 式 RLHF 做成“一键训练”的开源系统：同一套显卡一会儿当训练机，一会儿切成推理模式出题。"
+  takeaways:
+    - "读新框架的共置设计时拿 Hybrid Engine 当参照：核心问题始终是模式切换时权重如何重分片、显存如何腾挪。"
+  tags: [RLHF, Hybrid Engine, 历史]
+
+- id: openrlhf
+  title: "OpenRLHF: An Easy-to-use, Scalable and High-performance RLHF Framework"
+  short: OpenRLHF
+  kind: paper
+  org: OpenRLHF 社区
+  authors: "Jian Hu et al."
+  date: 2023-08
+  arxiv: "2405.11143"
+  repo: OpenRLHF/OpenRLHF
+  areas: [rl-llm]
+  facets: [infra]
+  tier: must
+  evidence: [adopted, open-source, community]
+  evidence_note: "最早把 Ray 调度与 vLLM 生成结合的开源 RLHF 框架；阶跃星辰与清华的 Open-Reasoner-Zero 明确基于它构建，HKUST 的 R1-Zero 小模型复现、LMM-R1、MARTI 等以它为底座或 fork。提供共置（hybrid engine + sleep）、异步、异步 + 部分 rollout 三种模式，内置截断式与掩码式 IS 修正。"
+  summary: "用 Ray 把 actor、critic、奖励与参考模型调度到不同 GPU，vLLM 生成、DeepSpeed ZeRO-3 训练，经 NCCL 或 CUDA IPC 同步权重；后续加入共置、异步流水与 agent 执行器。"
+  plain: "把 RLHF 里“出题、打分、改模型”的几个角色拆给不同显卡组，用 Ray 当调度员；卡不够时也能让它们挤在同一组卡上轮流干活。"
+  takeaways:
+    - "验证新算法先用 --train.colocate_all 的共置模式（严格 on-policy），确认收敛后再打开异步追求吞吐。"
+    - "异步模式下用队列长度控制 off-policy 程度，并同时打开 token 级 IS 修正。"
+  builds_on: [vllm]
+  tags: [Ray, vLLM, DeepSpeed, RLHF]
+
+- id: trl
+  title: "TRL: Transformers Reinforcement Learning"
+  short: TRL
+  kind: project
+  org: Hugging Face
+  date: 2020-03
+  repo: huggingface/trl
+  url: https://huggingface.co/docs/trl/index
+  areas: [rl-llm, sft]
+  facets: [infra]
+  tier: rec
+  evidence: [industrial, open-source, community]
+  evidence_note: "Hugging Face 官方后训练库，SFTTrainer、DPOTrainer、GRPOTrainer 被大量教程与开源复现（如 Open-R1）使用；vLLM 生成支持共置（默认）与独立 server 两种模式，server 模式经 NCCL 推送权重，并对 vLLM 生成默认开启截断重要性采样修正训推差异。"
+  summary: "基于 Transformers 与 Accelerate 的后训练库，覆盖 SFT、DPO、GRPO、RLOO 等；用 vLLM 加速在线生成，内置训推差异监控与 TIS/MIS 修正，适合中小规模实验与教学。"
+  plain: "Hugging Face 生态里最顺手的后训练工具箱：几行代码就能跑 SFT、DPO 或 GRPO；规模上去以后再换专门的大规模框架。"
+  takeaways:
+    - "单机到几台机器的小模型实验首选；上百卡或大 MoE 时迁移到 verl、slime 等支持 Megatron 的框架。"
+    - "盯住 sampling/sampling_logp_difference 这类指标：它持续上升说明训推差异在变大。"
+  tags: [GRPO, DPO, SFT, vLLM]
+
+- id: verl
+  title: "HybridFlow: A Flexible and Efficient RLHF Framework"
+  short: verl
+  kind: paper
+  org: 字节跳动 Seed · 香港大学
+  authors: "Guangming Sheng et al."
+  date: 2024-09
+  venue: EuroSys 2025
+  arxiv: "2409.19256"
+  repo: verl-project/verl
+  url: https://verl.readthedocs.io/en/latest/
+  areas: [rl-llm, agentic-rl]
+  facets: [infra]
+  tier: must
+  evidence: [industrial, adopted, ablation, open-source, community]
+  evidence_note: "字节 Seed 用它训练 Doubao-1.5-pro 的 RL 预览模型与 Seed-Thinking-v1.5，DAPO、VAPO 基于它；昆仑万维 Skywork-OR1 用其 fork 训练；美团贡献了 one-step-off 与全异步训练器，Mind Lab 用它做万亿参数模型的 LoRA RL。社区最活跃的开源 RL 框架之一，2026 年迁入 verl-project 组织。"
+  summary: "混合控制器编程模型：单控制器编排数据流、多控制器执行计算；3D-HybridEngine 在训练与生成间就地重分片 actor 权重。后端覆盖 FSDP/Megatron × vLLM/SGLang，并扩展出异步训练与 agent loop。"
+  plain: "算法流程写在一个“总指挥”脚本里，繁重的计算交给分布在各卡上的工人；同一份模型在训练形态和推理形态之间就地变身，不必各存一份。"
+  takeaways:
+    - "从同步共置起步：先跑通官方 GRPO/DAPO 示例，再按 rollout 耗时占比决定是否切到 one-step-off 或 fully_async。"
+    - "打开 rollout correction 的诊断指标；训推差异升高时先用 token 级 TIS，长序列上恶化再换序列级掩码。"
+  builds_on: [deepspeed-chat]
+  tags: [HybridFlow, FSDP, Megatron, 异步]
+
+- id: nemo-rl
+  title: "NeMo RL: A Scalable and Efficient Post-Training Library"
+  short: NeMo-RL
+  kind: project
+  org: NVIDIA
+  date: 2025-03
+  repo: NVIDIA-NeMo/RL
+  url: https://docs.nvidia.com/nemo/rl/latest/index.html
+  areas: [rl-llm]
+  facets: [infra]
+  tier: rec
+  evidence: [industrial, open-source]
+  evidence_note: "NVIDIA 用它训练 Nemotron 3 Nano（30B-A3B）并声明 Nemotron-3-Super、Nemotron-3-Ultra 的后训练也基于它，仓库附复现指南；支持 DTensor 与 Megatron 两类训练后端、vLLM / Megatron 推理 / SGLang 三类生成后端，以及带轨迹年龄上限的 Async GRPO 与 router replay。"
+  summary: "NVIDIA 的 Ray 编排后训练库：DTensor（FSDP2 等）与 Megatron Core 双训练后端，共置时经 IPC、分离时经 NCCL 广播或分片到分片的重分发同步权重；支持 GRPO、DAPO、在线蒸馏与异步训练。"
+  plain: "英伟达自家的 RL 训练框架，Nemotron 系列就是用它训的；在 NVIDIA 硬件与 Megatron 生态里最省心。"
+  takeaways:
+    - "用 Async GRPO 时从 max_trajectory_age_steps=1 起步，并按文档要求打开重要性采样修正。"
+  tags: [Megatron, DTensor, Nemotron]
+
+- id: slime
+  title: "slime: An SGLang-Native Post-Training Framework for RL Scaling"
+  short: slime
+  kind: project
+  org: 智谱 Z.ai · 清华 THUDM
+  date: 2025-06
+  repo: THUDM/slime
+  url: https://lmsys.org/blog/2025-07-09-slime/
+  links:
+    - { label: 文档, url: https://thudm.github.io/slime/ }
+    - { label: Miles（RadixArk 基于 slime 的企业版）, url: https://github.com/radixark/miles }
+  areas: [rl-llm, agentic-rl]
+  facets: [infra]
+  tier: must
+  evidence: [industrial, adopted, open-source, community]
+  evidence_note: "官方 README 列为 GLM-4.5、4.6、4.7 与 GLM-5 系列的 RL 框架；RadixArk 的 Miles、vLLM 项目的 vime、RedAI Infra 的 Relax、阿里 Accio 的 Dressage 等都构建在 slime 之上；与 SGLang 团队合作实现了确定性推理下的可复现 RL。"
+  summary: "Megatron 训练 + SGLang 推理的原生组合，两端参数直通；一个开关在共置与分离之间切换，rollout 以 server 模式经 router 暴露，自定义生成函数即可接入多轮工具调用、沙箱与全异步 rollout。"
+  plain: "只做一件事并做到极致：训练用 Megatron、生成用 SGLang，中间用数据缓冲区连起来；想训 agent，就把“怎么生成数据”这一步换成你自己的函数。"
+  takeaways:
+    - "大 MoE、需要 Megatron 全套并行（TP/PP/EP/CP）时优先考虑；调性能先用 --debug-rollout-only 与 --debug-train-only 分别压测两端。"
+    - "agent 场景让环境直接调用 router 暴露的 OpenAI 兼容接口，不要把环境逻辑塞进训练循环。"
+  builds_on: [sglang]
+  tags: [Megatron, SGLang, GLM, agentic RL]
+
+- id: areal
+  title: "AReaL: A Large-Scale Asynchronous Reinforcement Learning System for Language Reasoning"
+  short: AReaL
+  kind: paper
+  org: 蚂蚁集团 AReaL 团队 · 清华大学交叉信息研究院
+  authors: "Wei Fu et al."
+  date: 2025-05
+  venue: NeurIPS 2025
+  arxiv: "2505.24298"
+  repo: areal-project/AReaL
+  links:
+    - { label: v0.3 技术博客, url: https://github.com/areal-project/AReaL/blob/main/blog/AReaL_v0_3.md }
+    - { label: AReaL 2.0 技术报告, url: https://arxiv.org/abs/2607.01120 }
+  areas: [rl-llm, agentic-rl]
+  facets: [infra, algorithm]
+  tier: must
+  evidence: [industrial, adopted, ablation, open-source, community]
+  evidence_note: "蚂蚁用它训练 ASearcher 搜索智能体与 AReaL-SEA 等模型；verl 的 one-step-off 实现以 AReaL 为参考，其全异步训练器在“部分 rollout + 训练端重算 logprob”配置下即近似 AReaL 的 decoupled PPO；CAMEL-AI 的终端智能体 SETA 用 AReaL 训练。论文给出吞吐、陈旧度与目标函数的消融。"
+  summary: "把生成与训练彻底解耦到两组 GPU：rollout 可被权重更新打断，丢弃旧 KV cache 后用新权重续写；用陈旧度上限 η 控制样本版本差，并以 decoupled PPO 区分行为策略与近端策略，相对同步系统吞吐最高约 2.57 倍。"
+  plain: "出题的人一直出、改卷的人攒够一批就改；卷子不能太旧（最多落后 η 个版本），改的时候还要按“当时是谁出的题”做修正。"
+  takeaways:
+    - "从 η=1（相当于一步重叠）开始调，逐步放大，每次都对照同步基线的收敛曲线。"
+    - "异步时一定分开行为策略与近端策略：裁剪锚定在训练端重算的近端策略上，行为策略与它的差异用重要性权重修正。"
+  builds_on: [async-rlhf]
+  tags: [异步 RL, 陈旧度, decoupled PPO]
+
+- id: roll
+  title: "Reinforcement Learning Optimization for Large-Scale Learning: An Efficient and User-Friendly Scaling Library"
+  short: ROLL
+  kind: paper
+  org: 阿里巴巴（淘天集团 · AI Engine 团队）
+  authors: "Weixun Wang et al."
+  date: 2025-06
+  arxiv: "2506.06122"
+  repo: alibaba/ROLL
+  links:
+    - { label: ROLL Flash（异步）, url: https://arxiv.org/abs/2510.11345 }
+    - { label: RollPacker（同步训练的长尾）, url: https://arxiv.org/abs/2509.21009 }
+    - { label: Let It Flow（ROME 模型）, url: https://arxiv.org/abs/2512.24873 }
+  areas: [rl-llm, agentic-rl]
+  facets: [infra]
+  tier: rec
+  evidence: [industrial, ablation, open-source]
+  evidence_note: "阿里淘天未来生活实验室与 AI Engine 团队开发，阿里的 ROME 智能体模型在其 ROCK + ROLL 生态中训练；后续论文 ROLL Flash 报告异步化在 RLVR 上最高 2.24 倍、agentic 任务上最高 2.72 倍加速，RollPacker 处理同步训练的长尾；文档对 R3 路由回放的实现与限制写得很细。"
+  summary: "基于 Ray 的多角色 RL 库：训练后端覆盖 Megatron-Core、DeepSpeed、FSDP2，推理支持 vLLM 与 SGLang；提供 RLVR、agentic、蒸馏流水线，ROLL Flash 进一步加入 rollout 与训练解耦的异步训练。"
+  plain: "阿里开源的一站式 RL 训练库：数学题、多轮 agent、蒸馏都有现成流水线，规模大了还能让出题和改卷两边异步跑。"
+  takeaways:
+    - "agent 任务先把环境交互做成环境级异步（一个慢环境不拖住整批），再叠加 rollout 与训练的解耦。"
+  tags: [Megatron, agentic RL, 异步]
+
+- id: skyrl
+  title: "SkyRL: A Modular Full-stack RL Library for LLMs"
+  short: SkyRL
+  kind: project
+  org: UC Berkeley Sky Computing Lab · Anyscale
+  date: 2025-05
+  repo: NovaSky-AI/SkyRL
+  url: https://novasky-ai.notion.site/skyrl-v0
+  links:
+    - { label: SkyRL-Agent 论文, url: https://arxiv.org/abs/2511.16108 }
+    - { label: 文档, url: https://docs.skyrl.ai/docs/ }
+  areas: [agentic-rl, rl-llm]
+  facets: [infra, env]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "伯克利 Sky Lab 与 Anyscale 合作：训练后端 FSDP / Megatron，推理后端 vLLM / SGLang；提供 PipelineRL / AReaL 式全异步与飞行中权重更新，skyrl-tx 实现了 Tinker API 的自托管后端；Mercor 发布过用 SkyRL 训练 397B 知识工作智能体的指南，OpenThoughts-Agent 等项目基于它。"
+  summary: "由训练库 skyrl-train、agent 层 skyrl-agent 与环境库 skyrl-gym 组成，从 SWE-Bench 这类长程真实环境任务出发，强调模块化与异步；兼容 Tinker API，可在自有 GPU 上运行 Tinker 脚本。"
+  plain: "伯克利做的 RL 全家桶：训练、agent、环境三件套拆开也能单独用，特别照顾 SWE 这类又长又慢的真实任务。"
+  takeaways:
+    - "长程 agent 任务先用它的 fully async 示例测吞吐与稳定性，再决定权重更新的频率。"
+  builds_on: [verl, openrlhf]
+  tags: [agentic RL, 全异步, Tinker API]
+
+- id: prime-rl
+  title: "prime-rl: Async RL Training at Scale"
+  short: prime-rl
+  kind: project
+  org: Prime Intellect
+  date: 2025-05
+  repo: PrimeIntellect-ai/prime-rl
+  links:
+    - { label: INTELLECT-2 技术报告, url: https://arxiv.org/abs/2505.07291 }
+  areas: [rl-llm, agentic-rl]
+  facets: [infra, env]
+  tier: rec
+  evidence: [industrial, open-source, community]
+  evidence_note: "Prime Intellect 用它训练 INTELLECT-2（全球分布式异步 RL，技术报告 arXiv 2505.07291）与 INTELLECT-3.x（仓库附 INTELLECT-3.1 复现配置）；默认一步重叠的异步流水，FSDP2 训练 + vLLM 推理，与 verifiers 环境库和 Environments Hub 原生集成，内置 router replay 与采样掩码回放。"
+  summary: "推理（vLLM）、编排器（管理环境与多轮 rollout 的 CPU 进程）、训练器（FSDP2）三进程解耦；默认训练第 n 步时推理已在用上一版策略生成第 n+1 步数据，NCCL 广播权重，面向千卡与 1T 级 MoE。"
+  plain: "一边改卷一边出下一批题，两边永远差一步，谁也不用等谁；环境跑在单独的 CPU 编排器里，GPU 只管算。"
+  takeaways:
+    - "想要“默认异步、改动最小”的方案可以参考它的一步重叠设计：训练与推理的单步耗时接近时几乎没有空转。"
+  tags: [异步 RL, 环境, verifiers]
+
+- id: rllm
+  title: "rLLM: A Framework for Post-Training Language Agents"
+  short: rLLM
+  kind: project
+  org: UC Berkeley Sky Computing Lab（Agentica）
+  date: 2025-02
+  repo: rllm-org/rllm
+  url: https://pretty-radio-b75.notion.site/rLLM-A-Framework-for-Post-Training-Language-Agents-21b81902c146819db63cd98a54ba5f31
+  areas: [agentic-rl]
+  facets: [infra, env]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "伯克利 Sky Lab 的 Agentica 项目，与 Together AI 合作；DeepScaleR-1.5B、DeepCoder-14B、DeepSWE-32B 均用它训练。代码库最早以 DeepScaleR 仓库的形式随 DeepScaleR 发布公开，后更名 rLLM；分布式训练以 verl 为后端，也可切到 Tinker 或 Fireworks。"
+  summary: "面向语言智能体的 RL 框架：同一份 agent 代码既做评测又做训练，可包装现成的 CLI harness 或 OpenAI SDK 智能体，支持 Docker、Daytona、Modal 等沙箱与预热池，训练后端一键切换。"
+  plain: "你已经写好的 agent 不用改：rLLM 包一层，就能拿去跑评测，再用同样的代码做 RL 训练。"
+  takeaways:
+    - "已有成熟 agent harness（如 SWE agent）时，优先选这类“包装现有 agent”的框架，避免为训练重写一套交互逻辑。"
+  builds_on: [verl]
+  tags: [agentic RL, SWE, 沙箱]
+
+- id: tinker
+  title: "Tinker"
+  short: Tinker
+  kind: project
+  org: Thinking Machines Lab
+  date: 2025-10
+  repo: thinking-machines-lab/tinker-cookbook
+  url: https://thinkingmachines.ai/tinker/
+  links:
+    - { label: 发布公告, url: https://thinkingmachines.ai/news/announcing-tinker/ }
+    - { label: 文档, url: https://tinker-docs.thinkingmachines.ai/ }
+  areas: [rl-llm, sft]
+  facets: [infra]
+  tier: rec
+  evidence: [industrial, adopted, open-source]
+  evidence_note: "Thinking Machines Lab 的首个产品（2025-10-01 发布），以 LoRA 实现多租户共享算力；开源的 tinker-cookbook 提供 SFT、RL、蒸馏与 RLHF 配方。其 API 设计被其他团队采纳：SkyRL 的 skyrl-tx 与 verl 的 VeRL-Tinker 都实现了兼容 Tinker API 的自托管后端，rLLM 也可用 Tinker 做训练后端。"
+  summary: "把分布式训练封装成 forward_backward、optim_step、sample 等少数原语：用户在本地写算法循环，服务端负责集群、并行与容错；cookbook 支持最多落后 K 步的异步 RL。"
+  plain: "你只管写“怎么学”的那几行代码，GPU 集群、并行切分、权重同步全交给服务商，像调用云函数一样训练大模型。"
+  takeaways:
+    - "做算法研究而非系统研究时，托管训练 API 能省掉大部分工程；但它基于 LoRA，结论迁移到全参训练前要复核。"
+  tags: [训练 API, LoRA, 托管服务]
+
+# ---------- 异步 RL ----------
+
+- id: async-rlhf
+  title: "Asynchronous RLHF: Faster and More Efficient Off-Policy RL for Language Models"
+  short: 异步 RLHF
+  kind: paper
+  org: Mila 等
+  authors: "Michael Noukhovitch et al."
+  date: 2024-10
+  arxiv: "2410.18252"
+  areas: [rl-llm]
+  facets: [infra, algorithm]
+  tier: rec
+  evidence: [adopted, ablation]
+  evidence_note: "较早系统论证“生成与训练重叠、用上一版策略的样本训练”在 LLM RLHF 上可行的工作；verl 的 one-step-off 异步训练器（美团贡献）在 README 中把它列为方法源头。论文比较了多种 RLHF 目标对 off-policy 数据的耐受度。"
+  summary: "提出异步 RLHF：生成与训练在不同 GPU 上并行，训练使用上一步策略生成的样本；系统比较不同 RLHF 目标对 off-policy 数据的鲁棒性，表明适度 off-policy 可以在基本不损失效果的前提下明显提速。"
+  plain: "不必等老师改完卷再出下一套题：出题和改卷同时进行，学生做的是“上一版老师”出的题，只差一步，影响不大，却省掉了大量等待。"
+  takeaways:
+    - "从同步转异步的第一步是只允许落后一步（one-step off-policy），它几乎是白捡的吞吐。"
+  tags: [异步 RL, off-policy, RLHF]
+
+- id: llamarl
+  title: "LlamaRL: A Distributed Asynchronous Reinforcement Learning Framework for Efficient Large-scale LLM Training"
+  short: LlamaRL
+  kind: paper
+  org: Meta
+  authors: "Bo Wu et al."
+  date: 2025-05
+  arxiv: "2505.24034"
+  areas: [rl-llm]
+  facets: [infra]
+  tier: rec
+  evidence: [industrial, ablation]
+  evidence_note: "论文称在 Llama 3 后训练中使用；在 8B、70B、405B 策略模型上评测，405B 上相对 DeepSpeed-Chat 类系统最高 10.7 倍加速，并给出异步设计严格加速的形式化证明。代码未开源，结论只能从论文核对。"
+  summary: "基于原生 PyTorch 的单控制器、全分布式异步 RL 框架，面向数千卡与 405B 级策略模型；生成与训练异步执行，并从理论上证明异步设计相对同步有严格的速度优势。"
+  plain: "Meta 训 Llama 用的 RL 系统：一个“总指挥”调度几千张卡，出题和改卷各干各的，在最大的 405B 模型上比老式同步系统快一个数量级。"
+  takeaways:
+    - "规模到数百 B 参数时，同步系统的瓶颈会从算力变成等待；先量清空转时间再决定异步程度。"
+  tags: [异步 RL, 405B, 单控制器]
+
+- id: pipelinerl
+  title: "PipelineRL: Faster On-policy Reinforcement Learning for Long Sequence Generation"
+  short: PipelineRL
+  kind: paper
+  org: ServiceNow AI Research
+  authors: "Alexandre Piché et al."
+  date: 2025-04
+  arxiv: "2509.19128"
+  repo: ServiceNow/PipelineRL
+  links:
+    - { label: HF 博客, url: https://huggingface.co/blog/ServiceNow/pipelinerl }
+  areas: [rl-llm]
+  facets: [infra]
+  tier: rec
+  evidence: [adopted, ablation, open-source]
+  evidence_note: "2025-04 以 HF 博客与代码首发，2025-09 发布论文：128 张 H100 上长推理任务的学习速度约为常规 RL 的 2 倍。Meta 的 ScaleRL 推荐配方采用 PipelineRL 式的有界异步，SkyRL、NeMo-RL 等随后都提供了飞行中权重更新选项。"
+  summary: "生成与训练并发，每次优化器更新后立即把新权重广播给正在生成的推理服务器，不停机、不等序列结束；已生成部分的 KV cache 沿用旧权重，实验表明不影响稳定性，从而兼顾大批量吞吐与数据新鲜度。"
+  plain: "改卷老师每改完一批，就把新的答题要点塞给正在答题的学生，学生不用停笔接着写；前面写好的部分不重写。"
+  takeaways:
+    - "长 CoT 场景想要接近 on-policy 又不空转，先试飞行中权重更新；出现不稳定再考虑更新后重算 KV cache。"
+  builds_on: [async-rlhf]
+  tags: [异步 RL, 飞行中更新, 长序列]
+
+# ---------- 权重同步 ----------
+
+- id: checkpoint-engine
+  title: "Checkpoint Engine"
+  short: checkpoint-engine
+  kind: project
+  org: 月之暗面 Moonshot AI
+  date: 2025-09
+  repo: MoonshotAI/checkpoint-engine
+  url: https://moonshotai.github.io/checkpoint-engine/
+  links:
+    - { label: Kimi K2 技术报告, url: https://arxiv.org/abs/2507.20534 }
+  areas: [rl-llm]
+  facets: [infra]
+  tier: rec
+  evidence: [industrial, adopted, open-source]
+  evidence_note: "月之暗面用于 Kimi K2 的 RL 权重更新：README 称在数千张 GPU 上原地更新 1T 参数约需 20 秒；verl 的 checkpoint engine 抽象内置 kimi_ckpt_engine 后端，其全异步训练器的参数同步也参考了它。"
+  summary: "与推理引擎共置的参数服务中间件：把权重更新拆成 H2D 拷贝、在参数服务进程间广播、推理引擎按需重载三段并流水化；大规模同步更新走广播，新加入的推理实例经 Mooncake P2P 从已有实例拉取。"
+  plain: "专门负责把新菜谱送到每个前厅的快递系统：先搬上显卡、再群发、最后各前厅只取自己需要的那几页，全程流水线作业。"
+  takeaways:
+    - "分离部署的权重同步按“分桶 + 拷贝与通信重叠”设计；显存不足时退化为串行，桶大小决定速度与显存的权衡。"
+  tags: [权重同步, Kimi K2, 广播, P2P]
+
+# ---------- 训推不一致与数值稳定性 ----------
+
+- id: tis-offpolicy
+  title: "Your Efficient RL Framework Secretly Brings You Off-Policy RL Training"
+  short: TIS
+  kind: blog
+  org: UCSD · Microsoft Research
+  authors: "Feng Yao, Liyuan Liu et al."
+  date: 2025-08
+  url: https://fengyao.notion.site/off-policy-rl
+  repo: yaof20/Flash-RL
+  links:
+    - { label: 后续论文 On the Rollout-Training Mismatch, url: https://opt-ml.org/papers/2025/paper116.pdf }
+  areas: [rl-llm]
+  facets: [infra, algorithm]
+  tier: must
+  evidence: [adopted, open-source, community]
+  evidence_note: "引发 2025 年下半年“训推不一致”讨论的起点：TRL 的 GRPOTrainer 对 vLLM 生成默认开启 TIS，verl（rollout correction）、OpenRLHF、slime/Miles、NeMo-RL 都实现了同类修正；Qwen 团队的 Stabilizing RL with LLMs 把它纳入统一的理论解释。配套 Flash-RL 仓库提供精确的 rollout logprob 与 FP8/INT8 量化 rollout。"
+  summary: "指出 vLLM 生成 + FSDP 训练的系统即使权重相同，token 概率也显著不同，等于隐性 off-policy 训练；提出截断重要性采样 min(π_train/π_rollout, C) 修正，也让量化 rollout 能稳定训练。"
+  plain: "出题用的“快速版模型”和改卷用的“标准版模型”算出的概率不一样，相当于拿别人的卷子来学。给每个词乘一个有上限的修正系数，把偏差补回来。"
+  takeaways:
+    - "凡是“推理引擎生成、训练引擎重算”的系统，都应保存 rollout logprob 并默认开启 token 级 TIS。"
+    - "想用量化 rollout 提速时，TIS 是必要配套而不是可选项。"
+  tags: [训推不一致, 重要性采样, 量化 rollout]
+
+- id: rl-collapse-mismatch
+  title: "When Speed Kills Stability: Demystifying RL Collapse from the Training-Inference Mismatch"
+  short: 序列级 MIS
+  kind: blog
+  org: 个人技术博客
+  authors: "Jiacai Liu, Yingru Li et al."
+  date: 2025-09
+  url: https://richardli.xyz/rl-collapse
+  links:
+    - { label: verl rollout correction 理论文档, url: https://github.com/verl-project/verl/blob/main/docs/algo/rollout_corr_math.md }
+    - { label: 后续论文 Trust Region Masking, url: https://arxiv.org/abs/2512.23075 }
+  areas: [rl-llm]
+  facets: [algorithm, infra, theory]
+  tier: rec
+  evidence: [adopted, community]
+  evidence_note: "三篇系列博客，用 TV 距离刻画偏差、χ² 散度刻画方差来分析训推不一致；verl 的 rollout correction 以它为理论文档并内置 Seq-MIS、Geo-RS 等预设，Miles 的训推不一致专文推荐 MIS 作为稳健默认，TRL 也实现了 MIS。后续整理为论文 Trust Region Masking（arXiv 2512.23075）。"
+  summary: "说明训推差异不小时 token 级 IS 修正的偏差随长度增长，序列级 IS 无偏但方差随长度爆炸；提出超界即整条丢弃的序列级掩码 IS（MIS）与按几何平均比率过滤的 Geo-RS，避免长回答被系统性误伤。"
+  plain: "按词修正会越攒越偏，按整句修正又波动太大；干脆设一道门槛：整句偏离太多的样本直接不学。为了不冤枉长回答，门槛看的是“平均每个词偏了多少”。"
+  takeaways:
+    - "长 CoT 或多轮 agent 训练中，训推差异上升时从 token 级 TIS 升级到序列级 MIS 或 Geo-RS。"
+    - "过滤阈值用几何平均比率而不是比率乘积，否则长回答会被系统性丢弃。"
+  builds_on: [tis-offpolicy]
+  tags: [训推不一致, 掩码重要性采样, 长序列]
+
+- id: fp16-mismatch
+  title: "Defeating the Training-Inference Mismatch via FP16"
+  short: FP16 修训推差
+  kind: paper
+  org: Sea AI Lab · 新加坡国立大学
+  authors: "Penghui Qi et al."
+  date: 2025-10
+  arxiv: "2510.26788"
+  repo: sail-sg/Precision-RL
+  areas: [rl-llm]
+  facets: [infra, algorithm]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "在 VeRL 与 Oat 两套框架、GRPO/GSPO/TIS/MIS/PG 多种算法、R1-Distill/Qwen/OctoThinker 多个模型族以及 LoRA、Dense-14B 与 MoE 上一致复现 FP16 优于 BF16；仓库给出 VeRL 的最小补丁，verl 随后正式支持 FSDP 与 Megatron（稠密模型）的 FP16 训练。"
+  summary: "把训推不一致的根源归到 BF16 尾数太短（7 位）导致的舍入误差；训练与推理统一改用 FP16（10 位尾数）即可大幅降低训推概率差，训练更稳、收敛更快，无需改动模型结构或算法。"
+  plain: "BF16 能表示很大很小的数，但每个数都“四舍五入得很粗”；FP16 范围小一些，却精细得多。RL 后训练用不到那么大的范围，换成 FP16 反而两边算得更一致。"
+  takeaways:
+    - "稠密模型 RL 出现训推差异时，先试把训练与推理都切到 FP16（配合损失缩放），代价往往只是几行配置。"
+    - "MoE 的 FP16 支持仍在完善，切换前先确认训练框架（如 Megatron）的实现状态。"
+  builds_on: [tis-offpolicy]
+  tags: [训推不一致, 数值精度, FP16]
+
+- id: tm-nondeterminism
+  title: "Defeating Nondeterminism in LLM Inference"
+  short: 批不变推理
+  kind: blog
+  org: Thinking Machines Lab
+  authors: "Horace He et al."
+  date: 2025-09
+  url: https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/
+  repo: thinking-machines-lab/batch_invariant_ops
+  links:
+    - { label: SGLang 确定性推理, url: https://lmsys.org/blog/2025-09-22-sglang-deterministic/ }
+    - { label: vLLM × TorchTitan 比特一致 RL, url: https://blog.vllm.ai/2025/11/10/bitwise-consistent-train-inference.html }
+  areas: [rl-llm]
+  facets: [infra, theory]
+  tier: rec
+  evidence: [adopted, open-source, community]
+  evidence_note: "Thinking Machines Lab 的 Connectionism 博客首篇，发布后被广泛讨论；约两周后 SGLang 基于其 kernel 实现确定性推理，并与 slime 做到两次独立 RL 运行曲线完全一致；vLLM 推出批不变模式并与 TorchTitan 演示训推比特一致的 RL；Miles 的 true on-policy 模式同样基于这批 kernel。"
+  summary: "论证推理非确定性的主因不是笼统的“GPU 并发 + 浮点误差”，而是 kernel 缺乏批不变性：归约顺序随批大小变化，而服务端批大小随负载波动；给出批不变的 RMSNorm、矩阵乘与注意力，并演示训推 KL 恒为 0 的真 on-policy RL。"
+  plain: "同一个问题和不同的“邻居”拼进一个批里算，加法的先后顺序就变了，结果末位就不同。把计算顺序固定下来，不管和谁拼批，答案都一模一样。"
+  takeaways:
+    - "需要可复现、或要判断训推差异是不是 bug 时，打开引擎的确定性 / 批不变模式做对照实验；大规模训练先评估吞吐代价。"
+    - "报告温度 0 的评测结果时要意识到：未开启批不变模式时，同一提示在不同负载下可能给出不同输出。"
+  tags: [确定性推理, 批不变性, 真 on-policy]
+
+- id: rollout-routing-replay
+  title: "Stabilizing MoE Reinforcement Learning by Aligning Training and Inference Routers"
+  short: R3 路由回放
+  kind: paper
+  org: 小米 · 北京大学
+  authors: "Wenhan Ma et al."
+  date: 2025-10
+  arxiv: "2510.11370"
+  areas: [rl-llm]
+  facets: [infra, algorithm]
+  tier: must
+  evidence: [adopted, ablation, community]
+  evidence_note: "verl、ROLL、slime/Miles、prime-rl、NeMo-RL 均已内置 router replay，SGLang 与 vLLM 提供返回路由专家的接口；verl 文档称 DeepSeek-V3.2、GLM-5、MiMo-V2 等均采用 R3 式路由回放，prime-rl 文档称它能把训推差异降低一个数量级。论文在 MoE 上与 GSPO、TIS 做了对比。"
+  summary: "发现 MoE 在训练与推理阶段的路由选择明显不一致，是 RL 崩溃的重要来源；提出 Rollout Routing Replay（R3）：记录推理引擎为每个 token 选的专家，训练前向复用同一组专家，显著降低训推 KL 且几乎不影响速度。"
+  plain: "MoE 像医院分诊台：推理时把某个词分给了 3 号和 7 号专家，训练时却因为一点数值误差分给了 3 号和 9 号，学到的就不是同一回事。R3 让训练照抄推理时的分诊记录。"
+  takeaways:
+    - "MoE 模型做 RL 默认开启 R3；训练端仍用自己的 router logits 在回放的专家集合上做 softmax，路由器照常得到梯度。"
+    - "评估工程代价：每个 token × 每层 × top-k 的专家索引要随样本传输，部分框架暂不支持与 sequence packing 或 P/D 分离同时使用。"
+  builds_on: [gspo]
+  tags: [MoE, 路由回放, 训推不一致]

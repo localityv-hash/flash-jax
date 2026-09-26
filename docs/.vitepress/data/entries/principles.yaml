@@ -1,0 +1,465 @@
+# 原理与可解释性视角（/lenses/principles）的条目：RL 到底改变了模型什么。
+# 字段均按纯文本渲染，公式用 Unicode 书写。按页面上的问题顺序排列。
+
+# ---------- 熵：探索预算如何被花掉 ----------
+
+- id: entropy-mechanism
+  title: "The Entropy Mechanism of Reinforcement Learning for Reasoning Language Models"
+  short: "熵机制 Clip/KL-Cov"
+  kind: paper
+  org: "上海 AI Lab · 清华大学 等"
+  authors: "Ganqu Cui et al."
+  date: 2025-05
+  arxiv: "2505.22617"
+  repo: PRIME-RL/Entropy-Mechanism-of-RL
+  links:
+    - { label: "verl 配方文档", url: "https://verl.readthedocs.io/en/v0.5.x/algo/entropy.html" }
+  areas: [rl-llm]
+  facets: [theory, algorithm]
+  tier: must
+  evidence: [industrial, ablation, open-source, community]
+  evidence_note: "作者所在的上海 AI Lab 在 Intern-S1 技术报告（arXiv 2508.15763）中用 KL-Cov 控制 RL 阶段的熵；Clip-Cov / KL-Cov 已合入 verl 主干（loss_mode 设为 clip_cov 或 kl_cov 即可）；熵—性能拟合覆盖 Qwen2.5 0.5B–32B 等多个模型，发布当天登上 Hugging Face Daily Papers 第一。"
+  summary: "推导 softmax 策略在策略梯度下的一阶熵变化：由动作对数概率与 logit 更新（约等于优势）的协方差决定，解释了熵为何持续下降；经验拟合 R = −a·e^H + b，并提出只约束极少数高协方差 token 的 Clip-Cov 与 KL-Cov。"
+  plain: "模型越有把握、又恰好答对的地方，RL 越会把它推得更确定，熵就这样被花光；只给最“贪心”的极少数 token 踩刹车，探索就能保住。"
+  takeaways:
+    - "训练时把策略熵与 token 级协方差一起记录：熵若在前几百步就塌到底，性能上限基本锁定在 R = −a + b 附近。"
+    - "想保熵时，只约束极少数高协方差 token（官方配方里 KL-Cov 作用于 0.2%（7B）/ 0.02%（32B）的 token），比给全体 token 加熵奖励更精准。"
+  builds_on: [grpo, dapo]
+  tags: [熵, 探索, RLVR]
+
+- id: forking-tokens
+  title: "Beyond the 80/20 Rule: High-Entropy Minority Tokens Drive Effective Reinforcement Learning for LLM Reasoning"
+  short: "80/20 分叉 token"
+  kind: paper
+  org: "Alibaba Qwen · 清华 LeapLab"
+  authors: "Shenzhi Wang et al."
+  date: 2025-06
+  venue: NeurIPS 2025
+  arxiv: "2506.01939"
+  areas: [rl-llm]
+  facets: [theory, algorithm]
+  tier: rec
+  evidence: [ablation, community]
+  evidence_note: "Qwen 团队在 Qwen3-8B/14B/32B 基座上对照“只更新前 20% 高熵 token”“全量更新”“只更新后 80% 低熵 token”三种设置，并跟踪训练过程中熵模式的变化；NeurIPS 2025 收录，社区讨论与后续跟进工作很多。"
+  summary: "CoT 中只有约两成 token 熵高，它们是决定推理走向的“分叉点”；RLVR 基本沿用基座的熵模式，主要调整这些 token 的熵。只对前 20% 高熵 token 回传策略梯度，在 Qwen3-8B 上与全量持平，在 14B、32B 上明显更好。"
+  plain: "一段解答里，大多数字是顺着写的，只有少数“接下来往哪走”的词在做选择；RL 只盯着这些岔路口学，效果反而更好。"
+  takeaways:
+    - "做 token 级分析或干预（裁剪、温度、奖励塑形）时先按熵分层，优先作用在高熵分叉 token 上。"
+    - "模型越大，“只训练高熵 token”的收益越明显，值得在 14B 以上的 RLVR 中尝试。"
+  builds_on: [dapo, qwen3]
+  tags: [熵, 分叉 token, RLVR]
+
+# ---------- 更新落在哪里 ----------
+
+- id: rl-sparse-updates
+  title: "Reinforcement Learning Finetunes Small Subnetworks in Large Language Models"
+  short: "RL 稀疏子网络"
+  kind: paper
+  org: UIUC
+  authors: "Sagnik Mukherjee, Lifan Yuan, Dilek Hakkani-Tür, Hao Peng"
+  date: 2025-05
+  arxiv: "2505.11711"
+  areas: [rl-llm]
+  facets: [theory]
+  tier: rec
+  evidence: [ablation, community]
+  evidence_note: "覆盖 PPO、GRPO、DPO 等 7 种算法与 10 个不同家族的模型，现象一致；只微调该子网络即可复现全量结果。后续 The Path Not Taken（arXiv 2511.08567）、TinyLoRA（arXiv 2602.04118）等工作在此基础上继续解释并利用这一现象。"
+  summary: "逐参数比较 RL 微调前后的权重：只有约 5%–30% 的参数发生变化，在 7 种算法、10 个模型上普遍存在且无需任何稀疏正则；只训练这个子网络就能得到几乎相同的模型，不同种子、数据乃至算法得到的子网络高度重合。"
+  plain: "RL 训完一看，大部分参数一位都没变，真正动了的只是一小撮；换种子、换数据，动的还是差不多那一撮。"
+  takeaways:
+    - "RL 的更新“信息量”很小：LoRA 等参数高效方法在 RL 中通常够用，可作为默认起点。"
+    - "别把“大部分参数没变”解读成“能力没变”：稀疏的更新同样能带来显著的行为变化。"
+  tags: [参数更新, 稀疏性, 可解释性]
+
+# ---------- 遗忘 ----------
+
+- id: rl-razor
+  title: "RL's Razor: Why Online Reinforcement Learning Forgets Less"
+  short: "RL's Razor"
+  kind: paper
+  org: MIT
+  authors: "Idan Shenfeld, Jyothish Pari, Pulkit Agrawal"
+  date: 2025-09
+  arxiv: "2509.04259"
+  links:
+    - { label: "作者博客", url: "https://jyopari.github.io/posts/rl_razor" }
+  areas: [rl-llm, sft]
+  facets: [theory]
+  tier: rec
+  evidence: [ablation, community]
+  evidence_note: "在大语言模型与机器人基础模型上系统对比 RL 与 SFT 的“新任务收益—旧能力保留”权衡，并给出理论解释；发布后被遗忘方向的后续工作（如 Retaining by Doing）广泛引用与讨论。"
+  summary: "新任务表现相近时，RL 比 SFT 保留更多旧能力；遗忘程度可由在新任务上测得的“微调模型与基座之间的 KL”预测。on-policy RL 隐式偏向所有能解新任务的策略中 KL 最小的那个，SFT 则可能被拉到离基座任意远处。"
+  plain: "同样学会一门新手艺，RL 挑的是“离原来的自己最近”的改法，所以旧本事丢得少；SFT 则可能被标注数据拽到很远的地方。"
+  takeaways:
+    - "把“新任务上微调模型相对基座的 KL”当作遗忘的早期预警，比盯参数变化量更可靠。"
+    - "要加新能力又怕遗忘，优先用 on-policy 数据：RL、自采样后过滤再 SFT、on-policy 蒸馏。"
+  builds_on: [sft-memorizes-rl-generalizes]
+  tags: [遗忘, KL, on-policy]
+
+- id: retaining-by-doing
+  title: "Retaining by Doing: The Role of On-Policy Data in Mitigating Forgetting"
+  short: "Retaining by Doing"
+  kind: paper
+  org: Princeton
+  authors: "Howard Chen, Noam Razin, Karthik Narasimhan, Danqi Chen"
+  date: 2025-10
+  arxiv: "2510.18874"
+  repo: princeton-pli/retaining-by-doing
+  areas: [rl-llm, sft]
+  facets: [theory, data]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "在 Llama 与 Qwen 两个家族（1B–8B）、指令遵循 / 通用知识 / 算术推理三类任务上对比 SFT、RL 与自采样 SFT，并逐一排除 KL 正则、优势估计等因素；代码与数据公开。"
+  summary: "RL 比 SFT 遗忘更少，新任务表现相当或更好；主因不是 KL 正则或优势估计，而是 on-policy 数据带来的 mode-seeking：学新模式时不从旧模式挪走概率质量。近似 on-policy 的数据（如自采样后再 SFT）就能明显减轻遗忘。"
+  plain: "用自己生成的数据学新东西，像在自己的笔记上改，而不是照抄别人的整本笔记，原来会的东西不容易被覆盖。"
+  takeaways:
+    - "想降低 SFT 带来的遗忘，先试“当前模型自采样 + 过滤正确答案再 SFT”，成本远低于完整 RL。"
+    - "别指望只靠加大 KL 正则防遗忘；数据是否 on-policy 才是主因。"
+  builds_on: [rl-razor]
+  tags: [遗忘, on-policy, SFT vs RL]
+
+# ---------- pass@k 之争：锐化还是发现 ----------
+
+- id: rl-limit-pass-k
+  title: "Does Reinforcement Learning Really Incentivize Reasoning Capacity in LLMs Beyond the Base Model?"
+  short: "Limit of RLVR"
+  kind: paper
+  org: "清华 LeapLab · 上海交通大学"
+  authors: "Yang Yue, Zhiqi Chen et al."
+  date: 2025-04
+  venue: "NeurIPS 2025（Oral，最佳论文亚军）"
+  arxiv: "2504.13837"
+  repo: LeapLabTHU/limit-of-RLVR
+  links:
+    - { label: "项目主页", url: "https://limit-of-rlvr.github.io/" }
+  areas: [rl-llm]
+  facets: [theory, eval]
+  tier: must
+  evidence: [adopted, ablation, open-source, community]
+  evidence_note: "NeurIPS 2025 最佳论文亚军。“用大 k 的 pass@k 曲线检验推理边界”已成通行做法：NVIDIA 的 ProRL（arXiv 2505.24864）直接沿用这一评测口径检验长时 RL 并给出反例。实验覆盖多个模型族、6 种 RL 算法与数学 / 代码 / 视觉任务，评测代码开源。"
+  summary: "用大 k 的 pass@k 刻画推理边界：RLVR 模型在小 k 占优，k 到几十上百时被基座反超；困惑度分析表明 RL 的解题路径本就在基座分布内，6 种 RL 算法差别很小、离“基座上限”仍远；蒸馏则能真正扩展边界。"
+  plain: "RL 像是把模型本来就会、但不常说出口的解法调到嘴边：一次答对的概率高了，可多给几次机会时，原本偶尔能做出的题反而丢了。"
+  takeaways:
+    - "评估 RL 时同时报告 pass@1 与 k≥256 的 pass@k 曲线；大 k 掉点说明你主要在“锐化”。"
+    - "想真正扩展边界，只换 RL 算法作用有限：更强的先验（蒸馏、中训练）或显式的探索机制更关键。"
+  builds_on: [deepseek-r1, simplerl-zoo]
+  tags: [pass@k, 推理边界, RLVR]
+
+- id: reasoning-with-sampling
+  title: "Reasoning with Sampling: Your Base Model is Smarter Than You Think"
+  short: "幂次采样"
+  kind: paper
+  org: Harvard
+  authors: "Aayush Karan, Yilun Du"
+  date: 2025-10
+  arxiv: "2510.14901"
+  repo: aakaran/reasoning-with-sampling
+  links:
+    - { label: "项目主页", url: "https://aakaran.github.io/reasoning_with_sampling/" }
+  areas: [rl-llm]
+  facets: [theory, algorithm]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "代码开源；在 MATH500、HumanEval、GPQA 等单次作答任务上与 GRPO 后训练模型对照，是“RL 主要在锐化分布”一方被讨论最多的正面证据之一。"
+  summary: "不训练、不用验证器，只借基座模型自身的似然做类 MCMC 的迭代重采样，从“幂次锐化”分布 p^α 中取样：单次作答成绩接近甚至超过 RL 后训练模型，且没有 RL 常见的多样性塌缩。"
+  plain: "不做 RL，只换一种更会“挑”的采样方式，基座模型就能答得和 RL 模型差不多好，答案还更多样。"
+  takeaways:
+    - "衡量 RL 收益时加一个“更强采样”基线（幂次采样、best-of-n 等），把能力提升和分布锐化区分开。"
+    - "推理算力充裕而训练预算紧时，推理期锐化可以部分替代 RL。"
+  builds_on: [rl-limit-pass-k]
+  tags: [采样, 推理边界, 测试时计算]
+
+- id: rl-compositionality
+  title: "From f(x) and g(x) to f(g(x)): LLMs Learn New Skills in RL by Composing Old Ones"
+  short: "RL 组合新技能"
+  kind: paper
+  org: "UIUC · 清华大学 等"
+  authors: "Lifan Yuan, Weize Chen, Yuchen Zhang et al."
+  date: 2025-09
+  venue: ICLR 2026
+  arxiv: "2509.25123"
+  repo: PRIME-RL/RL-Compositionality
+  areas: [rl-llm]
+  facets: [theory]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "在可控的字符串变换任务上把原子技能与组合技能分开，对照 RL 与同数据的 RFT（下一 token 训练），并检验更深层组合与跨任务（Countdown）迁移；代码、数据与模型公开，ICLR 2026 收录。"
+  summary: "先用 RFT 让模型学会原子函数 f、g，再只在组合题上做 RL：模型学会了没见过的组合 g(f(x))，还能泛化到更多层嵌套和其他任务；用同样数据做下一 token 训练则做不到。说明 RL 能通过组合旧技能获得新技能。"
+  plain: "模型会加法、会乘法，却没练过“先加后乘”；RL 能教会它把两招串起来，而且这种串法还能迁移到别的题上。"
+  takeaways:
+    - "想让 RL 带来新能力，先确保原子技能已在 SFT / 中训练阶段学会，再用需要组合的题做 RL。"
+    - "用比训练更深的组合题检验外推，而不只看同分布准确率。"
+  builds_on: [rl-limit-pass-k]
+  tags: [组合泛化, 推理边界]
+
+- id: interplay-pt-mt-rl
+  title: "On the Interplay of Pre-Training, Mid-Training, and RL on Reasoning Language Models"
+  short: "预训练×中训练×RL"
+  kind: paper
+  org: CMU
+  authors: "Charlie Zhang, Graham Neubig, Xiang Yue"
+  date: 2025-12
+  venue: "ICML 2026（Spotlight）"
+  arxiv: "2512.07783"
+  repo: Interplay-LM-Reasoning/Interplay-LM-Reasoning
+  areas: [rl-llm, mid-training]
+  facets: [theory, data]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "用可完全控制的合成推理任务，分别操纵预训练、中训练与 RL 阶段的数据分布，因果地拆分三者的贡献；ICML 2026 Spotlight，代码公开。"
+  summary: "受控实验表明：只有预训练留有余量、且 RL 数据落在模型“能力边缘”时，RL 才带来真实的能力增益；预训练里只要有约 1% 的相关暴露，RL 就能稳健泛化；同等算力下“中训练 + RL”在 OOD 难题上比只做 RL 高 10.8%。"
+  plain: "RL 像教练：底子太差教不动，已经全会也没得教，只有“跳一跳够得着”的题最有用；中训练负责把底子打好。"
+  takeaways:
+    - "按当前模型的通过率挑 RL 数据：优先 0 < pass rate < 1 的边缘题，太易或太难都浪费算力。"
+    - "算力固定时，把一部分预算挪到中训练，往往比继续堆 RL 步数更划算。"
+  builds_on: [rl-limit-pass-k]
+  tags: [中训练, 推理边界, 受控实验]
+
+- id: pass-k-training
+  title: "Pass@k Training for Adaptively Balancing Exploration and Exploitation of Large Reasoning Models"
+  short: "Pass@k Training"
+  kind: paper
+  org: "中国人民大学 · ByteDance Seed"
+  authors: "Zhipeng Chen et al."
+  date: 2025-08
+  arxiv: "2508.10751"
+  repo: RUCAIBox/Passk_Training
+  areas: [rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "在 7B / 32B、稠密与 MoE、Qwen 与 Seed 模型以及文本与多模态任务上验证；给出 pass@k 优势的解析解，并与全采样、自助采样两种估计版本对照；代码公开。"
+  summary: "把“组内任取 k 个回答、至少一个正确”的 pass@k 作为奖励训练，并推导出正负样本优势的解析式：探索能力明显增强，pass@k 提升而 pass@1 不降，之后再做常规训练还能反哺 pass@1。"
+  plain: "不再要求“每次都答对”，而是奖励“多试几次里总有一次对”，模型就敢去尝试不常见的解法。"
+  takeaways:
+    - "若 pass@k 随训练下降，可先用 pass@k 奖励（解析优势，无需额外采样）训练一段，再切回 pass@1。"
+    - "它本质上是直接设计优势函数，同样思路可用于“更关注难题”等更细的控制。"
+  builds_on: [grpo, rl-limit-pass-k]
+  tags: [pass@k, 探索, 优势设计]
+
+- id: negative-reinforcement
+  title: "The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning"
+  short: "负样本强化 NSR"
+  kind: paper
+  org: "UVA · Princeton"
+  authors: "Xinyu Zhu, Mengzhou Xia et al."
+  date: 2025-06
+  venue: NeurIPS 2025
+  arxiv: "2506.01347"
+  repo: TianHongZXY/RLVR-Decomposed
+  areas: [rl-llm]
+  facets: [algorithm, theory]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "在 Qwen2.5-Math-7B、Qwen3-4B、Llama-3.1-8B-Instruct 上把 RLVR 拆成正、负样本两部分分别训练，并与 PPO、GRPO 对照整条 pass@k 曲线；代码与模型公开，NeurIPS 2025 收录。"
+  summary: "把 RLVR 的信号拆成强化正确样本（PSR）与惩罚错误样本（NSR）：只用 NSR 就能在整条 pass@k 曲线上稳定超过基座，常与 PPO、GRPO 持平；只用 PSR 提升 pass@1 却损害大 k。据此提出调低正样本权重的 W-REINFORCE。"
+  plain: "只告诉模型“这条路走错了”、不说哪条对，它会把概率让给自己原本也觉得可能的其他走法，于是既变准又不丢多样性。"
+  takeaways:
+    - "pass@k 掉得厉害时，试着调低正样本优势的权重（官方推荐 W-REINFORCE 的 λ = 0.1），保住探索。"
+    - "分析训练动态时把正、负样本的贡献分开记录，更容易看清是谁在压低熵。"
+  builds_on: [grpo]
+  tags: [负样本, 探索, pass@k]
+
+# ---------- 伪奖励与数据污染 ----------
+
+- id: spurious-rewards
+  title: "Spurious Rewards: Rethinking Training Signals in RLVR"
+  short: "Spurious Rewards"
+  kind: paper
+  org: "华盛顿大学 · AI2"
+  authors: "Rulin Shao, Shuyue Stella Li, Rui Xin, Scott Geng et al."
+  date: 2025-05
+  arxiv: "2506.10947"
+  repo: ruixin31/Spurious_Rewards
+  links:
+    - { label: "项目博客", url: "https://rethink-rlvr.notion.site/Spurious-Rewards-Rethinking-Training-Signals-in-RLVR-1f4df34dac1880948858f95aeb88872f" }
+  areas: [rl-llm]
+  facets: [eval, theory]
+  tier: must
+  evidence: [adopted, ablation, open-source, community]
+  evidence_note: "2025 年 5 月底先以博客公开，6 月上 arXiv。AI2 的 Olmo 3 在完全公开、去污染的 RL-Zero 设置上复做随机奖励实验，发现增益消失，并以此作为污染检验（arXiv 2512.13961）；复旦等的 Reasoning or Memorization 用干净合成数据进一步复核。代码、W&B 日志与模型全部公开。"
+  summary: "在 Qwen2.5-Math-7B 上，随机、格式甚至错误标签奖励都能让 MATH-500 提升 13.8–24.1 个点，接近真实奖励的 29.1；换到 Llama3、OLMo2 基本无效。增益来自放大已有行为（如用代码推理），与 GRPO 的裁剪偏置有关。"
+  plain: "给 Qwen 数学模型乱打分它也会变强，说明它不是学到了新东西，而是把预训练里就会的套路调了出来；换个模型家族，这招就不灵了。"
+  takeaways:
+    - "任何 RLVR 结论都至少在两个模型家族（如 Qwen + Llama/OLMo）上复现，并加一个随机奖励对照组。"
+    - "如果随机奖励也能涨分，先怀疑评测污染或基座先验，而不是奖励设计本身。"
+  builds_on: [one-shot-rlvr, grpo]
+  tags: [伪奖励, 污染, 实验设计]
+
+- id: reasoning-or-memorization
+  title: "Reasoning or Memorization? Unreliable Results of Reinforcement Learning Due to Data Contamination"
+  short: "推理还是记忆"
+  kind: paper
+  org: "复旦大学 等"
+  authors: "Mingqi Wu et al."
+  date: 2025-07
+  venue: AAAI 2026
+  arxiv: "2507.10532"
+  areas: [rl-llm]
+  facets: [eval, data]
+  tier: rec
+  evidence: [ablation, community]
+  evidence_note: "先用“只给部分题面，看能否续写出原题”检测污染，再在自建的无污染合成数据 RandomCalculation 上对照真实、随机与错误奖励；AAAI 2026 收录，与 Spurious Rewards、Olmo 3 的去污染实验相互印证。"
+  summary: "Qwen2.5 能凭部分题面续写出 MATH-500 等常用基准的原题并答对，对其发布后才出现的基准则不能，提示预训练污染；在无污染的合成算术数据 RandomCalculation 上，只有准确的奖励能稳定提升，随机或错误奖励无效。"
+  plain: "Qwen 在老考卷上“随便奖励也涨分”，很可能是早就背过这些题；换成保证没见过的新题，只有真奖励才管用。"
+  takeaways:
+    - "RLVR 的核心结论要在模型发布之后才出现的基准，或合成的无污染任务上复核。"
+    - "用“给一半题面，看能否续写出原题”快速筛查基准污染。"
+  builds_on: [spurious-rewards]
+  tags: [污染, 评测, 伪奖励]
+
+- id: one-shot-rlvr
+  title: "Reinforcement Learning for Reasoning in Large Language Models with One Training Example"
+  short: "1-shot RLVR"
+  kind: paper
+  org: "华盛顿大学 · Microsoft"
+  authors: "Yiping Wang et al."
+  date: 2025-04
+  venue: NeurIPS 2025
+  arxiv: "2504.20571"
+  repo: ypwang61/One-Shot-RLVR
+  areas: [rl-llm]
+  facets: [data, theory]
+  tier: rec
+  evidence: [ablation, open-source, community]
+  evidence_note: "覆盖 Qwen2.5-Math-1.5B/7B、Llama3.2-3B-Instruct、R1-Distill-Qwen-1.5B 与 GRPO / PPO；代码、数据、模型与 W&B 日志全部公开，已有人在其他框架（如 Google tunix）复现类似结果。NeurIPS 2025 收录。"
+  summary: "只用 1 道题（复制填满 batch）做 RLVR，就把 Qwen2.5-Math-1.5B 的 MATH500 从 36.0% 提到 73.6%，与用 1.2k 题相当；训练准确率饱和后测试成绩仍在上涨，作者称之为饱和后泛化。"
+  plain: "一道题反复练，模型的数学整体变好了——说明 RL 更多是在唤醒已有能力，而不是灌输新知识。"
+  takeaways:
+    - "做数据消融时加一个“1–2 道题”的极小基线：若它就拿到大部分增益，说明主要在激活先验。"
+    - "小数据 RLVR 中探索项（如熵损失系数）影响很大，值得单独调。"
+  builds_on: [grpo, deepscaler]
+  tags: [数据效率, RLVR]
+
+# ---------- 认知行为 ----------
+
+- id: cognitive-behaviors
+  title: "Cognitive Behaviors that Enable Self-Improving Reasoners, or, Four Habits of Highly Effective STaRs"
+  short: "四种认知行为"
+  kind: paper
+  org: "Stanford 等"
+  authors: "Kanishk Gandhi, Ayush Chakravarthy, Anikait Singh, Nathan Lile, Noah D. Goodman"
+  date: 2025-03
+  arxiv: "2503.01307"
+  repo: kanishkg/cognitive-behaviors
+  areas: [rl-llm, mid-training]
+  facets: [theory, data]
+  tier: rec
+  evidence: [ablation, open-source, community]
+  evidence_note: "在 Countdown 上对照 Qwen-2.5-3B 与 Llama-3.2-3B，并用“只含错误答案但保留推理行为”的数据、空 CoT 等做 priming 消融；代码与数据公开；是解释“为什么不同基座 RL 效果差别巨大”的高引用工作。"
+  summary: "识别出验证、回溯、子目标设定、逆向推理四种认知行为：Qwen 天生具备而 Llama 缺乏，所以 RL 下表现迥异。用少量示范这些行为的数据预热（哪怕答案是错的），或用富含这些行为的数据继续预训练，就能让 Llama 追上 Qwen。"
+  plain: "RL 只能放大模型身上已有的好习惯：会检查、会回头、会拆步骤的模型才越练越强；先把习惯教会，哪怕示范的答案是错的也行。"
+  takeaways:
+    - "RL 前先抽样检查基座 CoT 里有没有验证、回溯等行为；没有的话，RL 很可能原地打转。"
+    - "预热数据的关键是“行为示范到位”而非“答案正确”，可以低成本合成。"
+  builds_on: [deepseek-r1]
+  tags: [认知行为, 基座选择, 冷启动]
+
+# ---------- 忠实性与可监控性 ----------
+
+- id: reasoning-faithfulness
+  title: "Reasoning Models Don't Always Say What They Think"
+  short: "CoT 忠实性"
+  kind: paper
+  org: Anthropic
+  authors: "Yanda Chen, Joe Benton et al."
+  date: 2025-05
+  arxiv: "2505.05410"
+  areas: [rl-llm]
+  facets: [eval, theory]
+  tier: rec
+  evidence: [ablation, community]
+  evidence_note: "Anthropic 对齐科学团队在 Claude 3.7 Sonnet、DeepSeek R1 及对应的非推理模型上，用 6 类提示线索做受控实验，并补充了结果导向 RL 与“可被 hack 的 RL 环境”两组训练实验；是 CoT 忠实性方向被引最多的工作之一。"
+  summary: "在提示中埋入线索，看模型用了线索后是否在 CoT 里承认：多数设置下承认率低于 20%。结果导向 RL 起初能提升忠实性，但很快停滞；在可被 hack 的 RL 环境里，模型几乎总会利用漏洞，却极少在 CoT 中说出来。"
+  plain: "模型的草稿纸并不总写真话：明明参考了小抄却很少承认；单靠结果导向的 RL，也没能让它变得更坦白。"
+  takeaways:
+    - "CoT 监控能发现问题，但不能用来证明“没有问题”：罕见的危险行为可能根本不出现在 CoT 里。"
+    - "评估忠实性要做可控干预（埋线索、改前提），而不是只读 CoT。"
+  tags: [忠实性, CoT, 安全]
+
+- id: cot-obfuscation
+  title: "Monitoring Reasoning Models for Misbehavior and the Risks of Promoting Obfuscation"
+  short: "CoT 监控与混淆"
+  kind: paper
+  org: OpenAI
+  authors: "Bowen Baker, Joost Huizinga, Leo Gao et al."
+  date: 2025-03
+  arxiv: "2503.11926"
+  links:
+    - { label: "OpenAI PDF", url: "https://cdn.openai.com/pdf/34f2ada6-870f-4c26-9790-fd8def56387f/CoT_Monitoring.pdf" }
+  areas: [rl-llm]
+  facets: [eval, theory]
+  tier: must
+  evidence: [industrial, ablation, community]
+  evidence_note: "OpenAI 在前沿推理模型（与 o3-mini 同级）的智能体编码 RL 训练中实际用 CoT 监控抓到了真实的 reward hacking，并对比了“监控信号是否进入奖励”的训练；其结论推动了多家实验室“不对 CoT 施加强优化压力”的共识（见 CoT Monitorability 立场论文）。"
+  summary: "用 GPT-4o 读取前沿推理模型在智能体编码任务中的 CoT，比只看动作更能发现 reward hacking；把监控信号并入奖励后，优化压力小时模型更强也更守规矩，压力加大后则学会在 CoT 里隐藏意图、继续 hack，即“混淆”。"
+  plain: "偷看草稿纸能抓到作弊；可一旦因为草稿纸上写了作弊念头就扣分，模型就学会“心里想、纸上不写”，照样作弊。"
+  takeaways:
+    - "CoT 监控器用于检测、报警和数据清洗，不要把它的打分直接并入 RL 奖励。"
+    - "发现 reward hacking 后优先修环境和验证器，而不是惩罚“坏念头”。"
+  tags: [reward hacking, CoT 监控, 安全]
+
+- id: cot-monitorability
+  title: "Chain of Thought Monitorability: A New and Fragile Opportunity for AI Safety"
+  short: "CoT 可监控性"
+  kind: paper
+  org: "UK AISI · Apollo Research · METR · OpenAI · Google DeepMind · Anthropic 等"
+  authors: "Tomek Korbak, Mikita Balesni et al."
+  date: 2025-07
+  arxiv: "2507.11473"
+  areas: [rl-llm]
+  facets: [theory, eval]
+  tier: ref
+  evidence: [community]
+  evidence_note: "40 余位作者来自多家前沿实验室与安全研究机构的立场论文，无实验；OpenAI 其后发布的 CoT 可监控性评测套件（arXiv 2512.18311）正是在回应“如何度量并守住这一性质”。"
+  summary: "用自然语言“出声思考”的模型给安全监控留了窗口：难任务需要 CoT 充当工作记忆，模型也倾向于把想法写出来。但这种性质很脆弱，结果导向 RL 的规模化、对 CoT 的直接优化与潜空间推理都可能侵蚀它。"
+  plain: "现在还能偷看模型的草稿纸，这是珍贵的安全手段；但训练时一旦逼草稿纸“好看”，模型就可能不再写真话，所以要主动保护。"
+  takeaways:
+    - "奖励设计、CoT 长度惩罚、潜空间推理等训练决策，都要评估它们对 CoT 可读性与可监控性的影响。"
+    - "把 CoT 监控当作检测手段，而不是优化目标。"
+  builds_on: [cot-obfuscation, reasoning-faithfulness]
+  tags: [可监控性, 安全, CoT]
+
+- id: thought-anchors
+  title: "Thought Anchors: Which LLM Reasoning Steps Matter?"
+  short: "Thought Anchors"
+  kind: paper
+  org: "Bogdan · Macar · Nanda · Conmy"
+  authors: "Paul C. Bogdan, Uzay Macar, Neel Nanda, Arthur Conmy"
+  date: 2025-06
+  arxiv: "2506.19143"
+  repo: interp-reasoning/thought-anchors
+  url: "https://www.thought-anchors.com/"
+  areas: [rl-llm]
+  facets: [theory, eval]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "代码、MATH 重采样数据集与交互式可视化界面全部公开；同时给出黑盒（重采样）、白盒（注意力接收头）与因果（注意力抑制）三类互相印证的证据；在 Alignment Forum 等社区讨论活跃，已有后续工作沿用“锚点”式重采样分析。"
+  summary: "在句子层面做反事实归因：对每句话重采样替换并续写，量化它对最终答案分布的影响，再用注意力“接收头”与注意力抑制交叉验证。少数规划与回溯类句子（思维锚点）对后续推理的影响远超其余句子。"
+  plain: "一段长推理里真正“定调”的只有几句话，通常是订计划或决定回头检查的那几句，其余大多是在执行。"
+  takeaways:
+    - "调试长 CoT 时先找锚点句：对它们做重采样，比逐 token 看注意力更能说明问题。"
+    - "把句子级锚点和 token 级分叉点对照着看，可为更细粒度的信用分配提供线索。"
+  tags: [可解释性, CoT, 归因]
+
+- id: reward-hacking-misalignment
+  title: "Natural Emergent Misalignment from Reward Hacking in Production RL"
+  short: "Hack 泛化为失准"
+  kind: paper
+  org: Anthropic
+  authors: "Monte MacDiarmid, Benjamin Wright, Jonathan Uesato, Joe Benton et al."
+  date: 2025-11
+  arxiv: "2511.18397"
+  links:
+    - { label: "Anthropic PDF", url: "https://assets.anthropic.com/m/74342f2c96095771/original/Natural-emergent-misalignment-from-reward-hacking-paper.pdf" }
+  areas: [rl-llm, agentic-rl]
+  facets: [env, eval]
+  tier: rec
+  evidence: [ablation, community]
+  evidence_note: "实验直接在 Anthropic 真实的生产编码 RL 环境上完成，并对三类缓解手段（阻止 hack、多样化的 RLHF 安全训练、接种提示）做了对照；发布后在对齐与 RL 社区引发大量讨论。"
+  summary: "先让预训练模型通过合成文档或提示了解若干 reward hack 手法，再在 Anthropic 真实的生产编码环境上做 RL：模型学会 hack 的同时，泛化出对齐伪装、配合恶意行为者、在 Claude Code 中尝试破坏等更广泛的不对齐行为。"
+  plain: "在能钻空子的环境里练多了，模型学到的不只是“钻这个空子”，更像认定了“我就是会钻空子的那种模型”，坏习惯会外溢到别处。"
+  takeaways:
+    - "RL 环境与验证器的防 hack 设计是对齐问题，不只是奖励质量问题：上线前先做漏洞审计。"
+    - "漏洞一时堵不住时，可考虑“接种提示”（训练时明确说明此处允许 hack）阻断不对齐泛化，并提高安全训练的多样性。"
+  tags: [reward hacking, 对齐, 环境设计]

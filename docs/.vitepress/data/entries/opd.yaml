@@ -1,0 +1,287 @@
+# On-Policy 蒸馏（OPD）条目。维护者：opd。
+# 规则见 CONTRIBUTING.md；指标（引用、star 等）由 CI 抓取，这里不写数字。
+
+# ---------- 奠基：目标与数据 ----------
+
+- id: minillm
+  title: "MiniLLM: Knowledge Distillation of Large Language Models"
+  short: MiniLLM
+  kind: paper
+  org: 清华大学 CoAI · 微软研究院
+  authors: "Yuxian Gu et al."
+  date: 2023-06
+  venue: ICLR 2024
+  arxiv: "2306.08543"
+  links:
+    - { label: 官方代码（LMOps/minillm）, url: https://github.com/microsoft/LMOps/tree/main/minillm }
+    - { label: TRL MiniLLMTrainer, url: https://github.com/huggingface/trl/tree/main/trl/experimental/minillm }
+  areas: [opd]
+  facets: [algorithm]
+  tier: must
+  evidence: [adopted, ablation, open-source, community]
+  evidence_note: "GLM-5、DeepSeek-V4、MiMo-V2-Flash 的技术报告都把它列为所用 OPD 目标的出处；作者本人把它贡献进 TRL；官方代码与 GPT-2/OPT/LLaMA 系列检查点公开；ICLR 2024。arXiv 最新版已改名为 MiniLLM: On-Policy Distillation of Large Language Models。"
+  summary: "把 LLM 蒸馏的前向 KL 换成反向 KL，用策略梯度在学生自己的采样上优化；单步分解、教师混合采样、长度归一化三招稳住训练，优于 SFT、词级 KD 与 SeqKD。"
+  plain: "不再让小模型硬背大模型的所有说法，而是让它自己作答、老师逐词挑错；宁可少说，也不说老师认为离谱的话。"
+  takeaways:
+    - "今天通行的逐 token 反向 KL（折扣为 0）就是 MiniLLM 目标只保留“当前项”的特例；想降方差，可以像它一样对下一个 token 做全词表期望。"
+    - "较小的学生模型早期会生成重复、退化却能拿到不低教师分数的文本：在采样分布里掺一点教师（官方脚本 α=0.2）并做重要性修正。"
+    - "序列级回报会偏向短回答，先按剩余长度归一化再当优势用。"
+  tags: [反向 KL, 策略梯度, 知识蒸馏]
+
+- id: gkd
+  title: "On-Policy Distillation of Language Models: Learning from Self-Generated Mistakes"
+  short: GKD
+  kind: paper
+  org: Google DeepMind
+  authors: "Rishabh Agarwal et al."
+  date: 2023-06
+  venue: ICLR 2024
+  arxiv: "2306.13649"
+  links:
+    - { label: TRL GKDTrainer, url: https://github.com/huggingface/trl/tree/main/trl/experimental/gkd }
+  areas: [opd]
+  facets: [algorithm]
+  tier: must
+  evidence: [adopted, ablation, community]
+  evidence_note: "Gemma 3 技术报告把后训练蒸馏建立在它之上（引 Agarwal et al., 2024）；MiMo-V2-Flash 的 MOPD 引用它；TRL 的 GKDTrainer 与 DistillationTrainer、verl 的 GKD OPD 模式都照它实现。消融覆盖 3 类任务 × 3 种学生规模 × 5 种散度 × 3 种数据比例。"
+  summary: "把自回归蒸馏看成交互式模仿学习：学生在自己生成的序列上接受教师逐 token 反馈；用广义 JSD(β) 统一前向/反向 KL，用学生数据比例 λ 统一监督与在线蒸馏。"
+  plain: "学生先自己写，老师在学生写过的每个位置告诉它“换我会怎么写”；写错的地方正是最需要纠正的地方。"
+  takeaways:
+    - "λ 取 1（只用学生样本）在摘要、翻译、数学上都最好或接近最好；数学上至少让 25% 的数据来自学生。"
+    - "散度选择与任务和解码温度有关：高温采样时反向 KL、JSD(0.9) 质量更高但多样性更低，贪心解码时差别不大。"
+    - "要和 RL 一起训时，论文建议用反向 KL 或 JSD(0.9)，与 RLHF 惯用的 KL 约束方向一致。"
+  tags: [广义 JSD, 模仿学习, 知识蒸馏]
+
+- id: distillm
+  title: "DistiLLM: Towards Streamlined Distillation for Large Language Models"
+  short: DistiLLM
+  kind: paper
+  org: KAIST AI · Microsoft
+  authors: "Jongwoo Ko et al."
+  date: 2024-02
+  venue: ICML 2024
+  arxiv: "2402.03898"
+  repo: jongwooko/distillm
+  areas: [opd]
+  facets: [algorithm]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "ICML 2024；官方代码沿用 MiniLLM 的数据与评测，可直接对照复现；与 MiniLLM、GKD 在同一套指令跟随基准上做了对比与消融。"
+  summary: "提出 skew KL：先把师生分布按 α 混合再算 KL，损失与梯度有界；再用自适应离策略采样（学生样本进回放池复用）压低采样成本，比同期方法最高快 4.3 倍。"
+  plain: "比较两份分布前先让它们“掺一点对方”，某个词概率接近 0 时损失就不会爆掉；学生写过的答案存起来反复用，省下采样时间。"
+  takeaways:
+    - "反向 KL 在学生概率接近 0 的位置梯度很尖；α≈0.1 的 skew KL 或 skew 反向 KL 是一个几乎零成本的稳定器。"
+    - "学生采样太贵时，把学生样本放进回放池复用几轮而不是每步重采，代价是轻微离策略。"
+  builds_on: [minillm, gkd]
+  tags: [skew KL, 回放池]
+
+- id: distillm-2
+  title: "DistiLLM-2: A Contrastive Approach Boosts the Distillation of LLMs"
+  short: DistiLLM-2
+  kind: paper
+  org: KAIST AI · Microsoft
+  authors: "Jongwoo Ko et al."
+  date: 2025-03
+  venue: ICML 2025（Oral）
+  arxiv: "2503.07067"
+  repo: jongwooko/distillm-2
+  areas: [opd]
+  facets: [algorithm]
+  tier: rec
+  evidence: [ablation, open-source, community]
+  evidence_note: "ICML 2025 Oral；官方代码基于 alignment-handbook，含 Qwen2.5、DeepSeek-Coder 与视觉语言模型配置；在指令跟随、代码、数学和偏好对齐上系统对照。"
+  summary: "指出损失要与数据来源搭配：对教师回答用 skew KL 拉高似然，对学生回答用 skew 反向 KL 压低教师不认可的部分，形成类似 DPO 的对比式蒸馏；学生回答每轮用 vLLM 离线生成一次。"
+  plain: "老师的答案“多学一点”，自己答案里老师不认可的地方“少来一点”，两头一起用力，比两种数据共用一个损失更有效。"
+  takeaways:
+    - "同时有教师回答和学生回答时别一视同仁：教师数据配前向型损失，学生数据配反向型损失。"
+    - "预算紧时，“每个 epoch 批量生成一次学生回答”是完全在线蒸馏的一个便宜近似。"
+  builds_on: [distillm]
+  tags: [对比蒸馏, skew KL]
+
+# ---------- 工业配方 ----------
+
+- id: tm-opd
+  title: "On-Policy Distillation"
+  short: TM OPD 博客
+  kind: blog
+  org: Thinking Machines Lab
+  authors: "Kevin Lu et al."
+  date: "2025-10-27"
+  url: https://thinkingmachines.ai/blog/on-policy-distillation/
+  links:
+    - { label: 复现代码（tinker-cookbook）, url: https://github.com/thinking-machines-lab/tinker-cookbook/tree/main/tinker_cookbook/recipes/distillation }
+  areas: [opd]
+  facets: [algorithm, infra]
+  tier: must
+  evidence: [adopted, ablation, open-source, community]
+  evidence_note: "GLM-5、DeepSeek-V4、MiMo-V2-Flash 的技术报告和 MiniCPM5 的 OPD 都引用它；slime、verl 按它的定义实现反向 KL 优势；tinker-cookbook 公开全部复现脚本；中英文社区大量转载讨论。"
+  summary: "把 OPD 写成最简 RL 配方：学生采样，教师给每个采样 token 打 log 概率，优势取负的逐 token 反向 KL、折扣为 0；数学推理上以远低于 SFT/RL 的成本达到同等水平，还能找回个性化微调丢掉的能力。"
+  plain: "小模型自己答题，大模型只“阅卷”不“答题”，每个字都给分；比只看最终对错的 RL 省得多。"
+  takeaways:
+    - "已有同 tokenizer 的强教师时，先试 OPD 再考虑 RL：信号密、步数少、同一批提示可以反复用。"
+    - "教师只需前向打分一次，把 log 概率差当逐 token 优势，就能直接复用现有 RL 训练栈。"
+    - "领域微调把聊天能力“洗掉”后，用微调前的模型当老师跑一轮 OPD，能在基本不丢新知识的前提下找回行为。"
+  builds_on: [minillm, gkd, qwen3]
+  tags: [反向 KL, Tinker, 持续学习]
+
+- id: mimo-v2-flash
+  title: "MiMo-V2-Flash Technical Report"
+  short: MiMo-V2-Flash
+  kind: report
+  org: 小米 LLM-Core
+  authors: "Bangjun Xiao et al."
+  date: 2025-12
+  arxiv: "2601.02780"
+  repo: XiaomiMiMo/MiMo-V2-Flash
+  areas: [opd, rl-llm]
+  facets: [algorithm, infra]
+  tier: must
+  evidence: [industrial, adopted, ablation, open-source]
+  evidence_note: "小米 309B-A15B MoE 正式模型的后训练主干；GLM-5 报告在其 OPD 算法处引用本报告，verl 的多教师 OPD 文档也把它列为代表工作；权重与报告公开；报告给出每个领域“蒸馏前 / 最强教师 / 蒸馏后”的对照和与纯结果奖励的曲线对比。"
+  summary: "提出多教师在线蒸馏 MOPD：SFT 后先分领域训练 RL/SFT 专家，再让统一学生在自己的采样上接受对应领域教师的逐 token 反向 KL 优势，并可叠加结果奖励优势；多数领域达到或超过最强教师。"
+  plain: "先培养一群偏科的尖子生当老师，再让一个学生自己做各科题、由对应科目的老师逐字批改，最后一个人学会所有科目。"
+  takeaways:
+    - "多领域能力互相拉扯（跷跷板）时，“分领域训专家 + MOPD 合并”比参数合并或混合 RL 更稳。"
+    - "教师优势和结果奖励优势可以直接相加；只用教师信号时，学生的上限就是教师。"
+    - "训练引擎与推理引擎概率不一致时，对 π_θ/μ 做截断重要性加权并丢掉偏差过大的 token，OPD 同样需要。"
+  builds_on: [gkd, minillm, tm-opd]
+  tags: [MOPD, 多教师, MoE]
+
+# ---------- 2026：诊断、综述与自蒸馏 ----------
+
+- id: opd-survey
+  title: "A Survey of On-Policy Distillation for Large Language Models"
+  short: OPD 综述
+  kind: paper
+  org: 腾讯
+  authors: "Mingyang Song, Mao Zheng"
+  date: 2026-04
+  arxiv: "2604.00626"
+  links:
+    - { label: 配套论文清单, url: https://github.com/nick7nlp/Awesome-LLM-On-Policy-Distillation }
+  areas: [opd]
+  facets: [theory]
+  tier: ref
+  evidence: [community]
+  evidence_note: "第一篇专门的 OPD 综述，作者来自腾讯大模型部门并维护配套论文清单；社区维护的 awesome-on-policy-distillation 把它列为入门第一篇。"
+  summary: "第一篇专门梳理 LLM 在线蒸馏的综述：按反馈信号、教师访问方式和损失作用范围组织散度最小化、奖励引导与自博弈三类方法，并讨论工业流水线中静态模仿的结构性缺陷。"
+  plain: "OPD 论文一年冒出几百篇，这是一张按“信号从哪来、老师能看到什么”分好类的地图。"
+  takeaways:
+    - "刚进入这个方向时先用它建立坐标系，再按需要跳到具体方法；2026 年下半年的新工作需要另行补充。"
+  tags: [综述]
+
+- id: revisiting-opd
+  title: "Revisiting On-Policy Distillation: Empirical Failure Modes and Simple Fixes"
+  short: Revisiting OPD
+  kind: paper
+  org: 中国科学院自动化研究所
+  authors: "Yuqian Fu, Haohuan Huang et al."
+  date: 2026-03
+  venue: COLM 2026
+  arxiv: "2603.25562"
+  repo: hhh675597/revisiting_opd
+  areas: [opd]
+  facets: [algorithm]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "COLM 2026；基于 verl-agent 的代码开源，数学推理与 ALFWorld 智能体多任务都有配置；理论上比较了 token 级与序列级估计的偏差和方差，并逐项消融三个修复。"
+  summary: "指出采样 token 式 OPD 在长程任务上的三种失效：信号只落在一个 token 上、教师在学生前缀上越来越不可靠、tokenizer 与特殊 token 不匹配；对应给出教师 top-K 截断反向 KL、top-p 采样、特殊 token 掩码。"
+  plain: "只拿学生写下的那一个字问老师“你给几分”，信息太少也太吵；改成在老师最看好的几十个候选上整体比较，训练稳得多。"
+  takeaways:
+    - "长回答上，用教师 top-K（例如 32）截断并归一化后的反向 KL，比单个采样 token 的估计更稳。"
+    - "<think> 这类特殊 token 在师生间切分或含义不同时，先从 KL 里掩掉。"
+    - "token 级 OPD 相对序列级反向 KL 有偏，但方差上界紧得多，这正是大家默认折扣为 0 的理由。"
+  builds_on: [tm-opd]
+  tags: [失效模式, top-K]
+
+- id: rethinking-opd
+  title: "Rethinking On-Policy Distillation of Large Language Models: Phenomenology, Mechanism, and Recipe"
+  short: Rethinking OPD
+  kind: paper
+  org: 清华大学 · 上海科技大学 · UIUC · 中国人民大学
+  authors: "Yaxuan Li et al."
+  date: 2026-04
+  venue: ICML 2026 FoGen Workshop
+  arxiv: "2604.13016"
+  repo: thunlp/OPD
+  areas: [opd]
+  facets: [theory, algorithm]
+  tier: rec
+  evidence: [adopted, ablation, open-source]
+  evidence_note: "MiniCPM5-1B 的 OPD 明确采用了它的实现改进（在师生 top-k 并集上算反向 KL）；它的 top-k 重叠诊断已合入 verl（distillation/overlap_ratio 等指标）；代码开源。"
+  summary: "系统研究 OPD 何时成败：师生思维模式要兼容，教师还要带来学生没见过的新能力；成功时学生访问状态上的高概率 token 逐步对齐，师生共享的小集合占 97%–99% 的概率质量。"
+  plain: "老师得讲学生听得懂的话，还得讲学生不会的东西；缺一条，OPD 就学不动。"
+  takeaways:
+    - "OPD 不涨时先查两件事：师生思维模式是否一致（不一致就先做一段离线蒸馏冷启动），教师是否真有学生没见过的能力。"
+    - "按教师擅长的分布挑提示，比随机提示更容易救回失败的 OPD。"
+    - "监控师生 top-k 重叠率：持续上升是健康信号，停滞说明信号没落到学生真正会走的状态上。"
+  builds_on: [tm-opd]
+  tags: [机制分析, 冷启动]
+
+- id: self-distilled-reasoner
+  title: "Self-Distilled Reasoner: On-Policy Self-Distillation for Large Language Models"
+  short: OPSD
+  kind: paper
+  org: UCLA · HKU · Meta
+  authors: "Siyan Zhao et al."
+  date: 2026-01
+  arxiv: "2601.18734"
+  repo: siyan-zhao/OPSD
+  areas: [opd]
+  facets: [algorithm]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "代码开源（基于 TRL 的 GOLD 训练器），2026-03 修复对话模板问题后重跑并更新了消融；是 2026 年大量“特权信息自蒸馏”工作的起点。"
+  summary: "同一个模型既当学生又当老师：学生只看题目，老师额外看到参考解，在学生自己的轨迹上做逐 token 分布匹配；不需要更大的教师，报告相比 GRPO 有 4–8 倍的 token 效率。"
+  plain: "让模型先闭卷做题，再让“偷看了答案的自己”逐字批改，不用请更大的老师。"
+  takeaways:
+    - "只有带参考答案的数据、没有更强教师时，可以用“看过答案的自己”当老师做 OPD。"
+    - "“wait”“think”这类风格 token 的 KL 可能比数学 token 高 6–15 倍并主导梯度，需要逐 token 截断 KL。"
+  builds_on: [tm-opd]
+  tags: [自蒸馏, 特权信息]
+
+- id: sdft
+  title: "Self-Distillation Enables Continual Learning"
+  short: SDFT
+  kind: paper
+  org: MIT · Improbable AI Lab · ETH Zürich
+  authors: "Idan Shenfeld et al."
+  date: 2026-01
+  arxiv: "2601.19897"
+  repo: idanshen/Self-Distillation
+  links:
+    - { label: Tinker 复现（sdft recipe）, url: https://github.com/thinking-machines-lab/tinker-cookbook/tree/main/tinker_cookbook/recipes/sdft }
+  areas: [opd]
+  facets: [algorithm]
+  tier: rec
+  evidence: [adopted, open-source]
+  evidence_note: "Thinking Machines 在 tinker-cookbook 中做了复现并消融了 top-K=20 与静态教师两个近似；TRL 收录 SDFTTrainer；作者代码单卡 H200 可复现。注意作者 2026-04 的更正：论文结果实际用的是逐 token 前向 KL。"
+  summary: "用“看过示范的自己”当老师，在学生自己的输出上做逐 token 蒸馏，把示范数据变成在线训练信号；在技能学习和知识获取上新任务精度高于 SFT、遗忘明显更少，并能顺序累积多项技能。"
+  plain: "SFT 是让模型抄示范；SDFT 是让模型先自己写，再由看过示范的自己批改。学到新本事，旧本事忘得少。"
+  takeaways:
+    - "只有示范、没有奖励函数，又怕 SFT 洗掉旧能力时，SDFT 比 SFT 更稳。"
+    - "复现时注意损失方向：作者说明论文结果用的是逐 token 前向 KL（类似 GKD），不是反向 KL。"
+  builds_on: [gkd, tm-opd]
+  tags: [持续学习, 自蒸馏]
+
+- id: sdpo
+  title: "Reinforcement Learning via Self-Distillation"
+  short: SDPO
+  kind: paper
+  org: ETH Zürich · MPI-IS · MIT · Stanford
+  authors: "Jonas Hübotter et al."
+  date: 2026-01
+  arxiv: "2601.20802"
+  repo: lasgroup/SDPO
+  areas: [opd, rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [adopted, open-source]
+  evidence_note: "TRL 收录 SDPOTrainer（实验模块）；官方代码与训练日志公开；在科学推理、工具使用和 LiveCodeBench v6 上与强 RLVR 基线对照。"
+  summary: "把环境返回的文字反馈（报错、评审意见）或同组的成功样本当特权上下文，让“看到反馈的自己”当老师，把逐 token 自蒸馏信号接进 RLVR；样本效率与最终精度都优于强 RLVR 基线。"
+  plain: "做错题时，把判卷意见告诉另一个自己，让它指出每一步该怎么改；一个 0/1 分数就变成了逐字的指导。"
+  takeaways:
+    - "环境本来就返回报错、测试日志等文字反馈时，别只用 0/1 奖励：把反馈喂给自教师，得到稠密信号。"
+    - "只有标量奖励时，也可以拿同组成功样本当“反馈”，给失败样本提供逐 token 监督。"
+  builds_on: [tm-opd]
+  tags: [自蒸馏, RLVR, 富反馈]

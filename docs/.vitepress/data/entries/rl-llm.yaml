@@ -1,0 +1,829 @@
+# LLM 强化学习：从 RLHF 到 RLVR（owner: rl-llm）
+# 事实来源：arXiv 摘要页、各仓库 README / 技术报告 PDF、RLHF Book（natolambert/rlhf-book）交叉核对。
+# 指标（引用、star、点赞）由 CI 自动抓取，这里不手写数字。
+
+# ───────────────────────── RLHF 基础 ─────────────────────────
+
+- id: ppo
+  title: "Proximal Policy Optimization Algorithms"
+  short: PPO
+  kind: paper
+  org: OpenAI
+  authors: "John Schulman et al."
+  date: 2017-07
+  arxiv: "1707.06347"
+  areas: [classic-rl, rl-llm]
+  facets: [algorithm]
+  tier: must
+  evidence: [industrial, adopted, ablation, community]
+  evidence_note: "OpenAI 在 InstructGPT 中用 PPO 完成 RLHF；Tülu 3 的 RLVR、Open-Reasoner-Zero、VAPO 与 Seed1.5-Thinking 仍以 PPO 为骨架；GRPO、DAPO、CISPO 都是在它的裁剪代理目标上做的修改。原文在 MuJoCo 与 Atari 上对比了多种代理目标。"
+  summary: "提出裁剪重要性比率的代理目标 min(ρÂ, clip(ρ,1±ε)Â)，让同一批样本可安全地做多轮小批量更新，兼得 TRPO 的稳定与一阶优化的简单。"
+  plain: "每次更新只允许新策略在旧策略附近挪一小步：比率超出 1±ε 的那部分收益不再计入，防止一次学太猛把模型带歪。"
+  takeaways:
+    - "在 LLM 上用 PPO 时，把 ε、GAE 的 λ 和价值模型初始化当作一等超参：Open-Reasoner-Zero 发现推理 RL 中 λ=1 比 0.95 稳定得多。"
+    - "显存吃紧或奖励只在序列末尾出现时，先用 GRPO、RLOO 这类无 critic 方法建立基线，再决定是否值得维护价值网络。"
+  builds_on: [trpo]
+  tags: [策略梯度, 信任域, 裁剪]
+
+- id: instructgpt
+  title: "Training language models to follow instructions with human feedback"
+  short: InstructGPT
+  kind: paper
+  org: OpenAI
+  authors: "Long Ouyang et al."
+  date: 2022-03
+  venue: NeurIPS 2022
+  arxiv: "2203.02155"
+  repo: openai/following-instructions-human-feedback
+  areas: [rl-llm]
+  facets: [algorithm, data]
+  tier: must
+  evidence: [industrial, adopted, ablation, community]
+  evidence_note: "OpenAI 以此流程训练 InstructGPT，“SFT → 奖励模型 → PPO”三段式随后成为 Llama 2 等工业后训练的标准流程；论文含大规模人工评测与 PPO / PPO-ptx 对照。仓库只含模型卡、样例与标注说明。"
+  summary: "确立 RLHF 三段式：示范数据 SFT、用排序比较训练奖励模型、PPO 带逐 token KL 惩罚优化并混入预训练梯度（PPO-ptx）；1.3B 模型的输出被评为优于 175B 的 GPT-3。"
+  plain: "先教模型照着写，再请人给几个回答排座次、训练一个“打分员”，最后让模型为了高分反复练，同时拴一根 KL 绳子别跑太远。"
+  takeaways:
+    - "奖励模型只是人类偏好的代理：RL 阶段必须用 KL 约束或早停控制与参考策略的距离，并定期用人工评测校准。"
+    - "RL 后通用能力回退时，可仿照 PPO-ptx 在目标里混入少量预训练或高质量 SFT 数据的似然项。"
+  builds_on: [ppo]
+  tags: [RLHF, 奖励模型, PPO]
+
+- id: constitutional-ai
+  title: "Constitutional AI: Harmlessness from AI Feedback"
+  short: Constitutional AI
+  kind: paper
+  org: Anthropic
+  authors: "Yuntao Bai et al."
+  date: 2022-12
+  arxiv: "2212.08073"
+  repo: anthropics/ConstitutionalHarmlessnessPaper
+  areas: [rl-llm]
+  facets: [data, algorithm]
+  tier: must
+  evidence: [industrial, adopted, ablation, community]
+  evidence_note: "Anthropic 用宪法方法训练 Claude；Google 的 RLAIF 研究（Lee et al., 2023）系统比较了 AI 反馈与人类反馈，Hugging Face 发布了开源复现配方（Constitutional AI Recipe）。仓库为论文补充材料。"
+  summary: "只用一份自然语言“宪法”代替人工有害性标注：SL 阶段让模型按原则自我批评并改写，RL 阶段用 AI 给出的偏好训练偏好模型再做 RL（RLAIF），得到无害且不回避的助手。"
+  plain: "不再请人逐条判断哪句话有害，而是给模型一本“守则”，让它自己挑刺、自己改，再用它的判断去训练打分员。"
+  takeaways:
+    - "偏好标注昂贵或需要统一口径时，先把标准写成可执行的原则，再让强模型按原则比较回答，人工只做抽检。"
+    - "AI 反馈同样会被钻空子：原则越含糊，策略越容易学出讨好或说教式回答，需要定期人工审计。"
+  builds_on: [instructgpt]
+  tags: [RLAIF, 宪法, 无害性]
+
+- id: dpo
+  title: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model"
+  short: DPO
+  kind: paper
+  org: Stanford
+  authors: "Rafael Rafailov et al."
+  date: 2023-05
+  venue: NeurIPS 2023
+  arxiv: "2305.18290"
+  repo: eric-mitchell/direct-preference-optimization
+  areas: [rl-llm]
+  facets: [algorithm]
+  tier: must
+  evidence: [adopted, open-source, ablation, community]
+  evidence_note: "Llama 3、Tülu 3 等工业与开源后训练把 DPO 或其变体作为偏好优化阶段；官方代码开源，TRL、OpenRLHF 等框架均有实现。"
+  summary: "证明 KL 约束下 RLHF 的最优策略有闭式解，于是奖励可写成策略与参考策略的对数比，直接在偏好对上用一条二分类损失训练，免去奖励模型和在线采样。"
+  plain: "不单独训练打分员，也不在线生成：拿“好回答 / 差回答”成对数据，直接把好回答的相对概率抬高、差回答压低。"
+  takeaways:
+    - "有高质量成对偏好、只想低成本对齐风格与安全时，DPO 是首选基线；要探索新解法（数学、代码）时，它替代不了在线 RL。"
+    - "偏好数据与当前策略的分布差得越远，效果越打折；可以用当前模型重新采样构造偏好对，做迭代或在线 DPO。"
+  builds_on: [instructgpt]
+  tags: [偏好优化, 离线, Bradley–Terry]
+
+- id: remax
+  title: "ReMax: A Simple, Effective, and Efficient Reinforcement Learning Method for Aligning Large Language Models"
+  short: ReMax
+  kind: paper
+  org: 香港中文大学（深圳）· 南京大学
+  authors: "Ziniu Li et al."
+  date: 2023-10
+  venue: ICML 2024
+  arxiv: "2310.10505"
+  repo: liziniu/ReMax
+  areas: [rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "在 Mistral-7B 等模型上与 PPO 对照，给出显存与训练时间的节省（7B 上显存约减 46%）；代码开源，verl 附带 ReMax 训练脚本。"
+  summary: "指出 RLHF 模拟快、转移确定、奖励只在轨迹末端，于是改用 REINFORCE，以贪心解码回答的奖励作基线降方差，去掉价值模型，比 PPO 少 4 个以上超参。"
+  plain: "同一道题让模型再“认真答一遍”（贪心解码）当参照分：采样答案比它好就加强，比它差就削弱，不用训练估分网络。"
+  takeaways:
+    - "奖励只在序列末端给出时，价值网络的收益有限；先用 ReMax、RLOO 这类无 critic 方法建立基线，能省下大块显存。"
+  builds_on: [ppo]
+  tags: [REINFORCE, 基线, 无 critic]
+
+- id: rloo
+  title: "Back to Basics: Revisiting REINFORCE Style Optimization for Learning from Human Feedback in LLMs"
+  short: RLOO
+  kind: paper
+  org: Cohere For AI · Cohere
+  authors: "Arash Ahmadian et al."
+  date: 2024-02
+  venue: ACL 2024
+  arxiv: "2402.14740"
+  areas: [rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [ablation, community]
+  evidence_note: "在多组 RLHF 设置下与 PPO、DPO、RAFT 做受控对比；Kimi k1.5 去掉价值网络时直接以它为依据，TRL、OpenRLHF、verl 都提供 RLOO，PRIME 也用它估计优势。"
+  summary: "论证 PPO 为经典 RL 设计的许多组件在 RLHF 中并不必要：把整段回答当作一个动作，用同题其余 k−1 个样本的平均奖励作留一基线（RLOO），效果与成本均优于 PPO、DPO 和 RAFT。"
+  plain: "同一道题做 k 遍，每个答案都拿“其他几遍的平均分”当及格线，既不用估分网络，又不会自己跟自己比。"
+  takeaways:
+    - "RLHF 中奖励只在结尾出现时，把整段回答当成单个动作往往就够了；先上 RLOO，再考虑 PPO 的复杂度是否值得。"
+  builds_on: [ppo]
+  tags: [REINFORCE, 留一基线, 无 critic]
+
+- id: grpo
+  title: "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models"
+  short: GRPO（DeepSeekMath）
+  kind: paper
+  org: DeepSeek-AI
+  authors: "Zhihong Shao et al."
+  date: 2024-02
+  arxiv: "2402.03300"
+  repo: deepseek-ai/DeepSeek-Math
+  areas: [rl-llm]
+  facets: [algorithm, data]
+  tier: must
+  evidence: [industrial, adopted, open-source, community]
+  evidence_note: "DeepSeek 在 DeepSeekMath、V3、R1、V3.2 中持续使用；Qwen3、MiMo、Magistral 等工业报告以它为起点修改，DAPO、Dr. GRPO、GSPO 都是对它的修正；权重与评测代码开源。"
+  summary: "用 120B 数学 token 继续预训练得到 DeepSeekMath 7B，并提出 GRPO：同一题采样一组回答，以组内奖励的均值与标准差归一化作优势，去掉价值网络，显著降低 PPO 的显存开销。"
+  plain: "同一道题让模型做一组，拿组内平均分当及格线、组内分差当尺度来打分，不再需要另一个和模型一样大的“估分老师”。"
+  takeaways:
+    - "奖励稀疏、只看最终答案时，GRPO 是最省事的起点；但它的长度归一化与标准差归一化会引入偏置，见 Dr. GRPO。"
+    - "组内全对或全错时优势为 0、没有梯度；这类题占比高时要做难度筛选或动态采样。"
+  builds_on: [ppo]
+  tags: [GRPO, 组相对优势, 数学推理]
+
+# ───────────────────────── 奖励设计 ─────────────────────────
+
+- id: lets-verify
+  title: "Let's Verify Step by Step"
+  short: Let's Verify / PRM800K
+  kind: paper
+  org: OpenAI
+  authors: "Hunter Lightman et al."
+  date: 2023-05
+  venue: ICLR 2024
+  arxiv: "2305.20050"
+  repo: openai/prm800k
+  areas: [rl-llm]
+  facets: [data, algorithm]
+  tier: must
+  evidence: [industrial, open-source, ablation, community]
+  evidence_note: "OpenAI 团队在同一基座上大规模对照结果监督与过程监督；公开 80 万条步骤级标注 PRM800K，成为后续 PRM 研究最常用的对照数据；DeepSeek-R1 讨论 PRM 取舍时即以它为代表。"
+  summary: "在 MATH 上系统比较结果监督（ORM）与过程监督（PRM）：逐步标注训练的 PRM 用于 best-of-N 重排显著优于 ORM，在代表性子集上解出 78% 的题；主动学习能进一步提升标注效率。"
+  plain: "老师不只看最后答案，而是一步步批改；用这种“逐步批改员”从很多份答卷里挑最好的，比只看结果挑得准。"
+  takeaways:
+    - "PRM 的主战场是重排与搜索；把它直接当大规模在线 RL 的奖励，要先解决步骤切分、标注成本与被钻空子三件事（见 DeepSeek-R1 的失败尝试）。"
+    - "做过程标注时优先标“看起来对、其实错”的高置信错误样本（主动学习），同样预算下信息量更大。"
+  tags: [PRM, 过程监督, 数据集]
+
+- id: prime
+  title: "Process Reinforcement through Implicit Rewards"
+  short: PRIME
+  kind: paper
+  org: 清华大学 · UIUC 等
+  authors: "Ganqu Cui et al."
+  date: 2025-01
+  arxiv: "2502.01456"
+  repo: PRIME-RL/PRIME
+  areas: [rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "2025-01 先发布博客、代码与模型，2 月上线论文；Eurus-2-7B-PRIME 权重与数据开源，算法已并入 verl 的 recipe；消融覆盖 PRM 初始化、在线更新与优势组合方式。"
+  summary: "隐式 PRM 只用结果标签训练，却能给出逐 token 的过程奖励，并随策略在线更新以减轻分布漂移与奖励黑客；Eurus-2-7B-PRIME 在数学竞赛基准上比 SFT 模型平均提升 16.7%。"
+  plain: "不用人一步步标注，只用“最后对没对”训练一个会给每一步打分的模型，并且边训练边更新，让策略不容易钻它的空子。"
+  takeaways:
+    - "想要稠密奖励又没有步骤标注时，可用 SFT 模型初始化隐式 PRM，再用结果验证器的标签在线更新。"
+    - "过程奖励与结果奖励分别估计回报再相加（PRIME 对两者分别做 RLOO），比直接混成一个标量更稳。"
+  builds_on: [lets-verify, rloo]
+  tags: [隐式 PRM, 稠密奖励, 在线更新]
+
+- id: deepseek-grm
+  title: "Inference-Time Scaling for Generalist Reward Modeling"
+  short: DeepSeek-GRM
+  kind: paper
+  org: DeepSeek-AI · 清华大学
+  authors: "Zijun Liu et al."
+  date: 2025-04
+  arxiv: "2504.02495"
+  areas: [rl-llm]
+  facets: [algorithm, eval]
+  tier: rec
+  evidence: [industrial, open-source, ablation]
+  evidence_note: "DeepSeek 与清华合作，在多个奖励模型基准上对比标量 RM、成对 RM 与生成式 RM，并比较推理时扩展与训练时扩展；DeepSeek-GRM 权重已在 Hugging Face 与 ModelScope 发布。"
+  summary: "采用逐点生成式奖励模型：先为问题生成评判原则，再写批评并打分；用 SPCT（拒绝式微调 + 基于规则的在线 RL）训练，推理时并行采样并由元 RM 引导投票，使奖励质量随推理算力提升。"
+  plain: "让“评委模型”先写评分标准、再逐条点评打分；多请几次评委，再请一位“评委的评委”筛掉不靠谱的意见，分数就更准。"
+  takeaways:
+    - "通用领域没有验证器时，生成式 RM 比标量 RM 更能利用推理算力：多次采样投票加元 RM 过滤是性价比高的升级路径。"
+  tags: [生成式奖励模型, 推理时扩展, 评判原则]
+
+- id: rubrics-as-rewards
+  title: "Rubrics as Rewards: Reinforcement Learning Beyond Verifiable Domains"
+  short: RaR
+  kind: paper
+  org: Scale AI
+  authors: "Anisha Gunjal et al."
+  date: 2025-07
+  arxiv: "2507.17746"
+  links:
+    - { label: "解读（Cameron Wolfe）", url: "https://cameronrwolfe.substack.com/p/rubric-rl" }
+  areas: [rl-llm]
+  facets: [algorithm, eval]
+  tier: rec
+  evidence: [ablation, community]
+  evidence_note: "在医学与科学两个领域比较多种量表聚合方式与 Likert 式 LLM 裁判；RLHF Book 与多份 RL 综述把它列为 rubric 奖励的代表工作。"
+  summary: "为每道题生成实例级评分量表，把逐条检查的结果聚合成奖励做在线 RL；最佳变体比 Likert 打分的 LLM 裁判在 HealthBench 上最高相对提升 31%，GPQA-Diamond 上提升 7%。"
+  plain: "与其让裁判凭感觉打 1 到 10 分，不如先列出“好答案必须做到的几条”，逐条检查再汇总成分数。"
+  takeaways:
+    - "没有标准答案的任务，先把“好”拆成可逐条核对的量表条目，再让裁判模型按条目打分，比整体打分更稳、更难被刷分。"
+  tags: [rubric, 不可验证任务, LLM 裁判]
+
+- id: reward-overoptimization
+  title: "Scaling Laws for Reward Model Overoptimization"
+  short: RM 过优化扩展律
+  kind: paper
+  org: OpenAI
+  authors: "Leo Gao et al."
+  date: 2022-10
+  venue: ICML 2023
+  arxiv: "2210.10760"
+  areas: [rl-llm]
+  facets: [theory, eval]
+  tier: rec
+  evidence: [ablation, community]
+  evidence_note: "OpenAI 用“金标准 RM 给代理 RM 打标签”的合成设定做系统扩展实验；DeepSeek-R1 解释为何不用神经 PRM 时即引用此文，是讨论奖励黑客的标准参考。"
+  summary: "用金标准奖励模型标注数据来训练不同规模的代理 RM，测量优化代理 RM（best-of-n 与 RL）时真实奖励随 KL 距离的变化：先升后降，拐点与幅度随代理 RM 规模和数据量平滑变化。"
+  plain: "照着“打分员”使劲优化，真实质量一开始会涨，走太远就开始跌；打分员越大、数据越多，能安全走的距离越远。"
+  takeaways:
+    - "用学习到的 RM 做 RL 时，把与参考策略的 KL 当作预算来监控，并用留出的更强评估（人工或更大的 RM）确定早停点。"
+  builds_on: [instructgpt]
+  tags: [奖励黑客, 过优化, 扩展律]
+
+- id: deepseekmath-v2
+  title: "DeepSeekMath-V2: Towards Self-Verifiable Mathematical Reasoning"
+  short: DeepSeekMath-V2
+  kind: paper
+  org: DeepSeek-AI
+  authors: "Zhihong Shao et al."
+  date: 2025-11
+  arxiv: "2511.22570"
+  repo: deepseek-ai/DeepSeek-Math-V2
+  areas: [rl-llm]
+  facets: [algorithm, eval]
+  tier: rec
+  evidence: [industrial, open-source]
+  evidence_note: "DeepSeek 开源权重与报告；在 IMO 2025、CMO 2024 达到金牌水平，Putnam 2024 在扩展测试时算力下得 118/120。"
+  summary: "针对“答案对不代表推理对”和证明题无答案可比的问题，训练按量表给证明打分的验证器，并用元验证检查其指出的问题是否真实存在；再以验证器为奖励训练会自我检查的证明生成器。"
+  plain: "先培养一位严格的阅卷老师（还有人专门抽查老师有没有乱扣分），再让学生以老师的评分为目标练习，并学会交卷前自己先挑错。"
+  takeaways:
+    - "答案可被猜中或根本没有最终答案（证明、开放问题）时，用“验证器 + 元验证”代替答案匹配，并持续用更大的验证算力给新难例打标签，保持生成与验证之间的差距。"
+  builds_on: [grpo]
+  tags: [生成式验证器, 元验证, 定理证明]
+
+- id: reward-hacking-weng
+  title: "Reward Hacking in Reinforcement Learning"
+  short: Reward Hacking（Lil'Log）
+  kind: blog
+  org: Lilian Weng（Lil'Log）
+  authors: "Lilian Weng"
+  date: "2024-11-28"
+  url: https://lilianweng.github.io/posts/2024-11-28-reward-hacking/
+  areas: [rl-llm]
+  facets: [theory]
+  tier: ref
+  evidence: [community]
+  evidence_note: "Lilian Weng 的长文综述（约 37 分钟阅读），被广泛转引；以梳理案例与成因为主，作者自述缓解方法仍有待系统研究。"
+  summary: "从奖励设定与虚假相关出发定义奖励黑客，汇总经典 RL 与 LLM 中的典型案例：RLHF 中迎合用户偏好、编程任务里改单元测试、LLM 裁判的偏差、上下文内奖励黑客等，并分析成因。"
+  plain: "一篇把“模型钻奖励空子”讲透的综述：从游戏刷分 bug，到大模型改测试、拍用户马屁，案例和原因都有。"
+  takeaways:
+    - "设计新奖励前，对照文中的案例清单逐条自查：奖励会不会被格式、长度、讨好或篡改测试刷高。"
+  builds_on: [reward-overoptimization]
+  tags: [奖励黑客, 综述]
+
+# ───────────────────────── 推理 RL：信号与工业报告 ─────────────────────────
+
+- id: openai-o1
+  title: "Learning to Reason with LLMs"
+  short: OpenAI o1
+  kind: blog
+  org: OpenAI
+  date: "2024-09-12"
+  url: https://openai.com/index/learning-to-reason-with-llms/
+  areas: [rl-llm]
+  facets: [eval, theory]
+  tier: rec
+  evidence: [industrial, community]
+  evidence_note: "OpenAI 发布 o1-preview 时的官方技术博客，几乎不披露算法细节，但给出的训练算力与思考时长两条扩展曲线直接引发了 R1、k1.5 与整个开源复现潮。"
+  summary: "宣布用大规模 RL 训练模型在回答前生成长思维链：性能随 RL 训练算力与测试时思考算力同时平滑提升；AIME 2024 单样本 74%，64 样本共识 83%。"
+  plain: "OpenAI 告诉大家：让模型先想再答，并用强化学习奖励“想得对”，想得越久、练得越多就越强，但没说具体怎么做。"
+  takeaways:
+    - "评估推理模型要同时报告训练算力与测试时算力（思考长度、采样数）下的曲线，单点分数会掩盖扩展性。"
+  tags: [test-time scaling, 长 CoT, 闭源]
+
+- id: deepseek-r1
+  title: "DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning"
+  short: DeepSeek-R1
+  kind: paper
+  org: DeepSeek-AI
+  date: 2025-01
+  venue: Nature 2025
+  arxiv: "2501.12948"
+  repo: deepseek-ai/DeepSeek-R1
+  areas: [rl-llm]
+  facets: [algorithm, data]
+  tier: must
+  evidence: [industrial, adopted, open-source, community]
+  evidence_note: "DeepSeek 开源权重的推理模型，论文经同行评审刊于 Nature（2025）；Qwen3 等工业报告采用类似多阶段配方，ORZ、SimpleRL-Zoo、DAPO 以复现 R1-Zero 为目标，R1 蒸馏模型是 DeepScaleR、Skywork-OR1 的起点。"
+  summary: "R1-Zero 直接在基座上用 GRPO 与规则奖励做 RL，AIME24 pass@1 从 15.6% 升到 71.0% 并涌现反思；R1 再以冷启动、推理 RL、拒绝采样 SFT、全场景 RL 四段补齐可读性与通用性。"
+  plain: "不给解题示范，只告诉模型“答对给分”，它自己学会了打草稿、回头检查；再补一点示范和通用训练，就成了好用的推理模型。"
+  takeaways:
+    - "大规模推理 RL 先用规则可验证的奖励：R1 担心奖励黑客与额外成本，在 R1-Zero 中没有使用神经 ORM / PRM。"
+    - "纯 RL 得到的思维链可读性差、语言混杂；少量冷启动数据加语言一致性奖励，能以很小的分数代价换来可用性。"
+    - "小模型直接蒸馏大模型的推理轨迹，往往比自己从头做大规模 RL 更划算。"
+  builds_on: [grpo]
+  tags: [RLVR, R1-Zero, 长 CoT, 冷启动]
+
+- id: kimi-k1-5
+  title: "Kimi k1.5: Scaling Reinforcement Learning with LLMs"
+  short: Kimi k1.5
+  kind: report
+  org: Moonshot AI
+  date: 2025-01
+  arxiv: "2501.12599"
+  repo: MoonshotAI/Kimi-k1.5
+  areas: [rl-llm]
+  facets: [algorithm, infra]
+  tier: rec
+  evidence: [industrial, ablation, community]
+  evidence_note: "月之暗面 Kimi k1.5 的训练报告，与 R1 同日发布；含负梯度（对比 ReST）、课程采样、long2short 等对照实验。其策略优化与 partial rollout 被 Kimi K2、K2.5、K3 一路沿用。"
+  summary: "在线镜像下降变体：采样均值作基线、对上一轮策略加 τ 正则，不用价值网络与 PRM；配合长度惩罚、课程与优先采样、partial rollout 和 long2short，把长上下文 RL 做成系统。"
+  plain: "每轮以当前模型为参照、只允许小步改进；答案太长要扣分，难题多练，长答案分段生成，最后再把长思考压缩成短回答。"
+  takeaways:
+    - "答案可被猜中的题（选择、判断、证明）会制造假阳性：k1.5 直接剔除，并删掉不写推理、8 次内就能猜中答案的题。"
+    - "长度惩罚要预热：先不罚长度让能力长起来，再加长度奖励压缩冗余。"
+  tags: [长 CoT, 长度惩罚, partial rollout, long2short]
+
+- id: seed-thinking-1-5
+  title: "Seed1.5-Thinking: Advancing Superb Reasoning Models with Reinforcement Learning"
+  short: Seed1.5-Thinking
+  kind: report
+  org: ByteDance Seed
+  date: 2025-04
+  arxiv: "2504.13914"
+  repo: ByteDance-Seed/Seed-Thinking-v1.5
+  areas: [rl-llm]
+  facets: [algorithm, infra]
+  tier: rec
+  evidence: [industrial, community]
+  evidence_note: "字节跳动 Seed 的推理模型报告（MoE，激活 20B / 总参 200B）；公开了 VAPO 与 DAPO 在工业模型上的组合方式、两类验证器的对比，以及流式 rollout 系统设计。"
+  summary: "混训可验证数据（验证器打分）与通用数据（成对生成式 RM 打分），用 VAPO、DAPO 的技巧稳定长 CoT RL；思考型验证器在 456 条难例上准确率 99.3%，原则型验证器仅 82.7%。"
+  plain: "判卷员也要会思考：让判卷模型先推理再下结论，既判得更准，也更难被模型钻空子。"
+  takeaways:
+    - "规则匹配判不准的数学答案（等价形式、边界情况）交给会推理的验证器，并单独构建难例集检验验证器本身。"
+    - "可验证与不可验证数据混训时，成对生成式 RM 的分数分布更平稳，能减少与验证器分数的冲突。"
+  builds_on: [vapo, dapo]
+  tags: [验证器, 混合奖励, actor-critic]
+
+- id: qwen3
+  title: "Qwen3 Technical Report"
+  short: Qwen3
+  kind: report
+  org: 阿里巴巴 Qwen
+  date: 2025-05
+  arxiv: "2505.09388"
+  repo: QwenLM/Qwen3
+  areas: [rl-llm]
+  facets: [algorithm, data]
+  tier: rec
+  evidence: [industrial, open-source, community]
+  evidence_note: "通义千问开源 0.6B 到 235B 的全系列权重；后训练四阶段与强到弱蒸馏被大量开源工作参照，报告给出了在线策略蒸馏与 RL 的 GPU 时对照。"
+  summary: "旗舰模型四阶段：长 CoT 冷启动、推理 RL（3,995 组题目-验证器，GRPO）、思考模式融合、20 余类任务的通用 RL；小模型改用离策略加在线策略蒸馏。"
+  plain: "大模型靠少量精选难题做 RL 学会推理，再把“想”和“不想”两种模式合进一个模型；小模型直接跟着大模型学，比自己做 RL 便宜得多。"
+  takeaways:
+    - "推理 RL 的题目在精不在多：选冷启动模型能学会但仍困难、且没在 SFT 中出现过的题，几千条就能支撑一次稳定的长程训练。"
+    - "有强教师时，小模型优先做在线策略蒸馏：Qwen3-8B 上它比直接 RL 分数更高，GPU 时约为 RL 的 1/10。"
+  builds_on: [deepseek-r1, grpo]
+  tags: [思考模式融合, 强到弱蒸馏, 通用 RL]
+
+- id: mimo
+  title: "MiMo: Unlocking the Reasoning Potential of Language Model -- From Pretraining to Posttraining"
+  short: MiMo-7B
+  kind: report
+  org: 小米 LLM-Core
+  date: 2025-05
+  arxiv: "2505.07608"
+  repo: XiaomiMiMo/MiMo
+  areas: [rl-llm, mid-training]
+  facets: [algorithm, data]
+  tier: rec
+  evidence: [industrial, open-source, ablation]
+  evidence_note: "小米开源 MiMo-7B 全系列权重；13 万道 RL 题的清洗、奖励设计与 rollout 引擎细节完整，可直接照做。"
+  summary: "从预训练起为推理服务；RL 用 13 万道可验证的数学与代码题、只给正确性奖励，GRPO 去 KL 并加动态采样与 clip-higher，另设测试难度加权的代码奖励与易题重采样。"
+  plain: "代码题按测试点难度给部分分，避免“全过才给分”太稀疏；已经全会的题留一点比例继续练，防止训练后期不稳。"
+  takeaways:
+    - "代码 RL 奖励太稀疏时，可按测试点通过率把测试分成难度档，按档给部分分（类似 IOI 计分）。"
+    - "动态采样到后期会滤掉大量全对题、采样效率骤降；保留易题池按小概率（MiMo 用 10%）回放能稳住训练。"
+  builds_on: [grpo, dapo]
+  tags: [测试难度奖励, 易题重采样, 小模型推理]
+
+- id: minimax-m1
+  title: "MiniMax-M1: Scaling Test-Time Compute Efficiently with Lightning Attention"
+  short: MiniMax-M1 / CISPO
+  kind: report
+  org: MiniMax
+  date: 2025-06
+  arxiv: "2506.13585"
+  repo: MiniMax-AI/MiniMax-M1
+  areas: [rl-llm]
+  facets: [algorithm, infra]
+  tier: rec
+  evidence: [industrial, open-source, ablation]
+  evidence_note: "MiniMax 开源 456B（激活 45.9B）混合注意力推理模型；CISPO 与 GRPO、DAPO 做了受控对比。MiniMax 后续 M2 系列继续使用 CISPO，ScaleRL 配方也采用了这种损失。"
+  summary: "提出 CISPO：不裁剪 token 更新，而是裁剪并截断梯度的重要性权重，让低概率的反思类 token 在多轮离策略更新中仍有梯度；Qwen2.5-32B 上只用一半步数追平 DAPO。"
+  plain: "PPO 会把“变化太大”的 token 整个踢出训练，偏偏“等等、再检查一下”这类关键词最容易被踢；CISPO 只给它们的权重设上限，不踢人。"
+  takeaways:
+    - "一批数据要做多轮离策略更新时，裁剪 IS 权重（CISPO）比裁剪 token 更新更能保住稀有 token 的梯度。"
+    - "RL 前先对齐训练与推理的数值精度：M1 把 LM head 提到 FP32 后，训练和推理的 token 概率才重新对齐。"
+    - "用生成式 RM 时要在线监控“只变长不变好”的迹象，一旦出现就重新校准 RM。"
+  builds_on: [dapo, grpo]
+  tags: [CISPO, 混合注意力, 长度偏置]
+
+- id: magistral
+  title: "Magistral"
+  short: Magistral
+  kind: report
+  org: Mistral AI
+  date: 2025-06
+  arxiv: "2506.10910"
+  links:
+    - { label: "报告 PDF", url: "https://mistral.ai/static/research/magistral.pdf" }
+  areas: [rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [industrial, open-source, ablation]
+  evidence_note: "Mistral 首个推理模型：Magistral Medium 不依赖其他模型的蒸馏数据，只用自家模型与基础设施做 RL；Magistral Small 以 Apache 2.0 开源。去 KL、放宽裁剪等做法与 RLHF Book 的整理交叉核对。"
+  summary: "从 Mistral Medium 3 出发纯 RL 训练推理：GRPO 去 KL、放宽上裁剪、batch 级归一化、在线过滤无差异组，加格式与语言一致性奖励；纯文本 RL 保持甚至提升了多模态能力。"
+  plain: "不抄别人的推理草稿，从自家模型直接用“答对给分”练出推理，还要求它用提问的语言思考和回答。"
+  takeaways:
+    - "多语言产品要在 RL 里显式加语言一致性奖励，否则思维链容易混用语言。"
+  builds_on: [grpo, dapo]
+  tags: [纯 RL, 语言一致性, 多语言]
+
+- id: deepseek-v3-2
+  title: "DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models"
+  short: DeepSeek-V3.2
+  kind: report
+  org: DeepSeek-AI
+  date: 2025-12
+  arxiv: "2512.02556"
+  links:
+    - { label: "V3.2-Exp 报告与代码", url: "https://github.com/deepseek-ai/DeepSeek-V3.2-Exp" }
+  areas: [rl-llm, agentic-rl]
+  facets: [algorithm, infra]
+  tier: rec
+  evidence: [industrial, open-source, community]
+  evidence_note: "DeepSeek 开源权重的旗舰模型报告；其离策略序列掩码已被社区提议集成进 TRL 的 GRPOTrainer，RLHF Book 将其列为 2025 年底的代表性推理报告。"
+  summary: "后训练算力超过预训练的 10%：先训领域专家再蒸馏，最后一次混合 GRPO；引入无偏 KL 估计、离策略序列掩码、保持路由与采样掩码，并合成 1,800+ 环境做智能体 RL。"
+  plain: "在 RL 上花更多钱，同时把训练与推理两边的“小差异”对齐（同样的专家路由、同样的采样截断），偏离太大的负样本干脆不学。"
+  takeaways:
+    - "RL 规模上去后，训推不一致会主导稳定性：MoE 要复用推理时的专家路由，top-p / top-k 截断掩码也要在训练时保持一致。"
+    - "大 batch 切成多个 mini-batch 更新时，对偏离采样策略过远的负样本序列直接掩码，比一味调小学习率更有效。"
+  builds_on: [deepseek-r1, grpo]
+  tags: [RL 算力扩展, 离策略掩码, 训推一致, 智能体任务合成]
+
+- id: kimi-k3
+  title: "Kimi K3: Open Frontier Intelligence"
+  short: Kimi K3
+  kind: report
+  org: Moonshot AI
+  date: 2026-07
+  arxiv: "2607.24653"
+  repo: MoonshotAI/Kimi-K3
+  areas: [rl-llm, agentic-rl]
+  facets: [algorithm, env]
+  tier: rec
+  evidence: [industrial, open-source]
+  evidence_note: "月之暗面开源 2.8T 参数模型权重与完整报告；RL 算法沿用 Kimi K2.5（token 级 log-ratio 掩码加平方正则），RLHF Book 的课程材料把它列为 2026 年“领域专家 RL + 多教师在线蒸馏”配方的代表。"
+  summary: "后训练三步：SFT 冷启动；三个领域 × 三档推理强度各训一个 RL 专家（共九个）；再用多教师在线策略蒸馏合并。RL 用 partial rollout 容忍陈旧数据，并按题预算控制推理长度。"
+  plain: "先分科、分档培养九位“专科尖子”，再让一个学生跟着他们边做边学；训练时超出字数预算的答案直接判负，防止无休止地想。"
+  takeaways:
+    - "推理长度可以当作训练目标来调：按题估计初始 token 预算，超出阈值倍数即奖励记 −1，逐步收紧阈值得到不同推理强度的模型。"
+    - "智能体环境要把被评者与验证器隔离：公开验证器给诊断反馈、隐藏验证器评估留出场景，并限制提交次数。"
+    - "生成式 RM 容易偏爱冗长输出：K3 规定超出长度阈值的候选在两两比较中直接判负。"
+  builds_on: [kimi-k1-5, kimi-k2-5]
+  tags: [领域专家, 多教师 OPD, 推理强度, 奖励黑客防护]
+
+# ───────────────────────── 推理 RL：开源复现 ─────────────────────────
+
+- id: open-reasoner-zero
+  title: "Open-Reasoner-Zero: An Open Source Approach to Scaling Up Reinforcement Learning on the Base Model"
+  short: Open-Reasoner-Zero
+  kind: paper
+  org: StepFun · 清华大学
+  authors: "Jingcheng Hu et al."
+  date: 2025-03
+  arxiv: "2503.24290"
+  repo: Open-Reasoner-Zero/Open-Reasoner-Zero
+  areas: [rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "代码、约 12.9 万条训练数据与多尺寸权重全部开源；对 GAE λ、KL 损失与 KL 奖励塑形做了对照实验。"
+  summary: "极简配方复现并超越 R1-Zero：原版 PPO（GAE λ=γ=1）、只看对错的规则奖励、不加 KL；在 Qwen2.5-32B 上以约 1/10 的步数，在三项推理基准上胜过 R1-Zero-Qwen-32B。"
+  plain: "不用花哨技巧：标准 PPO、答对给分、不拴 KL 绳子，只要数据与规模够，基座模型一样能自己学会长推理。"
+  takeaways:
+    - "推理 RL 中价值模型的 GAE 取 λ=γ=1 更稳；在该设定下 KL 损失和 KL 惩罚既拖慢训练又占资源，可以先去掉。"
+    - "基座本身能写出合格格式时，不必加格式奖励；只奖励正确性也能很快学会格式。"
+  builds_on: [ppo, deepseek-r1]
+  tags: [zero-RL, PPO, 开源复现]
+
+- id: simplerl-zoo
+  title: "SimpleRL-Zoo: Investigating and Taming Zero Reinforcement Learning for Open Base Models in the Wild"
+  short: SimpleRL-Zoo
+  kind: paper
+  org: 香港科技大学
+  authors: "Weihao Zeng et al."
+  date: 2025-03
+  venue: COLM 2025
+  arxiv: "2503.18892"
+  repo: hkust-nlp/simpleRL-reason
+  areas: [rl-llm]
+  facets: [algorithm, data]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "在 Llama3、Mistral、DeepSeek-Math 与 Qwen2.5 全尺寸共 10 个基座上开源全部 zero-RL 模型与代码，对格式奖励、数据难度等做了跨模型对照。"
+  summary: "把 zero-RL 从 Qwen2.5 推广到 10 个不同家族与尺寸的基座，发现调整格式奖励、按基座能力控制题目难度是成败关键，且回答变长并不总伴随“顿悟”式反思。"
+  plain: "同一套“答对给分”的训练放到不同底座上效果差很多：要按底座能力调格式要求和题目难度，别只看 Qwen 的结果下结论。"
+  takeaways:
+    - "zero-RL 的结论要在多个基座家族上验证：Qwen2.5 本身的推理先验很强，单一家族的结果容易高估方法效果。"
+    - "对指令跟随弱的基座，严格的格式奖励会压制探索，可放宽或去掉；题目难度要与基座能力匹配。"
+  builds_on: [deepseek-r1]
+  tags: [zero-RL, 多基座, 开源复现]
+
+- id: deepscaler
+  title: "DeepScaleR: Surpassing O1-Preview with a 1.5B Model by Scaling RL"
+  short: DeepScaleR
+  kind: blog
+  org: Agentica · UC Berkeley
+  authors: "Michael Luo et al."
+  date: 2025-02
+  url: https://pretty-radio-b75.notion.site/DeepScaleR-Surpassing-O1-Preview-with-a-1-5B-Model-by-Scaling-RL-19681902c1468005bed8ca303013a4e2
+  links:
+    - { label: "代码（现为 rLLM）", url: "https://github.com/agentica-project/rllm" }
+  areas: [rl-llm]
+  facets: [algorithm, data]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "Berkeley Sky Computing Lab 与 BAIR 的项目，训练脚本、数据、权重与日志全部开源，代码后来演进为 rLLM 框架；在 Hacker News 等社区广泛讨论，是“小模型 + RL”复现最常用的起点之一。"
+  summary: "从 R1-Distill-Qwen-1.5B 出发用 GRPO 做 RL，思考上下文从 8K 逐步加到 16K、24K；1.5B 模型 AIME 2024 Pass@1 达 43.1%，超过 o1-preview。"
+  plain: "先让小模型在短篇幅里学会高效思考，再逐步放宽字数上限，避免一上来就写得很长却写不好。"
+  takeaways:
+    - "蒸馏过的小模型直接上长上下文 RL 很浪费：从短上下文开始、分阶段加长，能用更少算力拿到更高分。"
+  builds_on: [deepseek-r1, grpo]
+  tags: [小模型, 上下文逐步加长, 开源复现]
+
+- id: skywork-or1
+  title: "Skywork Open Reasoner 1 Technical Report"
+  short: Skywork-OR1
+  kind: report
+  org: 昆仑万维 Skywork AI
+  authors: "Jujie He et al."
+  date: 2025-05
+  arxiv: "2505.22312"
+  repo: SkyworkAI/Skywork-OR1
+  areas: [rl-llm]
+  facets: [algorithm, data]
+  tier: rec
+  evidence: [industrial, open-source, ablation]
+  evidence_note: "开源 7B / 32B 权重、基于 verl 的训练代码与 RL 数据（模型于 2025-04 先行发布）；报告对熵坍缩的成因与缓解做了大量消融。"
+  summary: "在 R1 蒸馏模型上做 8K→16K→32K 多阶段 RL，系统研究熵坍缩并用自适应熵控制维持探索；32B 模型在 AIME24/25 与 LiveCodeBench 上平均分从 57.8% 升到 72.8%。"
+  plain: "模型越训越“笃定”、不再尝试新解法时就会卡住；Skywork 给熵设一个目标值，低于它就自动加大鼓励探索的力度。"
+  takeaways:
+    - "监控策略熵：过早坍缩往往先于验证集停滞；用自适应熵系数把熵拉回目标值，比固定的熵奖励更安全。"
+  builds_on: [deepseek-r1, grpo]
+  tags: [熵坍缩, 自适应熵, 多阶段]
+
+- id: acereason-nemotron
+  title: "AceReason-Nemotron: Advancing Math and Code Reasoning through Reinforcement Learning"
+  short: AceReason-Nemotron
+  kind: paper
+  org: NVIDIA
+  authors: "Yang Chen et al."
+  date: 2025-05
+  arxiv: "2505.16400"
+  links:
+    - { label: "模型", url: "https://huggingface.co/nvidia/AceReason-Nemotron-14B" }
+  areas: [rl-llm]
+  facets: [algorithm, data]
+  tier: rec
+  evidence: [industrial, open-source, ablation]
+  evidence_note: "NVIDIA 发布 7B / 14B 权重并做了大量消融；续作 AceReason-Nemotron 1.1（资料库 acereason-1-1）进一步研究 SFT 与 RL 的协同。"
+  summary: "系统消融后给出简单配方：先只用数学题做 RL，再只用代码题做 RL；纯数学 RL 不仅大幅提升数学成绩，也能迁移提升代码推理，让中小模型超过同规模的蒸馏模型。"
+  plain: "先练数学再练代码：数学题练出的推理本领能带到写代码上，分两段练比混在一起更好调。"
+  takeaways:
+    - "多领域推理 RL 可以按领域分段：先用验证最可靠的数学题打底，再切到代码，便于分别控制数据与长度。"
+  builds_on: [deepseek-r1]
+  tags: [分领域 RL, 数学到代码迁移]
+
+- id: prorl
+  title: "ProRL: Prolonged Reinforcement Learning Expands Reasoning Boundaries in Large Language Models"
+  short: ProRL
+  kind: paper
+  org: NVIDIA
+  authors: "Mingjie Liu et al."
+  date: 2025-05
+  arxiv: "2505.24864"
+  links:
+    - { label: "ProRL v2 博客", url: "https://research.nvidia.com/labs/lpr/prorlv2/" }
+    - { label: "BroRL", url: "https://arxiv.org/abs/2510.01180" }
+  areas: [rl-llm]
+  facets: [algorithm, theory]
+  tier: rec
+  evidence: [industrial, ablation, open-source]
+  evidence_note: "NVIDIA 的长程 RL 研究，后续 ProRL v2 与 BroRL 继续加长训练、加大 rollout 数；NeMo-RL 公开了 ProRL v2 配方（动态采样、非对称裁剪、token 级损失、REINFORCE++ 优势估计）。"
+  summary: "在多样化任务上把 RL 训练拉长到远超常规的步数，用 KL 控制与定期重置参考策略维持稳定，论证长时间 RL 能发现基座模型大量采样也得不到的推理策略，扩展而不只是锐化推理边界。"
+  plain: "RL 练得够久、题目够杂，模型能学会原本怎么抽样都做不出来的解法；中途把“参照物”换成最新模型，防止被旧参照拖住。"
+  takeaways:
+    - "长程 RL 中熵和 KL 会慢慢失控，定期把参考策略重置为当前策略是低成本的稳定手段。"
+    - "判断 RL 是否“扩展能力”要看大 k 的 pass@k，并在基座原本做不出的任务上检验，而不能只看 pass@1。"
+  builds_on: [dapo, deepseek-r1]
+  tags: [长程 RL, 参考策略重置, 推理边界]
+
+# ───────────────────────── 推理 RL：方法修正 ─────────────────────────
+
+- id: dapo
+  title: "DAPO: An Open-Source LLM Reinforcement Learning System at Scale"
+  short: DAPO
+  kind: paper
+  org: ByteDance Seed · 清华大学 AIR
+  authors: "Qiying Yu et al."
+  date: 2025-03
+  arxiv: "2503.14476"
+  repo: BytedTsinghua-SIA/DAPO
+  areas: [rl-llm]
+  facets: [algorithm, infra]
+  tier: must
+  evidence: [industrial, adopted, open-source, ablation, community]
+  evidence_note: "字节 Seed 的 Seed1.5-Thinking 直接采用；MiMo、Magistral、MiniMax-M1、ProRL 等报告沿用其 clip-higher、动态采样或超长惩罚；基于 verl 的代码与 DAPO-Math-17K 数据开源，逐项消融清晰。"
+  summary: "针对朴素 GRPO 的熵坍缩与奖励噪声，提出 clip-higher、动态采样、token 级损失、超长奖励塑形并去掉 KL；AIME24 由 30 逐项升到 50，步数只有 R1-Zero-Qwen-32B 的一半。"
+  plain: "给低概率的好点子留出更大的上涨空间，全对或全错的题不浪费算力，长答案按 token 公平计分，太长的答案温和扣分。"
+  takeaways:
+    - "按 DAPO 的消融顺序排查：先处理超长截断（过滤或软惩罚），再放宽上裁剪（ε_high≈0.28），然后换 token 级损失，最后开动态采样。"
+    - "动态采样会多花采样算力，但每批都有有效梯度，总收敛时间不一定变长。"
+  builds_on: [grpo, deepseek-r1]
+  tags: [clip-higher, 动态采样, token 级损失, 超长惩罚]
+
+- id: dr-grpo
+  title: "Understanding R1-Zero-Like Training: A Critical Perspective"
+  short: Dr. GRPO
+  kind: paper
+  org: Sea AI Lab · 新加坡国立大学
+  authors: "Zichen Liu et al."
+  date: 2025-03
+  arxiv: "2503.20783"
+  repo: sail-sg/understand-r1-zero
+  areas: [rl-llm]
+  facets: [algorithm, theory]
+  tier: rec
+  evidence: [adopted, ablation, open-source, community]
+  evidence_note: "MiniMax-M1 采用 token 级损失时引用了该文；获 ICML 2025 AI for Math Workshop 最佳论文荣誉提名；代码与 Oat-Zero 模型开源。"
+  summary: "指出 DeepSeek-V3-Base 已有“顿悟”、Qwen2.5 基座不用模板也很强；GRPO 的长度与标准差归一化带来优化偏置（错误回答越写越长），去掉两项归一化即 Dr. GRPO。"
+  plain: "GRPO 按每个回答的字数平均扣分，错的长答案每个字扣得少，模型就学会把错答案写长；把这个除法去掉就好了。"
+  takeaways:
+    - "观察到“回答越来越长”时，先检查损失聚合方式，别急着归因于推理能力增长。"
+    - "评估 zero-RL 时核对模板：与预训练分布不匹配的模板会先破坏基座能力、再由 RL“修复”，造成虚高的提升。"
+  builds_on: [grpo, deepseek-r1]
+  tags: [长度偏置, 标准差归一化, 基座分析]
+
+- id: vapo
+  title: "VAPO: Efficient and Reliable Reinforcement Learning for Advanced Reasoning Tasks"
+  short: VAPO
+  kind: paper
+  org: ByteDance Seed
+  authors: "Yu Yue et al."
+  date: 2025-04
+  arxiv: "2504.05118"
+  areas: [rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [industrial, ablation]
+  evidence_note: "字节 Seed 在 Seed1.5-Thinking 中把 VAPO 作为 actor-critic 路线的主力算法；论文报告多次独立运行均未崩溃。"
+  summary: "为长 CoT 重新启用价值模型：价值预训练、解耦 GAE、随长度自适应的 λ，再叠加 clip-higher、token 级损失等技巧；Qwen2.5-32B 上 5,000 步内 AIME24 达 60.4。"
+  plain: "请回“估分老师”，但先让它在固定策略上预习好，再对长短不同的答案用不同的折扣，给长推理更准的逐步反馈。"
+  takeaways:
+    - "价值模型的偏差主要来自初始化与长序列上的 GAE 衰减：先用 SFT 策略的蒙特卡洛回报预训练价值模型，再上 PPO。"
+  builds_on: [dapo, ppo]
+  tags: [价值模型, GAE, actor-critic]
+
+- id: reinforce-pp
+  title: "REINFORCE++: Stabilizing Critic-Free Policy Optimization with Global Advantage Normalization"
+  short: REINFORCE++
+  kind: paper
+  org: OpenRLHF
+  authors: "Jian Hu et al."
+  date: 2025-01
+  arxiv: "2501.03262"
+  links:
+    - { label: "OpenRLHF 实现", url: "https://github.com/OpenRLHF/OpenRLHF" }
+  areas: [rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [adopted, open-source, ablation]
+  evidence_note: "NVIDIA NeMo-RL 的 ProRL v2 配方采用 REINFORCE++ 优势估计（先减组均值、再做全局归一化）；OpenRLHF 内置实现并提供 REINFORCE++-baseline 变体。"
+  summary: "去掉 critic、保留 PPO 的裁剪等技巧，用整个 batch 的统计量归一化优势，缓解组内归一化在小组与难题上的方差放大；baseline 变体先减组均值、再做全局归一化。"
+  plain: "不用估分老师，也不只和同组比：先减掉同题平均分，再按整批题目的分数分布统一换算，免得难题与易题的尺度被放大。"
+  takeaways:
+    - "组内样本少（G 小）或奖励尺度不稳时，把标准差归一化从组级换成 batch 级通常更稳。"
+  builds_on: [grpo, rloo]
+  tags: [全局归一化, 无 critic]
+
+- id: gspo
+  title: "Group Sequence Policy Optimization"
+  short: GSPO
+  kind: paper
+  org: 阿里巴巴 Qwen
+  authors: "Chujie Zheng et al."
+  date: 2025-07
+  arxiv: "2507.18071"
+  links:
+    - { label: "Qwen 博客", url: "https://qwenlm.github.io/blog/gspo/" }
+  areas: [rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [industrial, community]
+  evidence_note: "Qwen 团队用于最新 Qwen3 系列模型的 RL 训练；论文把 GRPO 在长回答与 MoE 上的不稳定归因于 token 级重要性权重的误用。"
+  summary: "把重要性比率定义在序列似然上（按长度开 |y| 次方归一化），并在序列级裁剪与优化，使比率与序列级奖励的粒度一致；效率与效果优于 GRPO，并显著稳定了 MoE 的 RL 训练。"
+  plain: "奖励是按整段回答给的，新旧策略差多少也该按整段来算，而不是每个 token 各算各的；这样噪声小很多，MoE 也不容易崩。"
+  takeaways:
+    - "MoE 做 RL 频繁崩溃时，优先尝试序列级比率（GSPO）或路由重放，而不是一味调小学习率。"
+  builds_on: [grpo]
+  tags: [序列级比率, MoE 稳定性]
+
+- id: scale-rl
+  title: "The Art of Scaling Reinforcement Learning Compute for LLMs"
+  short: ScaleRL
+  kind: paper
+  org: Meta 等
+  authors: "Devvrit Khatri et al."
+  date: 2025-10
+  arxiv: "2510.13786"
+  areas: [rl-llm]
+  facets: [algorithm, theory]
+  tier: rec
+  evidence: [ablation, community]
+  evidence_note: "超过 40 万 GPU 小时的系统消融，并用一次 10 万 GPU 小时的长跑验证外推；RLHF Book 将其作为“RL 扩展规律”的代表工作引用。"
+  summary: "用 sigmoid 拟合 RL 的算力-性能曲线，区分影响渐近上限与只影响效率的设计，据此组合出可预测扩展的 ScaleRL 配方（异步 PipelineRL、CISPO 损失、FP32 logits 等）。"
+  plain: "先用小规模实验画出“投入算力 vs 成绩”的 S 形曲线，就能预判大规模能到多高；有的技巧抬高天花板，有的只是让你更快到达天花板。"
+  takeaways:
+    - "比较 RL 配方时拟合完整的算力-性能曲线，看渐近上限与效率两个参数，而不是比固定步数下的单点分数。"
+    - "损失聚合、归一化、课程、离策略算法这类细节多半只改变效率而不改变上限，别指望靠它们突破天花板。"
+  builds_on: [minimax-m1]
+  tags: [扩展规律, 配方消融, 异步 RL]
+
+# ───────────────────────── 资源 ─────────────────────────
+
+- id: kl-approx
+  title: "Approximating KL Divergence"
+  short: KL 近似（k1/k2/k3）
+  kind: blog
+  org: John Schulman（个人博客）
+  authors: "John Schulman"
+  date: 2020-03
+  url: http://joschu.net/blog/kl-approx.html
+  areas: [rl-llm]
+  facets: [theory, algorithm]
+  tier: rec
+  evidence: [adopted, community]
+  evidence_note: "DeepSeekMath / R1 的 GRPO 目标中的 KL 项正是文中的 k3 估计器，verl 等框架的 KL 实现注释也直接引用本文；后续关于 KL 梯度估计偏差的讨论大多以它为起点。"
+  summary: "比较三种用样本估计 KL 的方法（r 为概率比）：k1=−log r 无偏但方差大、可为负；k2=½(log r)² 低方差但有偏；k3=(r−1)−log r 无偏、非负且方差低，成为 LLM RL 的事实标准。"
+  plain: "KL 没法精确算，只能拿采样到的回答去估；作者比较了三种估法，第三种不会估出负数、波动也小，所以大家都用它。"
+  takeaways:
+    - "用 k3 时分清它是加在奖励里还是作为损失求导：直接对 k3 求梯度并不等于反向 KL 的梯度，离策略时还需用重要性权重修正（参见 DeepSeek-V3.2 的无偏 KL）。"
+  tags: [KL 估计, k3, 方差]
+
+- id: rlhf-book
+  title: "Reinforcement Learning from Human Feedback"
+  short: RLHF Book
+  kind: book
+  org: Nathan Lambert
+  authors: "Nathan Lambert"
+  date: 2025-04
+  arxiv: "2504.12501"
+  repo: natolambert/rlhf-book
+  url: https://rlhfbook.com
+  areas: [rl-llm]
+  facets: [algorithm, data, theory]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "作者长期参与 Tülu、OLMo 等开源后训练；书稿在 GitHub 持续更新（2026-09 仍在修订），另有 Manning 出版版本与配套课程。本页的工业配方对照也以书中整理做交叉核对。"
+  summary: "系统讲解后训练全流程：指令微调、奖励模型、策略梯度（PPO、GRPO 等）、拒绝采样、直接对齐算法、推理训练与 RLVR、过优化与正则化，并持续整理各家推理模型报告的共同做法。"
+  plain: "一本持续更新的“后训练教科书”：从最基础的偏好建模讲到最新推理模型的训练套路，适合当作查漏补缺的参考书。"
+  takeaways:
+    - "入门时按“奖励模型 → 策略梯度 → 直接对齐 → 推理训练”的顺序读，再回到各家技术报告对照细节。"
+  tags: [教材, 后训练, 开源书稿]

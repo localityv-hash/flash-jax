@@ -1,0 +1,118 @@
+# SFT 专题（/topics/sft）的术语。字段均按纯文本渲染，公式用 Unicode 书写。
+
+- id: sft
+  term: SFT
+  full: Supervised Fine-Tuning
+  zh: 监督微调
+  area: sft
+  plain: "拿“题目 + 标准答案”让模型逐字模仿，教它按要求的格式和口吻作答。"
+  definition: "在预训练（或中训练）模型上，用示范数据 (x, y*) 最小化回答部分的逐 token 交叉熵 −Σ_t log π_θ(y*_t ∣ x, y*_<t)（教师强制）。它等价于最小化数据分布到模型的前向 KL，是覆盖式（mass-covering）的离线模仿学习。"
+  see: [/topics/sft#objective]
+
+- id: instruction-tuning
+  term: 指令微调
+  full: Instruction Tuning
+  zh: 指令微调
+  area: sft
+  plain: "把大量任务改写成“指令→回答”的形式来微调，让模型学会听懂并执行没见过的指令。"
+  definition: "用自然语言指令描述任务，在多任务指令数据上做 SFT，以提升零样本与少样本泛化。代表工作有 FLAN、T0、Super-NaturalInstructions 与 Flan 2022；后来泛指一切“提示—回答”形式的 SFT。"
+  see: [/topics/sft#flan]
+
+- id: chat-template
+  term: 聊天模板
+  full: Chat Template
+  zh: 聊天模板
+  area: sft
+  plain: "把多轮对话拼成一串 token 的固定格式：谁在说话、从哪开始、在哪结束、思考写在哪。训练和推理必须一模一样。"
+  definition: "tokenizer 附带的（通常是 Jinja）模板，用角色标记、轮次分隔符、思考标签与工具调用格式把 messages 序列化为模型输入。训练与推理模板不一致、轮次结束符与 EOS 设置错误，是 SFT 最常见的故障源。"
+  see: [/topics/sft#chat-template]
+
+- id: prompt-masking
+  term: Prompt Masking
+  full: Completion-only / Assistant-only Loss
+  zh: 提示掩码
+  area: sft
+  plain: "只在模型该说的话（回答）上算损失；题目、系统提示、工具返回都只读不学。"
+  definition: "把提示部分 token 的 label 设为 −100（忽略），只对 assistant 回答及其轮次结束符计算交叉熵。多轮对话可对全部 assistant 轮或仅最后一轮计算；智能体轨迹中环境观测同样要掩掉。"
+  see: [/topics/sft#masking]
+
+- id: packing
+  term: Packing
+  full: Sequence Packing
+  zh: 序列打包
+  area: sft
+  plain: "把多条短样本拼进一个长序列，少做无用的补齐；但要让每条样本只“看见”它自己。"
+  definition: "把多条样本拼接成定长块以提升吞吐。SFT 中需配合块对角因果掩码（FlashAttention 变长接口或按样本重置 position_ids）避免跨样本注意力，并优先用 best-fit 装箱，避免“先拼接再切块”把样本拦腰截断。"
+  see: [/topics/sft#packing]
+
+- id: long-cot
+  term: 长 CoT
+  full: Long Chain-of-Thought
+  zh: 长思维链
+  area: sft
+  plain: "模型在给答案前先写很长的草稿：拆解、试错、回头检查、换思路，动辄上万 token。"
+  definition: "以反思、回溯、自我验证等行为为特征、长度可达数万 token 的推理轨迹。通常由 RL 激发（如 DeepSeek-R1）或从推理模型蒸馏得到，是冷启动 SFT 与推理蒸馏的主要数据形态。"
+  see: [/topics/sft#long-cot]
+
+- id: rejection-sampling
+  term: 拒绝采样微调
+  full: Rejection Sampling Fine-Tuning
+  zh: 拒绝采样
+  area: sft
+  plain: "让模型对同一题答很多遍，只留下答对（或得分高）的那些，再拿来训练自己。"
+  definition: "对每个提示采样多条回答，用验证器、奖励模型或规则筛出合格样本，再作为 SFT 数据（也叫 RFT、best-of-n 蒸馏）。它是 RL 之后回收好轨迹、构建下一轮 SFT 的常用手段，如 Llama 3 的多轮后训练与 DeepSeek-R1 的第三阶段。"
+  see: [/topics/sft#industrial-interplay]
+
+- id: lora
+  term: LoRA
+  full: Low-Rank Adaptation
+  zh: 低秩适配
+  area: sft
+  plain: "不动原权重，只在旁边挂两块很“瘦”的矩阵来学增量：省显存、好切换，设置对了效果不输全参。"
+  definition: "把权重更新写成 ΔW = (α/r)·BA，其中 B ∈ R^(d×r)、A ∈ R^(r×k)、r ≪ min(d, k)，冻结原权重只训练 A、B。Thinking Machines 的实验表明：挂到所有线性层、学习率约为全参 10 倍时，LoRA 在中小规模后训练数据与 RL 上可匹配全参微调。"
+  see: [/topics/sft#lora]
+
+- id: cold-start
+  term: 冷启动
+  full: Cold-Start SFT
+  zh: 冷启动
+  area: sft
+  plain: "RL 开练前，先用少量好示范把模型扶上马：会用正确格式写推理，RL 才拿得到奖励。"
+  definition: "在推理 RL 之前，用数千到数十万条高质量长 CoT 数据对基座做 SFT，以稳定输出格式、提升可读性，并给 RL 一个通过率非零、熵不过低的起点。DeepSeek-R1 用它修正了 R1-Zero 的可读性差与语言混杂问题。"
+  see: [/topics/sft#r1-cold-start]
+
+- id: data-selection
+  term: 数据选择
+  full: Data Selection
+  zh: 数据选择
+  area: sft
+  plain: "从海量候选里挑出最值得训练的那部分：题要对、难度要合适、不能重复、不能和考题撞车。"
+  definition: "按质量、难度、多样性以及去重、去污染等标准筛选训练样本。SFT 中的常见做法包括：按模型通过率或回答长度筛难度、少而精的题源、精确/模糊/语义三级去重、对评测集做长 n-gram 去污染。"
+  see: [/topics/sft#data-selection]
+
+- id: superficial-alignment
+  term: 浅层对齐假说
+  full: Superficial Alignment Hypothesis
+  zh: 浅层对齐假说
+  area: sft
+  plain: "模型的知识和能力几乎都来自预训练，对齐只是教它挑哪种说话方式，所以少量好示范就够。"
+  definition: "LIMA 提出的假说：模型的知识与能力几乎全部在预训练中习得，对齐（SFT）主要教会模型与用户交互时使用哪种格式与风格的子分布。LIMO、s1 把它推广到推理：底座知识充足时，少量精准的长推理示范即可激发复杂推理。"
+  see: [/topics/sft#lima]
+
+- id: budget-forcing
+  term: 预算强制
+  full: Budget Forcing
+  zh: 预算强制
+  area: sft
+  plain: "推理时管住模型的“草稿长度”：想早停就不让停（补一个 Wait），超了预算就强行收尾作答。"
+  definition: "s1 提出的解码期长度控制：模型试图结束思考时追加 “Wait” 以延长推理，或在达到 token 预算时强制插入思考结束标记转入作答，从而在只做过 SFT 的模型上实现可控的测试时扩展。"
+  see: [/topics/sft#small-data]
+
+- id: loss-aggregation
+  term: 损失聚合
+  full: Loss Aggregation
+  zh: 损失聚合
+  area: sft
+  plain: "一个批次里各 token 的损失怎么加起来：每条样本一票，还是每个 token 一票。长短样本混训时结果差很多。"
+  definition: "批内逐 token 损失的归一化方式：按序列平均（每条样本等权，长回答的 token 被稀释）、全局按 token 平均（每个 token 等权）或直接求和。梯度累积与数据并行下必须用全局 token 数归一化，否则会隐式改变样本权重。"
+  see: [/topics/sft#loss-aggregation]

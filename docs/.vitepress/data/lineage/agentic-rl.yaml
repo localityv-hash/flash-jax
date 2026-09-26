@@ -1,0 +1,172 @@
+id: agentic-rl
+title: Agentic RL 谱系：从“会调用工具”到“在环境里被训练出来”
+description: 时间自上而下。每条边写的是后者修正了前者的什么问题；左侧两列是开源方法主线，右侧两列是工业系统主线，二者在 2025 年下半年汇合于“环境规模化 + 异步 RL”。
+lanes:
+  - { id: methods, label: 方法与框架 }
+  - { id: search, label: 搜索与深度研究 }
+  - { id: swe, label: 代码与 SWE }
+  - { id: general, label: 工具与通用智能体 }
+nodes:
+  - id: webgpt
+    label: WebGPT
+    date: 2021-12
+    lane: search
+    note: "把 GPT-3 放进文本浏览器，用行为克隆 + 奖励模型拒绝采样 / RL 训练带引用的问答，是搜索智能体的起点。"
+    entry: webgpt
+  - id: react
+    label: ReAct
+    date: 2022-10
+    lane: methods
+    note: "确立“思考—行动—观察”交替的轨迹格式；后来几乎所有智能体 RL 的 rollout 都沿用它。"
+    href: "#formulation"
+    entry: react
+  - id: archer
+    label: ArCHer
+    date: 2024-02
+    lane: methods
+    note: "单轮 RLHF 无法在多轮间分配信用；ArCHer 在回合粒度学价值、在 token 粒度做策略梯度。"
+    href: "#credit-assignment"
+    entry: archer
+  - id: digirl
+    label: DigiRL
+    date: 2024-06
+    lane: general
+    note: "把多轮 RL 带到真实安卓设备：离线预热 + 在线 RL，用 VLM 判定任务成败，免去人工奖励。"
+    entry: digirl
+  - id: oai-dr
+    label: OpenAI DR
+    date: "2025-02-02"
+    lane: search
+    note: "OpenAI Deep Research：用端到端 RL 在困难浏览任务上训练的生产级研究智能体，成为此后所有深度研究工作的对标对象。"
+    entry: openai-deep-research
+  - id: swe-rl
+    label: SWE-RL
+    date: 2025-02
+    lane: swe
+    note: "第一次把 RL 规模化用于真实软件工程；没有执行环境，用补丁相似度当奖励。"
+    entry: swe-rl
+  - id: search-r1
+    label: Search-R1
+    date: 2025-03
+    lane: search
+    note: "开源最小闭环：推理中穿插检索，检索 token 做损失屏蔽，只用 EM 结果奖励。"
+    href: "/practice/search-agent"
+    entry: search-r1
+  - id: ragen
+    label: RAGEN/StarPO
+    date: 2025-04
+    lane: methods
+    note: "把多轮 RL 的失稳（回声陷阱：奖励方差塌缩、梯度尖峰）讲清楚，并给出轨迹过滤等稳定化手段。"
+    entry: ragen
+  - id: gigpo
+    label: GiGPO
+    date: 2025-05
+    lane: methods
+    note: "GRPO 只有轨迹级信用；GiGPO 用重复出现的锚状态构造步级小组，零额外 rollout 得到步级优势。"
+    href: "#credit-assignment"
+    entry: gigpo
+  - id: zerosearch
+    label: ZeroSearch
+    date: 2025-05
+    lane: search
+    note: "真实搜索 API 贵且不稳：用 LLM 模拟搜索引擎并按课程注入噪声，训练零 API 成本。"
+    entry: zerosearch
+  - id: kimi-researcher
+    label: Kimi-Researcher
+    date: "2025-06-20"
+    lane: search
+    note: "工业级端到端智能体 RL 的公开样本：REINFORCE、γ 衰减奖励、上下文管理与轮次级 partial rollout。"
+    href: "#reward"
+    entry: kimi-researcher
+  - id: kimi-dev
+    label: Kimi-Dev
+    date: 2025-06
+    lane: swe
+    note: "相似度奖励会奖励“长得像”：改为 Docker 中测试全过才给 1 分，并用 150B token 中训练打底。"
+    entry: kimi-dev
+  - id: websailor
+    label: WebSailor
+    date: 2025-07
+    lane: search
+    note: "开源模型在 BrowseComp 上几乎为零：合成高不确定性难题，并用 DUPO 降低智能体 RL 的补批开销。"
+    entry: websailor
+  - id: deepswe
+    label: DeepSWE
+    date: "2025-07-01"
+    lane: swe
+    note: "在 R2E-Gym 可执行环境中只用 RL 训练 32B 编码智能体，完整公开配方、日志与集群要求。"
+    href: "/practice/swe-agent"
+    entry: deepswe
+  - id: qwen3-coder
+    label: Qwen3-Coder
+    date: "2025-07-22"
+    lane: swe
+    note: "把 SWE 智能体 RL 推到工业规模：依托阿里云并行运行 2 万个独立环境做长程 Agent RL。"
+    href: "#industry"
+    entry: qwen3-coder
+  - id: kimi-k2
+    label: Kimi K2
+    date: 2025-07
+    lane: general
+    note: "真实环境难以规模化：用真实 MCP 工具 + 合成工具 + 工具模拟器批量造智能体数据，再做跨环境联合 RL。"
+    href: "#industry"
+    entry: kimi-k2
+  - id: glm-45
+    label: GLM-4.5
+    date: 2025-07
+    lane: general
+    note: "推理、编码、智能体能力互相拉扯：先分域训练专家模型再自蒸馏合一，并配套 slime 做 RL。"
+    entry: glm-4-5
+  - id: asearcher
+    label: ASearcher
+    date: 2025-08
+    lane: search
+    note: "同步 RL 被长轨迹拖住只能限 10 轮以内：全异步解耦 rollout 与训练，轮数上限放宽到 128。"
+    href: "#rollout"
+    entry: asearcher
+  - id: tongyi-dr
+    label: 通义DeepResearch
+    date: 2025-09
+    lane: search
+    note: "开源全流程：智能体中训练 + SFT + 严格 on-policy RL；先在离线维基“风洞”调算法，再上真实网页。"
+    href: "#industry"
+    entry: tongyi-deepresearch
+  - id: ui-tars-2
+    label: UI-TARS-2
+    date: 2025-09
+    lane: general
+    note: "GUI 智能体的多轮 RL 工程化：数据飞轮、GUI + 终端 + 文件系统混合环境与统一沙箱。"
+    entry: ui-tars-2
+  - id: kimi-k25
+    label: Kimi K2.5
+    date: 2026-01
+    lane: general
+    note: "单智能体串行执行太慢：训练编排器并行调度冻结子智能体（PARL），用关键步数约束端到端延迟。"
+    href: "#credit-assignment"
+    entry: kimi-k2-5
+  - id: glm-5
+    label: GLM-5
+    date: 2026-02
+    lane: general
+    note: "面向长程“智能体工程”：模型扩到 744B-A40B，并用异步 RL 基础设施 slime 提升后训练吞吐。"
+    entry: glm-5
+edges:
+  - { from: webgpt, to: oai-dr, label: 浏览环境 + 端到端 RL }
+  - { from: react, to: search-r1, label: 推理与检索交错 }
+  - { from: react, to: ragen, label: ReAct 轨迹上的多轮 RL }
+  - { from: archer, to: gigpo, label: 不学 critic 也能做步级信用 }
+  - { from: ragen, to: gigpo, label: 轨迹级 → 步级优势 }
+  - { from: archer, to: digirl, label: 多轮 RL 走向设备控制 }
+  - { from: digirl, to: ui-tars-2, label: 从手机到整台电脑 }
+  - { from: search-r1, to: zerosearch, label: 用模拟搜索替代真实 API }
+  - { from: search-r1, to: asearcher, label: 放宽轮数上限 + 全异步 }
+  - { from: oai-dr, to: kimi-researcher, label: 端到端智能体 RL 的工业复现 }
+  - { from: oai-dr, to: websailor, label: 对标 BrowseComp 级难题 }
+  - { from: websailor, to: tongyi-dr, label: 高不确定性数据合成 }
+  - { from: zerosearch, to: tongyi-dr, label: 模拟环境先行 }
+  - { from: zerosearch, to: kimi-k2, label: 用模拟器规模化造工具数据 }
+  - { from: swe-rl, to: kimi-dev, label: 相似度奖励 → 执行奖励 }
+  - { from: swe-rl, to: deepswe, label: 真实执行环境 + 纯 RL }
+  - { from: deepswe, to: qwen3-coder, label: 工业级环境规模化 }
+  - { from: kimi-k2, to: kimi-k25, label: 单智能体 → 并行智能体 }
+  - { from: glm-45, to: glm-5, label: 异步 RL + 长程工程任务 }

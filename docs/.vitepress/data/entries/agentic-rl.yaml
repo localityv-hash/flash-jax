@@ -1,0 +1,770 @@
+# Agentic RL 条目（owner: agentic）。字段说明见 CONTRIBUTING.md §3。
+# 组织顺序：范式源头 → 方法与框架 → 搜索与深度研究 → 工具集成推理 → 代码与 SWE → GUI → 工业级智能体模型。
+
+# ───────────── 范式源头 ─────────────
+- id: webgpt
+  title: "WebGPT: Browser-assisted question-answering with human feedback"
+  short: WebGPT
+  kind: paper
+  org: OpenAI
+  authors: "Reiichiro Nakano et al."
+  date: 2021-12
+  arxiv: "2112.09332"
+  areas: [agentic-rl]
+  facets: [env, algorithm]
+  tier: rec
+  evidence: [ablation, community]
+  evidence_note: "OpenAI 早期把语言模型放进文本浏览器环境的系统性工作，对行为克隆、奖励模型、拒绝采样与 RL 做了成体系的对照；论文高引用，是搜索智能体与“带引用回答”的共同源头。"
+  summary: "把 GPT-3 放进文本浏览器（搜索、点击、滚动、摘录引用），先模仿人类演示，再用基于人类偏好的奖励模型做拒绝采样与 RL；要求回答附带引用，便于人工核验事实。"
+  plain: "让模型像人一样上网查资料、边查边记出处，再请人打分教它哪种回答更好。它是搜索智能体的老祖宗。"
+  takeaways:
+    - "奖励模型不够准时，对奖励模型做 best-of-n 拒绝采样常常不输 RL 而且更稳，先把它当基线。"
+    - "让智能体输出可核验的引用，人工评估与奖励建模都会容易得多。"
+  tags: [浏览器环境, 奖励模型, 拒绝采样]
+
+- id: react
+  title: "ReAct: Synergizing Reasoning and Acting in Language Models"
+  short: ReAct
+  kind: paper
+  org: "Princeton · Google Research"
+  authors: "Shunyu Yao et al."
+  date: 2022-10
+  venue: ICLR 2023
+  arxiv: "2210.03629"
+  repo: ysymyth/ReAct
+  areas: [agentic-rl]
+  facets: [env]
+  tier: must
+  evidence: [adopted, open-source, community]
+  evidence_note: "“思考—行动—观察”交替的轨迹格式已成为智能体训练与推理的事实标准：Tongyi DeepResearch 技术报告明确以原版 ReAct 作为 rollout 格式，WebDancer 等也基于 ReAct 构建；论文引用量极高。"
+  summary: "让模型交替生成推理（Thought）与动作（Action），动作交给环境执行并返回观察（Observation），再继续推理；仅靠少样本提示就在 HotpotQA、FEVER、ALFWorld、WebShop 上优于纯推理或纯行动。"
+  plain: "想一步、做一步、看结果，再想下一步。今天几乎所有智能体 RL 的轨迹都是这个格式。"
+  takeaways:
+    - "设计智能体 RL 的轨迹格式时，从 Thought / Action / Observation 三段式出发，最容易与现有框架和数据兼容。"
+    - "Observation 由环境写入而非模型生成，训练时应从策略损失中屏蔽。"
+  tags: [ReAct, 智能体循环, 工具调用]
+
+- id: openai-deep-research
+  title: "Introducing deep research"
+  short: OpenAI Deep Research
+  kind: blog
+  org: OpenAI
+  date: "2025-02-02"
+  url: https://openai.com/index/introducing-deep-research/
+  areas: [agentic-rl]
+  facets: [env]
+  tier: rec
+  evidence: [industrial, community]
+  evidence_note: "在 ChatGPT 中上线的生产级研究智能体；官方博客说明它由针对网页浏览与数据分析优化的 o3 版本驱动，并用端到端 RL 在困难浏览与推理任务上训练。Search-R1、WebSailor、Kimi-Researcher 等开源与工业工作都把它作为对标对象。"
+  summary: "OpenAI 的深度研究智能体：由面向网页浏览与数据分析优化的 o3 版本驱动，官方称其通过端到端强化学习在困难浏览与推理任务上训练，学会规划多步检索、回溯并根据实时信息调整，最终生成带引用的报告。"
+  plain: "它把“让模型自己上网研究几十分钟再交报告”做成了产品，也让“用端到端 RL 训练智能体”成了行业共识。"
+  takeaways:
+    - "深度研究能力的主流训练方式是“困难浏览任务 + 端到端 RL”，Kimi-Researcher、Tongyi DeepResearch 等后来者都走了这条路。"
+  builds_on: [webgpt, openai-o1]
+  tags: [深度研究, 工业产品]
+
+# ───────────── 方法与框架 ─────────────
+- id: archer
+  title: "ArCHer: Training Language Model Agents via Hierarchical Multi-Turn RL"
+  short: ArCHer
+  kind: paper
+  org: "UC Berkeley · Google DeepMind"
+  authors: "Yifei Zhou et al."
+  date: 2024-02
+  arxiv: "2402.19446"
+  repo: YifeiZhou02/ArCHer
+  areas: [agentic-rl]
+  facets: [algorithm]
+  tier: rec
+  evidence: [ablation, open-source, community]
+  evidence_note: "Sergey Levine、Aviral Kumar 组把分层 RL 引入多轮 LLM 智能体的代表作，与单轮 RLHF 式方法做了对照；同组后续的 DigiRL、SWEET-RL 延续了“在回合粒度上学习价值”的思路。"
+  summary: "把多轮交互建模为分层 RL：上层用离策略 TD 学习在“整轮发言”粒度上估计价值，下层用这个价值为轮内逐 token 的策略梯度提供优势，兼顾样本效率与 LLM 的 token 级生成。"
+  plain: "上层老师只评价“这一整轮说得好不好”，下层学生据此调整每个词，比只看最终结果学得快。"
+  takeaways:
+    - "多轮任务奖励稀疏时，先学一个回合级价值函数，再把它当作轮内 token 策略的基线。"
+  tags: [分层 RL, 价值函数, 多轮]
+
+- id: ragen
+  title: "RAGEN: Understanding Self-Evolution in LLM Agents via Multi-Turn Reinforcement Learning"
+  short: RAGEN / StarPO
+  kind: paper
+  org: "Northwestern · Stanford · Microsoft · UW"
+  authors: "Zihan Wang et al."
+  date: 2025-04
+  arxiv: "2504.20073"
+  repo: mll-lab-nu/RAGEN
+  areas: [agentic-rl]
+  facets: [algorithm, env]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "最早被广泛使用的开源多轮智能体 RL 框架之一，Search-R1 的实现即基于 veRL 与 RAGEN（见 Search-R1 仓库致谢）；论文在可控小环境里系统拆解了多轮 RL 的失稳模式。"
+  summary: "提出轨迹级智能体 RL 框架 StarPO，并发现多轮 RL 的“回声陷阱”（Echo Trap）：奖励方差骤降、梯度尖峰、推理退化；StarPO-S 用轨迹过滤、引入 critic 与梯度稳定化缓解。"
+  plain: "多轮 RL 训着训着会变成复读机：模型反复用同一套路，奖励不再有区分，训练就崩了。RAGEN 把这个现象讲清楚并给了几个补丁。"
+  takeaways:
+    - "监控组内奖励方差：方差塌到接近 0 往往是崩溃前兆，应过滤低方差轨迹组。"
+    - "rollout 设计上，初始状态要多样、每轮动作数适中、采样更频繁（更 on-policy）。"
+    - "缺少细粒度、感知推理的奖励时，多轮 RL 很难自发长出有效推理，可能只学到浅层套路。"
+  tags: [StarPO, Echo Trap, 多轮 RL]
+
+- id: gigpo
+  title: "Group-in-Group Policy Optimization for LLM Agent Training"
+  short: GiGPO
+  kind: paper
+  org: 南洋理工大学
+  authors: "Lang Feng et al."
+  date: 2025-05
+  venue: NeurIPS 2025
+  arxiv: "2505.10978"
+  repo: langfengQ/verl-agent
+  areas: [agentic-rl]
+  facets: [algorithm]
+  tier: must
+  evidence: [adopted, open-source, ablation, community]
+  evidence_note: "阿里 ROLL 框架已原生支持 GiGPO，OpenManus-RL 采用了 verl-agent 式训练管线（见 verl-agent 仓库 News）；NeurIPS 2025 接收；verl-agent 提供 ALFWorld、WebShop、Search、Sokoban 等环境与完整训练日志。"
+  summary: "在 GRPO 的轨迹级组内优势之外，按“锚状态”（不同轨迹中的相同环境观察）回溯构造步级小组，计算步级相对优势并加权相加；无需 critic、不增 rollout，ALFWorld、WebShop 上比 GRPO 高 12%、9% 以上。"
+  plain: "同一道题跑多遍，总有几条轨迹走到同一个路口；比较它们在这个路口各自怎么选、后来得了多少分，就知道哪一步走得好。"
+  takeaways:
+    - "环境状态会重复出现（文本游戏、网页、表单）时，用锚状态分组给步级信用，几乎零额外成本。"
+    - "观察很少完全相同（如搜索结果）时，改用相似度阈值分组，verl-agent 已给出实现。"
+  builds_on: [grpo]
+  tags: [信用分配, 步级优势, verl-agent]
+
+- id: sweet-rl
+  title: "SWEET-RL: Training Multi-Turn LLM Agents on Collaborative Reasoning Tasks"
+  short: SWEET-RL
+  kind: paper
+  org: "Meta FAIR · UC Berkeley"
+  authors: "Yifei Zhou et al."
+  date: 2025-03
+  arxiv: "2503.15478"
+  repo: facebookresearch/sweet_rl
+  areas: [agentic-rl]
+  facets: [algorithm, env]
+  tier: ref
+  evidence: [ablation, open-source]
+  evidence_note: "提出多轮人机协作基准 ColBench（后端编程与前端设计）并开源数据与代码，在同一基准上与多种多轮 RL 方法做了对照。"
+  summary: "训练时让 critic 看到策略看不到的额外信息（如参考答案），为每一轮给出步级奖励，再用于优化策略；在 ColBench 上比其他多轮 RL 方法的成功率与胜率高约 6 个百分点，8B 模型可比肩 GPT-4o。"
+  plain: "评委手里有标准答案、选手没有；评委据此逐轮点评，选手就知道哪一轮说错了。"
+  takeaways:
+    - "训练期才有的特权信息（参考解、隐藏测试、环境真值）可以只喂给 critic 或过程奖励模型，而不喂给策略，从而得到更细的步级信号。"
+  builds_on: [archer]
+  tags: [信用分配, 非对称 critic, 多轮协作]
+
+- id: agentgym-rl
+  title: "AgentGym-RL: Training LLM Agents for Long-Horizon Decision Making through Multi-Turn Reinforcement Learning"
+  short: AgentGym-RL
+  kind: paper
+  org: "复旦大学 · 字节跳动 · 上海创智学院"
+  authors: "Zhiheng Xi et al."
+  date: 2025-09
+  arxiv: "2509.08755"
+  repo: WooooDyy/AgentGym-RL
+  areas: [agentic-rl]
+  facets: [env, algorithm]
+  tier: rec
+  evidence: [open-source, ablation]
+  evidence_note: "环境、智能体、训练三模块解耦，环境以统一 HTTP 协议的服务端—客户端形式接入；在 27 个任务上系统评测并开源代码与数据。"
+  summary: "模块化的多轮智能体 RL 框架，覆盖网页导航、深度搜索、文本游戏、具身与科学任务，支持 PPO、GRPO、REINFORCE++；提出 ScalingInter-RL：训练早期限制交互轮数先求稳，再逐步放宽以鼓励探索。"
+  plain: "像教小孩下棋：先只让走几步把基本功练稳，再慢慢允许下完整盘，边练边加难度。"
+  takeaways:
+    - "交互轮数上限可以当作课程：先短后长，能缓解长程 RL 早期的不稳定与无效探索。"
+  builds_on: [ragen]
+  tags: [多环境, 交互课程]
+
+- id: agent-lightning
+  title: "Agent Lightning: Train ANY AI Agents with Reinforcement Learning"
+  short: Agent Lightning
+  kind: paper
+  org: 微软研究院
+  date: 2025-08
+  arxiv: "2508.03680"
+  repo: microsoft/agent-lightning
+  areas: [agentic-rl]
+  facets: [infra, algorithm]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "微软开源、持续维护的智能体训练框架，文档完善；演示了 LangChain 文本转 SQL、OpenAI Agents SDK 的 RAG、AutoGen 的数学工具智能体三类接入。"
+  summary: "把智能体执行与 RL 训练解耦：将任意框架（LangChain、AutoGen 等）写的智能体执行过程建模为 MDP，由分层算法 LightningRL 把轨迹拆成单步训练样本，几乎不改原有代码。"
+  plain: "你已经用各种框架搭好了智能体？不用重写，接上它就能拿运行记录直接做 RL。"
+  takeaways:
+    - "已有生产智能体时，优先考虑“旁路采集轨迹 + 拆成单步样本”的训练方式，而不是把业务逻辑迁进 RL 框架。"
+  builds_on: [verl]
+  tags: [训练框架, 训推解耦]
+
+# ───────────── 搜索与深度研究 ─────────────
+- id: search-r1
+  title: "Search-R1: Training LLMs to Reason and Leverage Search Engines with Reinforcement Learning"
+  short: Search-R1
+  kind: paper
+  org: "UIUC · UMass Amherst · Google Cloud AI Research"
+  authors: "Bowen Jin et al."
+  date: 2025-03
+  arxiv: "2503.09516"
+  repo: PeterGriffinJin/Search-R1
+  links:
+    - { label: 实证研究续篇, url: "https://arxiv.org/abs/2505.15117" }
+  areas: [agentic-rl]
+  facets: [algorithm, env]
+  tier: must
+  evidence: [adopted, open-source, ablation, community]
+  evidence_note: "搜索智能体 RL 的最小可复现范式：veRL 官方多轮工具示例、SkyRL 以及 Thinking Machines 的 Tinker cookbook 都收录了它的配方（见仓库 News）；ZeroSearch、DeepResearcher、ASearcher 等以它为基线。代码、数据、检索索引与 W&B 日志全部公开。"
+  summary: "把 R1 式结果奖励 RL 扩展到“推理中穿插搜索”：模型用 search 标签发起检索、结果以 information 块写回上下文；关键是对检索回的 token 做损失屏蔽，仅用精确匹配（EM）奖励训练，PPO 与 GRPO 均可。"
+  plain: "教模型“不懂就去搜”：自己决定何时搜、搜什么，答对才给分；搜回来的资料不是模型写的，所以不拿它算梯度。"
+  takeaways:
+    - "检索结果一定要从策略损失中屏蔽；作者在 v0.2 修复屏蔽 bug 后训练稳定性明显提升。"
+    - "GRPO 收敛快，但在部分模型上会奖励崩塌；PPO 更稳。先用 PPO 跑通，再试 GRPO。"
+    - "格式奖励有用、中间检索奖励作用有限；基座与指令模型最终奖励相近，指令模型起步更快。"
+  builds_on: [deepseek-r1, ragen]
+  tags: [搜索, 检索屏蔽, EM 奖励]
+
+- id: r1-searcher
+  title: "R1-Searcher: Incentivizing the Search Capability in LLMs via Reinforcement Learning"
+  short: R1-Searcher
+  kind: paper
+  org: 中国人民大学
+  authors: "Huatong Song et al."
+  date: 2025-03
+  arxiv: "2503.05592"
+  repo: RUCAIBox/R1-Searcher
+  areas: [agentic-rl]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "与 Search-R1 几乎同期的独立工作，代码与模型开源；团队随后发布 R1-Searcher++、SimpleDeepSearcher 等后续工作，在 HotpotQA、2Wiki、Bamboogle、Musique 等多跳 QA 上系统评测。"
+  summary: "两阶段纯结果奖励 RL：第一阶段奖励正确的检索调用与格式，让模型学会“去搜”；第二阶段再奖励答案正确，让模型学会“用搜索答对”。不依赖过程奖励与蒸馏冷启动，在多跳 QA 上显著提升。"
+  plain: "先教会模型“会用搜索”，再教它“用搜索答对题”，分两步走比一步到位更稳。"
+  takeaways:
+    - "冷启动阶段可以先只奖励正确的工具调用与格式，调用行为稳定后再切换到答案奖励。"
+  builds_on: [deepseek-r1]
+  tags: [搜索, 两阶段奖励]
+
+- id: deepresearcher
+  title: "DeepResearcher: Scaling Deep Research via Reinforcement Learning in Real-world Environments"
+  short: DeepResearcher
+  kind: paper
+  org: 上海交通大学 GAIR
+  authors: "Yuxiang Zheng et al."
+  date: 2025-04
+  arxiv: "2504.03160"
+  repo: GAIR-NLP/DeepResearcher
+  areas: [agentic-rl]
+  facets: [env, infra]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "首批在真实网页搜索环境里端到端做 RL 的开源工作，系统对比了提示工程方法与在本地 RAG 环境训练的 RL 智能体；代码与 7B 模型开源。"
+  summary: "在真实搜索 API 与网页浏览环境中端到端训练深度研究智能体，并工程化处理限流、网页噪声与抓取失败；较提示工程基线最高提升 28.9 分、较 RAG 环境训练的 RL 智能体最高提升 7.2 分，并涌现规划、交叉验证与诚实拒答。"
+  plain: "不在离线维基里练，直接上真网练；虽然更贵更乱，但学出来的本事更接近真实场景。"
+  takeaways:
+    - "在本地 RAG 环境训练的搜索智能体迁到开放网页会掉点；目标是开放网页任务，就尽量在真实或逼真的环境里训练。"
+    - "真实环境必须配重试、缓存与并发控制，否则工具故障会污染奖励。"
+  builds_on: [search-r1]
+  tags: [深度研究, 真实环境]
+
+- id: zerosearch
+  title: "ZeroSearch: Incentivize the Search Capability of LLMs without Searching"
+  short: ZeroSearch
+  kind: paper
+  org: 阿里巴巴通义实验室
+  authors: "Hao Sun et al."
+  date: 2025-05
+  arxiv: "2505.04588"
+  repo: Alibaba-NLP/ZeroSearch
+  areas: [agentic-rl]
+  facets: [env, data]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "用 LLM 模拟搜索引擎替代真实 API，训练成本几乎只剩 GPU；Kimi K2 技术报告在介绍工具模拟器时将其列为“不依赖真实交互生成大规模数据”的代表工作。代码与模拟器权重开源。"
+  summary: "先用轻量 SFT 把一个 LLM 训成“搜索引擎模拟器”，按提示生成相关或带噪文档；RL 时按课程逐步提高噪声文档比例，让策略在零 API 成本下学会检索与甄别，3B 模拟器即可有效。"
+  plain: "不花钱调搜索 API，而是让另一个模型假扮搜索引擎，还故意掺点烂结果，逼策略学会分辨好坏资料。"
+  takeaways:
+    - "真实搜索 API 太贵或不稳定时，可以用微调过的模拟器训练，再在真实搜索上评测。"
+    - "逐步提高噪声文档比例，是一种简单有效的环境课程。"
+  builds_on: [search-r1]
+  tags: [模拟环境, 课程学习, 搜索]
+
+- id: webdancer
+  title: "WebDancer: Towards Autonomous Information Seeking Agency"
+  short: WebDancer
+  kind: paper
+  org: 阿里巴巴通义实验室
+  date: 2025-05
+  venue: NeurIPS 2025
+  arxiv: "2505.22648"
+  links:
+    - { label: 代码, url: "https://github.com/Alibaba-NLP/DeepResearch/tree/main/WebAgent/WebDancer" }
+  areas: [agentic-rl]
+  facets: [data, algorithm]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "通义 WebAgent 系列的起点，“数据构造 → 轨迹采样 → SFT 冷启动 → RL”四阶段范式被 WebSailor 与 Tongyi DeepResearch 延续；NeurIPS 2025 接收，模型与部分数据开源。"
+  summary: "给出构建网页信息检索智能体的四阶段流程：合成浏览数据、采样 ReAct 轨迹、SFT 冷启动、DAPO 强化学习；GAIA 与 WebWalkerQA 上 Pass@3 分别为 64.1% 与 62.0%。"
+  plain: "先造一批需要上网查的难题，再让强模型示范几遍当教材，最后用 RL 让模型自己练熟。"
+  takeaways:
+    - "搜索智能体先用少量高质量轨迹做 SFT 冷启动再上 RL，比从零 RL 更稳也更快。"
+  builds_on: [react, dapo]
+  tags: [网页智能体, 冷启动, DAPO]
+
+- id: kimi-researcher
+  title: "Kimi-Researcher: End-to-End RL Training for Emerging Agentic Capabilities"
+  short: Kimi-Researcher
+  kind: blog
+  org: 月之暗面 Moonshot AI
+  date: "2025-06-20"
+  url: https://moonshotai.github.io/Kimi-Researcher/
+  areas: [agentic-rl]
+  facets: [algorithm, infra]
+  tier: rec
+  evidence: [industrial, community]
+  evidence_note: "月之暗面官方技术博客，对应已上线的 Kimi 深度研究功能；少见地公开了一线厂商端到端智能体 RL 的训练与基础设施细节（REINFORCE、γ 衰减奖励、上下文管理、轮次级 partial rollout、Kubernetes 沙箱）。"
+  summary: "完全靠端到端 RL 训练的深度研究智能体，HLE 从 8.6% 升到 26.9%：REINFORCE、严格 on-policy、有选择地丢弃负样本、对正确轨迹做 γ 衰减奖励，并配合上下文管理与轮次级 partial rollout。"
+  plain: "不写流程、不靠示范，直接让模型在真实搜索里反复试错；答对得分，而且越快答对分越高。"
+  takeaways:
+    - "严格 on-policy：训练时关掉推理引擎的工具调用格式强制器，否则样本就不来自模型自己的分布。"
+    - "对正确轨迹第 i 步的奖励乘以 γ^(T−i)，无需过程奖励就能鼓励更短的探索路径。"
+    - "长尾轨迹用轮次级 partial rollout：超时任务存入回放缓冲，下一轮用新权重接着跑。"
+  builds_on: [openai-deep-research, kimi-k1-5]
+  tags: [深度研究, REINFORCE, 上下文管理]
+
+- id: websailor
+  title: "WebSailor: Navigating Super-human Reasoning for Web Agent"
+  short: WebSailor
+  kind: paper
+  org: 阿里巴巴通义实验室
+  date: 2025-07
+  arxiv: "2507.02592"
+  links:
+    - { label: 代码, url: "https://github.com/Alibaba-NLP/DeepResearch/tree/main/WebAgent/WebSailor" }
+    - { label: WebSailor-V2, url: "https://arxiv.org/abs/2509.13305" }
+  areas: [agentic-rl]
+  facets: [data, algorithm]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "登上 Hugging Face Daily Papers 榜首（见仓库 News），3B/7B/32B 模型陆续开源；数据合成思路在 WebSailor-V2 中延续，Tongyi DeepResearch 报告亦将其列为前序工作。"
+  summary: "用知识图谱采样加信息混淆合成高不确定性难题（SailorFog-QA），从专家轨迹重构简洁推理做 RFT 冷启动，再用 DUPO 做 RL：复制同批中奖励有方差的样本来补满 batch，而非补采新题，比 DAPO 动态采样快约 2–3 倍。"
+  plain: "专门出线索模糊、要反复排除可能性的难题来练；RL 时不再为凑满一批而重跑环境，而是复制本批里有区分度的题。"
+  takeaways:
+    - "智能体 rollout 很贵：与其像 DAPO 那样补采新题，不如复制同批中奖励有方差的样本来填满 batch。"
+    - "训练前先剔除全对的简单题（如 8 次全对），把 rollout 预算留给有学习信号的题。"
+  builds_on: [webdancer, dapo]
+  tags: [BrowseComp, 数据合成, DUPO]
+
+- id: asearcher
+  title: "Beyond Ten Turns: Unlocking Long-Horizon Agentic Search with Large-Scale Asynchronous RL"
+  short: ASearcher
+  kind: paper
+  org: "清华大学 IIIS · 蚂蚁研究院"
+  authors: "Jiaxuan Gao et al."
+  date: 2025-08
+  arxiv: "2508.07976"
+  repo: inclusionAI/ASearcher
+  areas: [agentic-rl]
+  facets: [infra, data]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "模型、训练数据（两套各 3.5 万条）与代码全部开源，基于 AReaL；论文给出了轮数上限、轨迹长度方差与全异步训练收益的直接证据。"
+  summary: "基于 AReaL 的全异步智能体 RL：轨迹执行与参数更新彻底解耦，长轨迹可跨多个策略版本而不阻塞训练，轮数上限因此可放宽到 128；配合自动合成的难题，训练中出现 40 轮以上工具调用、15 万以上输出 token。"
+  plain: "以前怕长轨迹拖慢训练，只敢让模型搜十来轮；改成全异步后让它搜上百轮也不耽误，于是它真学会了“深挖”。"
+  takeaways:
+    - "轮数上限本身是关键超参数：上限太小（4～10 轮），模型只能学到浅层搜索策略。"
+    - "轨迹长度方差极大时，用全异步 rollout，攒够一批就更新，别让最长的那条拖住所有 GPU。"
+  builds_on: [search-r1, areal]
+  tags: [异步 RL, 长程搜索]
+
+- id: tongyi-deepresearch
+  title: "Tongyi DeepResearch Technical Report"
+  short: Tongyi DeepResearch
+  kind: report
+  org: 阿里巴巴通义实验室
+  date: 2025-09
+  arxiv: "2510.24701"
+  repo: Alibaba-NLP/DeepResearch
+  links:
+    - { label: 技术博客, url: "https://tongyi-agent.github.io/blog/introducing-tongyi-deep-research/" }
+  areas: [agentic-rl, mid-training]
+  facets: [data, env, algorithm]
+  tier: must
+  evidence: [industrial, open-source, ablation, community]
+  evidence_note: "30B-A3B 权重、推理框架与技术报告全部开源，并提供阿里云百炼上的生产服务；报告完整披露智能体中训练、SFT、RL、环境设计与自动数据课程，是最详尽的开源深度研究智能体全流程报告之一。"
+  summary: "基于 Qwen3-30B-A3B-Base，做两阶段智能体持续预训练（32K→128K）、SFT 与严格 on-policy 的 RL（token 级 GRPO 变体、留一基线、筛除部分负样本），先在离线维基模拟环境验证、再迁到真实网页。"
+  plain: "阿里把训练“研究员型”智能体的整条流水线公开了：先大量读智能体数据，再模仿，最后在模拟网和真网上反复练。"
+  takeaways:
+    - "先在廉价、确定的模拟环境（离线 Wikipedia + 本地 RAG）里调通算法，再迁到真实环境做最终训练。"
+    - "给真实工具加一层统一沙箱：限流、缓存、超时重试、故障切换，把不稳定的外部 API 变成确定性接口。"
+    - "报告的核心结论：智能体 RL 的成败更取决于数据质量与环境稳定性，而非具体算法。"
+  builds_on: [react, webdancer, websailor, agentfounder]
+  tags: [深度研究, 智能体中训练, 模拟环境]
+
+# ───────────── 工具集成推理（TIR） ─────────────
+- id: torl
+  title: "ToRL: Scaling Tool-Integrated RL"
+  short: ToRL
+  kind: paper
+  org: 上海交通大学 GAIR
+  authors: "Xuefeng Li et al."
+  date: 2025-03
+  arxiv: "2503.23383"
+  repo: GAIR-NLP/ToRL
+  areas: [agentic-rl, rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, ablation]
+  evidence_note: "代码与模型开源；对工具调用次数上限等关键超参做了消融，是“从基座直接做工具集成 RL”的早期代表。"
+  summary: "不做 SFT，直接从基座出发把代码解释器接进 RL rollout；1.5B、7B 模型比无工具基线与 Qwen2.5-Math-Instruct-TIR 高约 12%、14%，并自发学会策略性调用与根据执行结果自我纠错。"
+  plain: "不先教怎么用计算器，直接让模型边练题边摸索，它自己就学会了什么时候该敲代码。"
+  takeaways:
+    - "有可靠沙箱时，工具使用可以从基座直接用 RL 学出来，不一定需要 SFT 数据。"
+    - "限制每条轨迹的工具调用次数并监控调用频率，它是这类训练最直观的行为指标。"
+  builds_on: [deepseek-r1]
+  tags: [工具集成推理, 从零 RL]
+
+- id: retool
+  title: "ReTool: Reinforcement Learning for Strategic Tool Use in LLMs"
+  short: ReTool
+  kind: paper
+  org: 字节跳动 Seed
+  authors: "Jiazhan Feng et al."
+  date: 2025-04
+  arxiv: "2504.11536"
+  repo: ReTool-RL/ReTool
+  areas: [agentic-rl, rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "字节 Seed 出品，代码开源；与纯文本 RL 做了训练步数和效果的对照，给出“冷启动 + 带执行 RL”的清晰配方。"
+  summary: "在长推理中交错执行代码：先用合成的“代码增强推理”数据做 SFT 冷启动，再在 RL rollout 中实时执行代码并把结果写回上下文，仅凭结果奖励学会何时、如何调用解释器，以更少训练步数超过纯文本 RL。"
+  plain: "让模型在想的中途写段代码算一算，把算出来的结果接着用；练到后来它会自己判断什么时候该算。"
+  takeaways:
+    - "工具集成推理先用少量高质量“代码增强”轨迹冷启动，RL 阶段再放开探索，收敛快得多。"
+    - "解释器输出同样属于环境观察，要从损失中屏蔽。"
+  builds_on: [deepseek-r1]
+  tags: [代码解释器, 工具集成推理]
+
+- id: arpo
+  title: "Agentic Reinforced Policy Optimization"
+  short: ARPO
+  kind: paper
+  org: "中国人民大学 · 快手"
+  authors: "Guanting Dong et al."
+  date: 2025-07
+  arxiv: "2507.19849"
+  repo: RUC-NLPIR/ARPO
+  links:
+    - { label: AEPO 续作, url: "https://arxiv.org/abs/2510.14545" }
+  areas: [agentic-rl]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "代码与模型开源，在 13 个计算推理、知识推理与深度搜索基准上评测；团队随后发布熵平衡的续作 AEPO。"
+  summary: "观察到模型拿到工具返回后 token 熵明显升高，于是在高熵的工具交互步上自适应地额外分支采样，并配合优势归因估计；在 13 个基准上优于轨迹级 RL，且只用约一半的工具调用预算。"
+  plain: "工具结果一出来，模型最犹豫；ARPO 就在这些犹豫点多试几条岔路，把探索花在刀刃上。"
+  takeaways:
+    - "把探索预算集中在工具调用之后的高熵位置分叉采样，比整条轨迹重采更省。"
+  builds_on: [grpo]
+  tags: [熵, 分支采样, 工具调用]
+
+- id: simpletir
+  title: "SimpleTIR: End-to-End Reinforcement Learning for Multi-Turn Tool-Integrated Reasoning"
+  short: SimpleTIR
+  kind: paper
+  org: 南洋理工大学 等
+  authors: "Zhenghai Xue et al."
+  date: 2025-09
+  venue: ICLR 2026
+  arxiv: "2509.02479"
+  repo: ltzheng/SimpleTIR
+  areas: [agentic-rl, rl-llm]
+  facets: [algorithm, theory]
+  tier: rec
+  evidence: [open-source, ablation]
+  evidence_note: "代码与模型开源，ICLR 2026 接收；对多轮 TIR 训练崩溃给出了可复现的机制分析与极简修复。"
+  summary: "诊断多轮 TIR 训练崩溃：工具反馈造成分布漂移，模型在后续轮次生成低概率 token，累积成梯度范数爆炸；做法是丢弃含“空轮”（既无代码块也无最终答案）的轨迹，Qwen2.5-7B 基座的 AIME24 从 22.1 提到 50.5。"
+  plain: "多轮工具推理训着训着就炸，元凶是一些啥也没干的轮次带来的离谱大梯度；把这类轨迹直接扔掉就稳了。"
+  takeaways:
+    - "多轮 TIR 出现梯度范数尖峰时，先检查“空轮”轨迹，按规则过滤后再更新。"
+    - "监控后续轮次 token 的对数概率：低概率 token 的累积是崩溃先兆。"
+  builds_on: [torl]
+  tags: [多轮 TIR, 训练稳定性]
+
+# ───────────── 代码与 SWE ─────────────
+- id: swe-rl
+  title: "SWE-RL: Advancing LLM Reasoning via Reinforcement Learning on Open Software Evolution"
+  short: SWE-RL
+  kind: paper
+  org: "Meta FAIR · UIUC"
+  authors: "Yuxiang Wei et al."
+  date: 2025-02
+  arxiv: "2502.18449"
+  repo: facebookresearch/swe-rl
+  areas: [agentic-rl]
+  facets: [algorithm, data]
+  tier: rec
+  evidence: [ablation, open-source, community]
+  evidence_note: "首个把 RL 规模化用于真实软件工程的工作；仓库公开了提示模板与基于序列相似度的奖励实现。Meta 后续的 CWM 在中训练数据中使用了与 SWE-RL 类似的 GitHub PR 数据（见 CWM 模型卡）。"
+  summary: "用 GitHub PR 构造问题与参考补丁，不需执行环境：奖励为生成修改与参考补丁的 difflib 相似度，格式错误记 −1；GRPO 训出的 Llama3-SWE-RL-70B 在 SWE-bench Verified 达 41.0%。"
+  plain: "不跑测试，只看模型改的代码和人类真实提交像不像，像就给分；便宜，但只是“近似正确”。"
+  takeaways:
+    - "没有可执行环境时，补丁相似度可以作为廉价的代理奖励起步，但它奖励“长得像”而非“真的对”。"
+  builds_on: [grpo]
+  tags: [SWE, 规则奖励, 无执行]
+
+- id: kimi-dev
+  title: "Kimi-Dev: Agentless Training as Skill Prior for SWE-Agents"
+  short: Kimi-Dev
+  kind: paper
+  org: 月之暗面 Moonshot AI
+  date: 2025-06
+  arxiv: "2509.23045"
+  repo: MoonshotAI/Kimi-Dev
+  links:
+    - { label: 技术博客, url: "https://moonshotai.github.io/Kimi-Dev/" }
+  areas: [agentic-rl, mid-training]
+  facets: [algorithm, data]
+  tier: rec
+  evidence: [industrial, open-source, ablation]
+  evidence_note: "Kimi-Dev-72B 权重开源，发布时是 SWE-bench Verified 上最强的开源模型（60.4%）；博客与 arXiv 报告公开了约 150B token 中训练、仅结果奖励 RL 与测试时自博弈等细节。"
+  summary: "Qwen2.5-72B 先用约 150B token 的 issue/PR 数据中训练，再在 Agentless 框架（定位、编辑）上做 RL：只用 Docker 中测试全过的 0/1 奖励，过滤零成功率题、课程式加难度、末期回放成功样本。"
+  plain: "先在固定流程里把找文件、改代码、写测试这些基本功用 RL 练扎实，再换成自由探索的智能体形态，学得又快又好。"
+  takeaways:
+    - "RL 只用测试全过的 0/1 奖励即可，不必加格式或过程奖励；但要先剔除模型一次都做不对的题。"
+    - "训练末期把近期成功样本混回 batch（positive example reinforcement），有助于巩固成功模式。"
+    - "先用 Agentless 式结构化任务练出定位与编辑能力，再用少量轨迹 SFT 迁移到多轮 SWE-Agent。"
+  builds_on: [swe-rl, kimi-k1-5]
+  tags: [SWE, Agentless, 中训练]
+
+- id: skywork-swe
+  title: "Skywork-SWE: Unveiling Data Scaling Laws for Software Engineering in LLMs"
+  short: Skywork-SWE
+  kind: paper
+  org: 昆仑万维 Skywork AI
+  date: 2025-06
+  arxiv: "2506.19290"
+  areas: [agentic-rl]
+  facets: [data, env]
+  tier: rec
+  evidence: [industrial, ablation]
+  evidence_note: "昆仑万维出品；系统测量了 SWE 智能体训练数据量与效果的关系；每个实例配独立运行时镜像并经单元测试校验的数据流水线，对自建 SWE 环境有直接参考价值。"
+  summary: "自动构建 10,169 个带运行时镜像、经单元测试校验的 Python 任务（2,531 个仓库），用 OpenHands 轨迹做 SFT，效果随数据量持续增长、未见饱和；32B 模型 pass@1 38.0%，测试时扩展后 47.0%。"
+  plain: "它回答了一个朴素的问题：SWE 训练数据多多益善吗？目前看是的，而且还没到顶。"
+  takeaways:
+    - "构建 SWE 环境时，每个实例都要有可复现的运行时镜像，并验证“修复前测试失败、修复后通过”。"
+    - "上 RL 之前，先把可执行任务的数量与仓库多样性做上去，SFT 阶段就能看到持续收益。"
+  builds_on: [swe-gym, openhands]
+  tags: [SWE, 数据规模, SFT]
+
+- id: deepswe
+  title: "DeepSWE: Training a Fully Open-sourced, State-of-the-Art Coding Agent by Scaling RL"
+  short: DeepSWE
+  kind: blog
+  org: "Agentica · Together AI"
+  date: "2025-07-01"
+  url: https://www.together.ai/blog/deepswe
+  links:
+    - { label: 训练脚本, url: "https://github.com/agentica-project/rllm/tree/main/examples/swe" }
+    - { label: 模型, url: "https://huggingface.co/agentica-org/DeepSWE-Preview" }
+  areas: [agentic-rl]
+  facets: [algorithm, infra]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "数据集、代码、训练与评测日志全部公开（rLLM 仓库）；发布时是只用 RL、从 Qwen3-32B 训练并达到开源权重 SOTA 的完整公开配方，消融日志可在 W&B 查看。"
+  summary: "在 R2E-Gym 环境中只用 RL 训练 Qwen3-32B：每题 8 条轨迹、最多 50 步、90 分钟超时，留一优势、clip-higher、去掉 KL 与熵项，屏蔽截断与超时轨迹；Pass@1 42.2%，测试时扩展达 59%。"
+  plain: "给 32B 模型一堆真实代码仓库和测试，只告诉它“测试过了就得分”，靠自己一遍遍试把 bug 修对。"
+  takeaways:
+    - "超时、超长或步数用尽的轨迹不要当负样本，直接从损失中屏蔽，否则会惩罚长程探索。"
+    - "SWE 训练的 Infra 重头在容器：官方建议 Kubernetes 集群，每节点约 200 CPU、6TB 以上磁盘缓存上千个镜像。"
+  builds_on: [r2e-gym, rllm, dapo]
+  tags: [SWE, R2E-Gym, 纯 RL]
+
+- id: cwm
+  title: "CWM: An Open-Weights LLM for Research on Code Generation with World Models"
+  short: CWM
+  kind: report
+  org: Meta FAIR
+  date: 2025-09
+  url: https://ai.meta.com/research/publications/cwm/
+  repo: facebookresearch/cwm
+  areas: [agentic-rl, mid-training]
+  facets: [data, env]
+  tier: rec
+  evidence: [industrial, open-source, ablation]
+  evidence_note: "Meta FAIR 开放权重（非商用研究许可）的 32B 模型与技术报告；模型卡公开了中训练数据构成与三阶段训练流程，SWE-bench Verified 53.9%（测试时扩展 65.8%）。"
+  summary: "32B 代码模型：预训练 8T token 后，在 131K 上下文用 5T token“代码世界模型”数据中训练（Python 执行轨迹、约 300 万条容器内智能体交互），再做 SFT 与覆盖编码、数学、多轮 SWE 的多任务 RL。"
+  plain: "先让模型大量看代码执行时变量怎么变、命令敲下去系统怎么变，再用 RL 练它实际修代码。"
+  takeaways:
+    - "在 RL 之前用大量“观察—动作”轨迹做中训练，给模型一个“环境会如何响应”的先验，能抬高智能体 RL 的起点。"
+  builds_on: [swe-rl]
+  tags: [世界模型, 中训练, SWE]
+
+# ───────────── GUI 与计算机使用 ─────────────
+- id: digirl
+  title: "DigiRL: Training In-The-Wild Device-Control Agents with Autonomous Reinforcement Learning"
+  short: DigiRL
+  kind: paper
+  org: "UC Berkeley · UIUC · Google DeepMind"
+  authors: "Hao Bai et al."
+  date: 2024-06
+  venue: NeurIPS 2024
+  arxiv: "2406.11896"
+  repo: DigiRL-agent/digirl
+  areas: [agentic-rl]
+  facets: [algorithm, env]
+  tier: ref
+  evidence: [open-source, ablation]
+  evidence_note: "NeurIPS 2024 接收，代码、检查点与数据开源；是 LLM/VLM 设备控制智能体做离线到在线 RL 的早期完整实践。"
+  summary: "在真实安卓设备控制任务上做自主 RL：先离线 RL 预热、再在线 RL 适应网页与应用的动态变化，用 VLM 评估器自动判定任务成败，并结合步级与指令级价值函数估计优势，显著超越 SFT 与提示基线。"
+  plain: "让手机助手在真手机上自己点来点去地练，由另一个视觉模型当裁判判断任务完成没有。"
+  takeaways:
+    - "GUI 环境里可以用 VLM 做结果判定器免去人工奖励标注，但要定期抽检误判率。"
+  builds_on: [archer]
+  tags: [GUI, 设备控制, 离线到在线]
+
+- id: ui-tars-2
+  title: "UI-TARS-2 Technical Report: Advancing GUI Agent with Multi-Turn Reinforcement Learning"
+  short: UI-TARS-2
+  kind: report
+  org: 字节跳动 Seed
+  date: 2025-09
+  arxiv: "2509.02544"
+  links:
+    - { label: 项目主页, url: "https://seed-tars.com/showcase/ui-tars-2/" }
+  areas: [agentic-rl]
+  facets: [env, infra, algorithm]
+  tier: must
+  evidence: [industrial, ablation, community]
+  evidence_note: "字节 Seed 的 GUI 智能体旗舰技术报告，覆盖数据飞轮、稳定化多轮 RL、GUI + 文件系统 + 终端的混合环境与统一沙箱平台，是 GUI/计算机使用方向披露最完整的多轮 RL 工程实践之一；前代 UI-TARS-1.5 已开源 7B 权重。"
+  summary: "原生 GUI 智能体：数据飞轮持续产出训练数据，在集成文件系统与终端的混合 GUI 环境中做稳定化多轮 RL，统一沙箱支撑大规模 rollout；OSWorld 47.5、Online-Mind2Web 88.2。"
+  plain: "让模型看屏幕、点鼠标、敲键盘完成电脑任务；关键是有一套能同时开很多台虚拟电脑陪它练的系统。"
+  takeaways:
+    - "GUI 智能体不要只给鼠标键盘：接入终端与文件系统等混合动作空间，可解任务范围会显著扩大。"
+    - "GUI 环境慢且易出错，稳定的沙箱平台与数据飞轮是多轮 RL 能规模化的前提。"
+  builds_on: [digirl]
+  tags: [GUI, 计算机使用, 多轮 RL]
+
+# ───────────── 工业级智能体模型 ─────────────
+- id: kimi-k2
+  title: "Kimi K2: Open Agentic Intelligence"
+  short: Kimi K2
+  kind: report
+  org: 月之暗面 Moonshot AI
+  date: 2025-07
+  arxiv: "2507.20534"
+  repo: MoonshotAI/Kimi-K2
+  areas: [agentic-rl]
+  facets: [data, env, infra]
+  tier: must
+  evidence: [industrial, open-source, ablation, community]
+  evidence_note: "1T 参数 MoE 开源权重；技术报告系统披露了大规模智能体数据合成（3000+ 真实 MCP 工具、2 万+ 合成工具）、联合 RL 与智能体 rollout 基础设施，是理解工业级智能体后训练的首选读物之一。"
+  summary: "1T 总参、32B 激活的 MoE。后训练核心是大规模智能体数据合成（真实与合成工具、用户模拟、带状态的工具模拟器、rubric 评判过滤）与联合 RL；SWE 环境由 Kubernetes 支撑 1 万以上并发沙箱。"
+  plain: "先造出成千上万种工具和任务，让模型在模拟世界里大量练，再到真沙箱里实战，最后统一用 RL 打磨。"
+  takeaways:
+    - "规模化工具使用数据的可行做法：真实工具规格 + 演化合成工具 + LLM 模拟执行 + rubric 评判过滤，并在代码/SWE 等关键场景用真实沙箱兜底。"
+    - "智能体 rollout 的两大敌人是环境等待与长尾轨迹：重环境独立成服务、提高并发，长尾用 partial rollout。"
+  builds_on: [kimi-k1-5]
+  tags: [工业报告, 智能体数据合成, 联合 RL]
+
+- id: qwen3-coder
+  title: "Qwen3-Coder: Agentic Coding in the World"
+  short: Qwen3-Coder
+  kind: blog
+  org: 阿里巴巴通义千问
+  date: "2025-07-22"
+  url: https://qwenlm.github.io/blog/qwen3-coder/
+  repo: QwenLM/Qwen3-Coder
+  links:
+    - { label: Qwen3-Coder-Next, url: "https://qwenlm.github.io/blog/qwen3-coder-next/" }
+  areas: [agentic-rl]
+  facets: [env, infra]
+  tier: must
+  evidence: [industrial, open-source, community]
+  evidence_note: "开源 480B-A35B 等多个尺寸的编码智能体模型；官方博客明确披露依托阿里云搭建了可并行运行 2 万个独立环境的 Agent RL 系统，是“环境规模化”最常被引用的工业数据点之一。"
+  summary: "480B 总参、35B 激活的编码智能体。后训练在可验证代码 RL 之外引入长程 Agent RL，让模型在真实软件环境中多轮用工具完成任务；依托阿里云搭建了可并行运行 2 万个独立环境的系统。"
+  plain: "阿里给编码模型准备了两万个“工位”同时开练，让它在真实代码仓库里反复修问题。"
+  takeaways:
+    - "Agent RL 的瓶颈常在环境而非 GPU：先规划好成千上万个隔离环境的调度、回收与镜像缓存。"
+  builds_on: [qwen3]
+  tags: [编码智能体, 环境规模化]
+
+- id: glm-4-5
+  title: "GLM-4.5: Agentic, Reasoning, and Coding (ARC) Foundation Models"
+  short: GLM-4.5
+  kind: report
+  org: "智谱 Z.ai · 清华大学"
+  date: 2025-07
+  arxiv: "2508.06471"
+  repo: zai-org/GLM-4.5
+  areas: [agentic-rl]
+  facets: [algorithm, infra]
+  tier: must
+  evidence: [industrial, open-source, ablation, community]
+  evidence_note: "355B-A32B 与 GLM-4.5-Air（106B-A12B）以 MIT 许可开源；报告公开了专家模型迭代、推理 / 智能体 / 通用 RL 的做法与基于 slime 的 RL 基础设施；GLM-4.6、4.7 与 GLM-5 沿这条路线迭代。"
+  summary: "355B 总参、32B 激活的混合推理 MoE：先分别训练推理、智能体、通用专家模型，再自蒸馏合一，并对网页搜索、SWE 等任务做智能体 RL；TAU-Bench 70.1%，SWE-bench Verified 64.2%。"
+  plain: "先分别练出推理专家、智能体专家、聊天专家，再把它们的本事蒸馏进同一个模型。"
+  takeaways:
+    - "多能力后训练可以先分域训练专家、再蒸馏合一，减少不同 RL 任务之间的互相干扰。"
+  builds_on: [slime]
+  tags: [工业报告, 混合推理, 专家迭代]
+
+- id: kimi-k2-5
+  title: "Kimi K2.5: Visual Agentic Intelligence"
+  short: Kimi K2.5
+  kind: report
+  org: 月之暗面 Moonshot AI
+  date: 2026-01
+  url: https://www.kimi.com/blog/kimi-k2-5.html
+  repo: MoonshotAI/Kimi-K2.5
+  links:
+    - { label: 技术报告 PDF, url: "https://github.com/MoonshotAI/Kimi-K2.5/blob/main/tech_report.pdf" }
+  areas: [agentic-rl]
+  facets: [algorithm, infra]
+  tier: rec
+  evidence: [industrial, open-source, ablation]
+  evidence_note: "开源权重的多模态智能体旗舰；技术报告公开了并行智能体 RL（PARL）的奖励设计与关键步数约束，以及可同时编排 10 万个智能体任务的统一 RL 环境与训推不一致修正。"
+  summary: "在 K2 上做视觉—文本联合训练并提出 Agent Swarm：可训练编排器动态创建冻结子智能体并行执行。PARL 奖励 = 实例化奖励 + 完成率 + 结果奖励（辅助项退火到 0），用关键步数约束延迟。"
+  plain: "一个“包工头”模型学会把大任务拆开，派给一群临时工人同时干；只训练包工头，工人的产出当作环境反馈。"
+  takeaways:
+    - "多智能体 RL 的信用分配可以用“只训编排器、冻结执行者”绕开：执行者输出当作环境观察。"
+    - "为防串行坍缩与虚假并行，先用两个辅助奖励引导探索，再把系数退火到 0，让目标回到任务结果本身。"
+    - "长程多步工具调用 RL 要按对数比率区间做 token 级梯度屏蔽来约束训推不一致，报告称这对稳定性至关重要。"
+  builds_on: [kimi-k2]
+  tags: [多智能体, PARL, 训推一致]
+
+- id: glm-5
+  title: "GLM-5: from Vibe Coding to Agentic Engineering"
+  short: GLM-5
+  kind: report
+  org: "智谱 Z.ai · 清华大学"
+  date: 2026-02
+  arxiv: "2602.15763"
+  repo: zai-org/GLM-5
+  areas: [agentic-rl]
+  facets: [infra]
+  tier: rec
+  evidence: [industrial, open-source]
+  evidence_note: "744B-A40B 开源权重与技术报告；官方说明为此开发了异步 RL 基础设施 slime 以提升后训练吞吐。后续 GLM-5.1、5.2、5.3 沿“长程智能体工程”路线迭代（见仓库 README）。"
+  summary: "面向长程智能体任务的旗舰：从 GLM-4.5 的 355B-A32B 扩到 744B-A40B，预训练数据由 23T 增至 28.5T token，引入 DeepSeek 稀疏注意力；后训练依托异步 RL 基础设施 slime 提升吞吐。"
+  plain: "智谱把重心从“写几段代码”转向“长时间独立完成工程任务”，为此专门改造了异步 RL 训练系统。"
+  takeaways:
+    - "长程智能体后训练的吞吐瓶颈要靠异步 RL 系统解决，训推解耦是前提。"
+  builds_on: [glm-4-5, slime, deepseek-v3-2]
+  tags: [工业报告, 异步 RL, 长程任务]
+
+- id: minimax-m2-5
+  title: "MiniMax-M2.5"
+  short: MiniMax-M2.5
+  kind: project
+  org: MiniMax
+  date: 2026-02
+  repo: MiniMax-AI/MiniMax-M2.5
+  links:
+    - { label: MiniMax-M2, url: "https://github.com/MiniMax-AI/MiniMax-M2" }
+  areas: [agentic-rl]
+  facets: [infra, env, algorithm]
+  tier: rec
+  evidence: [industrial, open-source]
+  evidence_note: "开源权重；发布说明披露了在数十万真实环境中做 RL、自研智能体原生 RL 框架 Forge（约 40 倍训练加速）、沿用 CISPO 并引入过程奖励等要点，是少数公开大规模智能体 RL 系统设计的一手材料。"
+  summary: "在数十万真实环境中做 RL（编码类超 20 万）。自研 Forge 以中间层解耦训推引擎与任意智能体脚手架，异步调度权衡吞吐与离策略程度，样本树状合并约 40 倍加速；沿用 CISPO 并引入过程奖励。"
+  plain: "MiniMax 把公司里大部分日常工作做成了练习场，再造了一套能接任何智能体外壳的训练系统，让模型在里面大规模练。"
+  takeaways:
+    - "想让模型跨脚手架泛化，就在训练中接入多种真实 agent scaffold，而不是只用一种自研模板。"
+    - "异步调度要显式权衡吞吐与样本的离策略程度；共享前缀的多轮样本可以树状合并以省算力。"
+  builds_on: [minimax-m1]
+  tags: [工业实践, 环境规模化, Forge]

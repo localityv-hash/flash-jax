@@ -1,0 +1,406 @@
+# 经典 RL 五年（/topics/classic-rl）的条目。
+# 选择标准：2020–2026 年的经典 RL 工作里，思想或工程经验真正迁移到了大模型后训练、或能帮 LLM 从业者看清边界的那部分。
+# PPO 本身见 rl-llm（id: ppo），GAE/TRPO 见 algorithms（id: gae, trpo）。
+
+# ---------- 实现细节与工程基线 ----------
+
+- id: ppo-implementation-details
+  title: "The 37 Implementation Details of Proximal Policy Optimization"
+  short: PPO 37 个细节
+  kind: blog
+  org: CleanRL / Stable-Baselines3 社区
+  authors: "Shengyi Huang et al."
+  date: "2022-03-25"
+  venue: ICLR 2022 Blog Track
+  url: https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
+  repo: vwxyzjn/ppo-implementation-details
+  links:
+    - { label: "续作：The N Implementation Details of RLHF with PPO（Hugging Face 博客，2023）", url: https://huggingface.co/blog/the_n_implementation_details_of_rlhf_with_ppo }
+    - { label: "续作：The N+ Implementation Details of RLHF with PPO（COLM 2024）", url: https://openreview.net/forum?id=kHO2ZTa8e3 }
+  areas: [classic-rl, rl-llm]
+  facets: [algorithm, infra]
+  tier: must
+  evidence: [community, open-source, adopted]
+  evidence_note: "ICLR 2022 博客赛道文章：先考证 openai/baselines 的历史版本，再逐条给出 37 个细节的源码永久链接，并用单文件实现复现官方曲线。Hugging Face 的 Deep RL 课程把它列为 PPO 进阶必读；HF 的 RLHF 复现博客（2023）照搬其“逐条细节 + 对齐学习曲线”的方法，TRL 的 RLOO 博客（与 Cohere For AI 合写，2024）也以它说明 PPO 细节之难。"
+  summary: "逐条梳理 PPO 官方实现里论文没写的 37 个细节（13 条通用核心，其余针对 Atari、连续控制、LSTM 等）：正交初始化、Adam ε=1e-5、学习率退火、小批量级优势归一化、价值损失裁剪、全局梯度裁剪等，并附调试清单。"
+  plain: "同一个 PPO，论文里是一页公式，代码里藏着几十个“小开关”。这篇把开关逐个找出来、标清出处、验证影响；照着核对，你的 PPO 才算真正复现了。"
+  takeaways:
+    - "自己实现或改造 PPO/GRPO 时先做两项体检：第一个 epoch 的第一个 minibatch 里比率应恒为 1；approx_kl 按原文经验通常低于 0.02，持续偏高多半是 bug 或步子太大。"
+    - "发表对比实验时逐条列出所用的实现细节（优势归一化的粒度、是否裁剪价值损失、梯度裁剪阈值等），否则别人无法判断增益来自算法还是来自细节。"
+    - "默认流程是“先对齐一个可信的参考实现、复现出曲线，再改算法”，而不是从零写一个新训练器直接比。"
+  builds_on: [ppo, cleanrl]
+  tags: [PPO, 实现细节, 可复现性]
+
+- id: cleanrl
+  title: "CleanRL: High-quality Single-file Implementations of Deep Reinforcement Learning Algorithms"
+  short: CleanRL
+  kind: project
+  org: CleanRL 开源社区
+  authors: "Shengyi Huang et al."
+  date: 2021-11
+  venue: JMLR 2022
+  arxiv: "2111.08819"
+  repo: vwxyzjn/cleanrl
+  url: https://docs.cleanrl.dev/
+  areas: [classic-rl]
+  facets: [infra, algorithm]
+  tier: must
+  evidence: [open-source, community, adopted]
+  evidence_note: "最常被当作参考实现阅读的深度 RL 代码库之一，实验曲线在 Open RL Benchmark 上公开可查。PyTorch 团队的 LeanRL（pytorch-labs）在 CleanRL 实现上做 CUDA Graphs 等加速，CORL 按同样风格实现离线 RL，Hugging Face Deep RL 课程以 CleanRL 的 PPO 作为从零实现的范本。"
+  summary: "把每个算法变体的全部细节写进一个独立文件（如 ppo_atari.py 约 340 行），配套基准曲线、种子复现与实验追踪；牺牲代码复用，换取可逐行对照、可快速魔改的研究基线。"
+  plain: "不做“框架”，只做一份能从头读到尾的代码。想知道 PPO 到底怎么跑，读一个文件就够，不用在十几个抽象类之间来回跳。"
+  takeaways:
+    - "验证 LLM RL 的新想法时，先在单文件、小模型的最小实现上跑通，再搬进 verl、OpenRLHF 这类大框架。"
+    - "把 approx_kl、clipfrac 这类调试指标当作一等公民记录：CleanRL 的 ppo.py 同时记录 k1 与 k3 两种 KL 估计。"
+  tags: [单文件实现, 研究基线, 可复现性]
+
+- id: what-matters-on-policy
+  title: "What Matters In On-Policy Reinforcement Learning? A Large-Scale Empirical Study"
+  short: On-Policy 大规模消融
+  kind: paper
+  org: Google Research
+  authors: "Marcin Andrychowicz et al."
+  date: 2020-06
+  venue: ICLR 2021
+  arxiv: "2006.05990"
+  areas: [classic-rl]
+  facets: [algorithm, eval]
+  tier: rec
+  evidence: [ablation, community]
+  evidence_note: "在统一框架里实现 50 多个设计选择，在 5 个连续控制环境上训练超过 25 万个智能体，是 on-policy 方法实现细节最系统的消融之一；37 个细节博客逐条引用了它的结论。"
+  summary: "把 on-policy 算法拆成 50 多个可选设计，训练 25 万个智能体做大规模消融：GAE 优于 n 步回报、策略输出层用小初始化有益、学习率退火小幅有益，而价值损失裁剪无益甚至有害。"
+  plain: "与其争论哪个算法更好，不如把算法拆成几十个小开关，每个开关都实测一遍，看看到底是哪些在起作用。"
+  takeaways:
+    - "宣称新算法有效之前，先做开关级消融：很多“算法增益”其实来自某个实现细节。"
+    - "“官方实现里有”不等于“有用”：价值损失裁剪就是反例，以消融结果而不是惯例为准。"
+  builds_on: [ppo, gae]
+  tags: [消融, 超参数, PPO]
+
+# ---------- 离线 RL ----------
+
+- id: cql
+  title: "Conservative Q-Learning for Offline Reinforcement Learning"
+  short: CQL
+  kind: paper
+  org: UC Berkeley · Google Research
+  authors: "Aviral Kumar et al."
+  date: 2020-06
+  venue: NeurIPS 2020
+  arxiv: "2006.04779"
+  repo: aviralkumar2907/CQL
+  areas: [classic-rl]
+  facets: [algorithm, theory]
+  tier: rec
+  evidence: [open-source, community, ablation]
+  evidence_note: "离线 RL 的标志性基线，被引极高；在 D4RL 与 Atari 离线数据上系统对比，论文报告在复杂、多模态数据上常取得 2–5 倍的最终回报。ILQL 把它的保守正则搬到了 token 级语言生成。"
+  summary: "在 Bellman 误差之外加一个正则：压低策略偏好动作（对 Q 取 soft-max）的 Q 值、抬高数据中动作的 Q 值，使学到的 Q 在期望意义上成为策略真实价值的下界，避免离线训练对分布外动作的高估。"
+  plain: "没见过的招式，一律先假设它不怎么样；只有数据里真出现过、效果也确实好的招式才给高分。这样模型就不会被“想象中的好招”带偏。"
+  takeaways:
+    - "只能用固定数据训练时，最大的敌人是“对没见过的动作乐观”：评估任何离线方法，先问它如何抑制分布外高估。"
+    - "RLHF 里策略钻奖励模型的空子是同一类病：离奖励模型见过的分布越远，分数越不可信，所以要用 KL 或保守正则拉住策略。"
+  tags: [离线 RL, 保守估计, 分布偏移]
+
+- id: iql
+  title: "Offline Reinforcement Learning with Implicit Q-Learning"
+  short: IQL
+  kind: paper
+  org: UC Berkeley
+  authors: "Ilya Kostrikov et al."
+  date: 2021-10
+  venue: ICLR 2022
+  arxiv: "2110.06169"
+  repo: ikostrikov/implicit_q_learning
+  areas: [classic-rl]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, community, ablation]
+  evidence_note: "离线 RL 最常用的强基线之一，官方 JAX 代码与 rlkit 中的 PyTorch 复现均公开；在 D4RL（尤其稀疏奖励的 AntMaze）上系统评测，并展示了离线预训练后再在线微调的效果。"
+  summary: "训练中从不查询数据集外的动作：用 expectile 回归让 V(s) 逼近数据内动作 Q 值的上分位，Q 以 r+γV(s′) 为 TD 目标；最后用优势加权回归（AWR）从数据中抽取策略。"
+  plain: "只在“真实发生过的招式”里挑：估计每个局面下数据里较好的那些做法能拿多少分，再让策略多学那些比平均水平更好的做法。"
+  takeaways:
+    - "只有离线数据时，优先考虑“只在数据内做改进”的方法（IQL、加权 SFT），它们几乎不会因分布外动作而崩溃。"
+    - "expectile τ 是乐观程度的旋钮：官方配置在运动控制上取 0.7，在稀疏奖励的 AntMaze 上取 0.9；AWR 的权重还被截断在 100 以内防止爆炸。"
+  tags: [离线 RL, expectile, AWR]
+
+- id: ilql
+  title: "Offline RL for Natural Language Generation with Implicit Language Q Learning"
+  short: ILQL
+  kind: paper
+  org: UC Berkeley
+  authors: "Charlie Snell et al."
+  date: 2022-06
+  venue: ICLR 2023
+  arxiv: "2206.11871"
+  repo: Sea-Snell/Implicit-Language-Q-Learning
+  areas: [classic-rl, rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "把 IQL 搬到 token 级文本生成的代表工作，官方代码公开；CarperAI 的 RLHF 库 trlX 曾把 ILQL 与 PPO 并列为两种内置训练算法。"
+  summary: "把每个 token 当作动作，在固定文本数据上用 IQL 式 expectile 回归学习 token 级 Q/V，并加 CQL 式正则压低未出现 token 的 Q；解码时把 β·(Q−V) 加到语言模型的 logits 上。"
+  plain: "不重新采样，只用现成的带分数文本，给每个词估一个“往后还能拿多少分”；生成时把高分的词往上推一点。"
+  takeaways:
+    - "只有一批带分数的历史文本、又不能在线采样时，token 级价值学习 + 解码时加权是可行路线；但工业界更常用拒绝采样微调或 DPO 这类更简单的离线做法。"
+    - "解码时的加权强度 β 就是“离数据多远”的旋钮：β 越大越偏离原模型，Q 值越可能落在没被校准过的区域。"
+  builds_on: [iql, cql]
+  tags: [离线 RL, token 级价值, 文本生成]
+
+# ---------- 序列建模 ----------
+
+- id: decision-transformer
+  title: "Decision Transformer: Reinforcement Learning via Sequence Modeling"
+  short: Decision Transformer
+  kind: paper
+  org: UC Berkeley · Facebook AI Research · Google Brain
+  authors: "Lili Chen et al."
+  date: 2021-06
+  venue: NeurIPS 2021
+  arxiv: "2106.01345"
+  repo: kzl/decision-transformer
+  areas: [classic-rl]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "把 RL 改写成条件序列建模的代表作，被引极高，催生了 Multi-Game DT、Q-learning DT、Elastic DT 等大量后续；官方代码可复现 Atari 与 D4RL 结果。它能否“拼接”次优轨迹，后来被多篇理论与实验工作质疑。"
+  summary: "把轨迹写成（剩余回报、状态、动作）交错的 token 序列，用因果 Transformer 做条件化的行为克隆；测试时指定目标回报即可生成动作，在 Atari、D4RL 上与当时的离线 RL 基线相当。"
+  plain: "不教模型“哪个动作值多少分”，而是给它看大量“想拿 X 分 → 当时这么做”的录像；用的时候告诉它“我要高分”，它就模仿高分录像出招。"
+  takeaways:
+    - "在提示里写目标分数或质量标签，是把奖励信号塞进 SFT 的最简单办法，但它只会模仿数据里出现过的好行为。"
+    - "数据以低质量为主、需要把多条次优片段拼成好策略时，别指望条件化生成；应改用带价值函数或带搜索的方法。"
+  tags: [序列建模, 条件生成, 离线 RL]
+
+- id: trajectory-transformer
+  title: "Offline Reinforcement Learning as One Big Sequence Modeling Problem"
+  short: Trajectory Transformer
+  kind: paper
+  org: UC Berkeley
+  authors: "Michael Janner et al."
+  date: 2021-06
+  venue: NeurIPS 2021
+  arxiv: "2106.02039"
+  repo: jannerm/trajectory-transformer
+  areas: [classic-rl]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "与 Decision Transformer 同月发布的另一条序列建模路线，代码与 16 个数据集的预训练模型公开；README 中的 D4RL 表格显示其运动控制平均分与 CQL 相当。"
+  summary: "把状态、动作、奖励逐维离散成 token，用 GPT 建模整条轨迹，再用按累计奖励打分的束搜索做规划；同一个模型既充当世界模型，又充当动作先验。"
+  plain: "先学会“这个世界接下来会怎样”，再在脑子里用束搜索往后试走几步，挑累计奖励最高的那条路，像下棋时多算几步。"
+  takeaways:
+    - "“序列模型 + 带价值的搜索”比“序列模型 + 条件化”更接近真正的规划；LLM 里的价值引导解码走的就是这条路。"
+    - "把规划开销算进预算：每一步决策都要跑一次束搜索，推理比直接输出动作的策略慢得多。"
+  tags: [序列建模, 束搜索, 规划]
+
+# ---------- 模型与搜索 ----------
+
+- id: efficientzero
+  title: "Mastering Atari Games with Limited Data"
+  short: EfficientZero
+  kind: paper
+  org: 清华大学 · UC Berkeley · 上海期智研究院
+  authors: "Weirui Ye et al."
+  date: 2021-10
+  venue: NeurIPS 2021
+  arxiv: "2111.00210"
+  repo: YeWR/EfficientZero
+  links:
+    - { label: "EfficientZero V2（ICML 2024）", url: https://arxiv.org/abs/2403.00564 }
+  areas: [classic-rl]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "代码开源，对三项改进逐一消融（自监督一致性损失贡献最大）；后续 EfficientZero V2（ICML 2024）扩展到连续控制，并在 66 个任务中的 50 个上超过 DreamerV3。"
+  summary: "在 MuZero 上加三项改进：自监督的时间一致性损失、端到端预测“价值前缀”（累计奖励）、基于模型的离策略价值修正；在 Atari 100k（约两小时游戏经验）上达到人类平均分的 194.3%、中位数 109.0%。"
+  plain: "MuZero 很强但太费数据。EfficientZero 让它脑中的“想象”额外对齐真实画面，并用新模型重算旧数据的价值目标，于是两小时的游戏量就能超过人类平均水平。"
+  takeaways:
+    - "样本昂贵时，给世界模型加自监督一致性目标（预测的下一状态要对得上真实观测的编码）是性价比最高的一招。"
+    - "旧数据的价值目标会“过期”：数据越旧，越应缩短自举步长或用当前模型重算；LLM 异步 RL 处理陈旧样本也是同一类问题。"
+  tags: [MuZero, 样本效率, 世界模型]
+
+- id: gumbel-muzero
+  title: "Policy Improvement by Planning with Gumbel"
+  short: Gumbel MuZero
+  kind: paper
+  org: DeepMind
+  authors: "Ivo Danihelka et al."
+  date: 2021-10
+  venue: ICLR 2022
+  url: https://openreview.net/forum?id=bERaNdoegnO
+  repo: google-deepmind/mctx
+  areas: [classic-rl]
+  facets: [algorithm, theory]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "DeepMind 的 JAX 搜索库 mctx 实现了 MuZero 与 Gumbel MuZero，并在 README 中推荐默认使用后者；开源 MCTS 框架 LightZero 也收录了该算法。"
+  summary: "指出 AlphaZero/MuZero 在根节点没访问到全部动作时可能改进不了策略；改用 Gumbel-Top-k 无放回采样候选动作、sequential halving 分配模拟次数，在动作价值估计准确时保证策略改进，模拟次数很少时明显优于 MuZero。"
+  plain: "搜索预算很紧、只能试几步棋时，老办法可能白算一场。Gumbel MuZero 先有章法地随机挑几个候选，再逐轮淘汰差的，保证“搜完之后的选择不比搜之前差”。"
+  takeaways:
+    - "每步只能展开少数候选时，用无放回采样 + 逐轮淘汰来挑候选，比按访问次数挑更稳。"
+    - "把搜索产出的改进策略（mctx 的 action_weights）当作蒸馏目标训练策略网络，这就是 AlphaZero 家族里的专家迭代。"
+  tags: [MCTS, MuZero, 策略改进, JAX]
+
+- id: dreamerv3
+  title: "Mastering Diverse Domains through World Models"
+  short: DreamerV3
+  kind: paper
+  org: Google DeepMind · University of Toronto
+  authors: "Danijar Hafner et al."
+  date: 2023-01
+  venue: Nature 2025
+  arxiv: "2301.04104"
+  repo: danijar/dreamerv3
+  links:
+    - { label: "Nature 版：Mastering diverse control tasks through world models", url: https://www.nature.com/articles/s41586-025-08744-2 }
+  areas: [classic-rl]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "2025 年在 Nature 正式发表；作者公开 JAX 实现。论文用同一套超参数在 8 个领域、150 多个任务上评测，并逐项消融 symlog、free bits、回报归一化等鲁棒性技巧，还报告了 12M 到 400M 参数的扩展曲线。"
+  summary: "学习一个世界模型，在想象出的轨迹上训练 actor-critic；靠 symlog 变换、free bits、按 5%–95% 分位数范围归一化回报等技巧，让一套超参数通用于 150 多个任务，并首次不借助人类数据从零在 Minecraft 挖到钻石。"
+  plain: "先在脑子里学会“世界怎么运转”，再在脑内模拟里反复练习。最大的卖点是不用调参：一套设置从雅达利游戏、机器人控制一直用到 Minecraft。"
+  takeaways:
+    - "奖励尺度差异大时，按分位数范围归一化回报、并且只缩小不放大（除以 max(1, S)），比除以标准差更稳：稀疏奖励下标准差接近 0，会把噪声放大。"
+    - "想要一套超参数走天下，就在算法内部解决输入输出的尺度问题（symlog、回报归一化），而不是留给每个任务去调。"
+  tags: [世界模型, 想象训练, 固定超参数]
+
+# ---------- 样本效率与评测 ----------
+
+- id: bbf
+  title: "Bigger, Better, Faster: Human-level Atari with Human-level Efficiency"
+  short: BBF
+  kind: paper
+  org: Google DeepMind · Mila
+  authors: "Max Schwarzer et al."
+  date: 2023-05
+  venue: ICML 2023
+  arxiv: "2305.19452"
+  url: https://github.com/google-research/google-research/tree/master/bigger_better_faster
+  areas: [classic-rl]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, ablation]
+  evidence_note: "代码随 google-research 仓库开源（基于 Dopamine 的 JAX 实现）；论文对网络规模、周期性重置、n 步与折扣退火等设计逐项消融，并用 IQM 与置信区间报告结果。"
+  summary: "无模型的值方法也能样本高效：Q 网络加宽到 4 倍，配合高回放比、周期性 shrink-and-perturb 重置、n 步从 10 退火到 3、折扣从 0.97 升到 0.997、权重衰减与自预测损失，在 Atari 100k 上达到超人水平。"
+  plain: "数据少时把网络做大，通常会过拟合、越学越僵。BBF 的办法是边练边“部分重置”网络，再配一组调好的旋钮，于是大网络在很少数据上也能学得又好又快。"
+  takeaways:
+    - "同一批数据反复训练（高回放比）会让网络失去可塑性；定期部分重置或加强正则能把它找回来，长时间 RL 训练的大模型同样要监控这类退化。"
+    - "放大模型的收益要靠配套设计兑现：先解决过拟合与可塑性，再加宽网络。"
+  tags: [样本效率, 可塑性, 模型扩展]
+
+- id: rliable
+  title: "Deep Reinforcement Learning at the Edge of the Statistical Precipice"
+  short: rliable
+  kind: paper
+  org: Google Research · Mila
+  authors: "Rishabh Agarwal et al."
+  date: 2021-08
+  venue: NeurIPS 2021（Outstanding Paper）
+  arxiv: "2108.13264"
+  repo: google-research/rliable
+  areas: [classic-rl]
+  facets: [eval]
+  tier: rec
+  evidence: [community, open-source]
+  evidence_note: "NeurIPS 2021 杰出论文奖；配套开源库 rliable 提供 IQM、分层 bootstrap 置信区间与性能剖面，已成为 Atari 100k 等样本效率评测的常用报告方式，BBF 即采用。"
+  summary: "指出深度 RL 常用“少量种子 + 点估计”报告结果，结论可能被统计噪声左右；主张报告分层 bootstrap 置信区间、性能剖面与四分位均值（IQM），并用这些工具重新检视 ALE、Procgen 等基准上的已有比较。"
+  plain: "只跑三五个随机种子、报一个平均数，很可能只是运气好。这篇教你用区间、分布和更稳健的均值说话，别让噪声替你下结论。"
+  takeaways:
+    - "LLM RL 的评测同样是少种子、高方差：报告 avg@k 与置信区间，比单次 pass@1 点估计可靠得多。"
+    - "比较两个方法时优先看 IQM 或“提升概率”，不要被少数极端任务主导的均值带偏。"
+  tags: [评测, 统计显著性, IQM]
+
+# ---------- RL 用于发现 ----------
+
+- id: alphatensor
+  title: "Discovering faster matrix multiplication algorithms with reinforcement learning"
+  short: AlphaTensor
+  kind: paper
+  org: DeepMind
+  authors: "Alhussein Fawzi et al."
+  date: 2022-10
+  venue: Nature 2022
+  url: https://www.nature.com/articles/s41586-022-05172-4
+  repo: google-deepmind/alphatensor
+  areas: [classic-rl]
+  facets: [algorithm]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "Nature 2022 论文；仓库公开了发现的全部分解（包括 4×4 问题上 14,236 个互不等价的算法）、V100 测速脚本与组合代码，在“AI 发现算法”方向被广泛引用。"
+  summary: "把找矩阵乘法算法写成单人游戏 TensorGame（每步减去一个秩一张量、奖励 −1），用 AlphaZero 式搜索 + 学习求解；模 2 算术下首次改进 Strassen 两层算法（4×4 用 47 次乘法对 49 次），还能以实测运行时间为奖励适配硬件。"
+  plain: "把“找更快的矩阵乘法”变成拆积木游戏：每拆一块扣一分，最快拆完的就是乘法次数最少的算法。AI 靠自我博弈找到了 Strassen 算法问世 50 多年来的改进。"
+  takeaways:
+    - "能把目标写成“可自动验证、可计步”的游戏，RL 才能大显身手：正确性由构造保证，效率就是奖励。"
+    - "奖励可以直接换成实测指标（如目标硬件上的运行时间），同一套搜索就变成面向硬件的自动调优。"
+  tags: [算法发现, AlphaZero, 张量分解]
+
+- id: alphadev
+  title: "Faster sorting algorithms discovered using deep reinforcement learning"
+  short: AlphaDev
+  kind: paper
+  org: Google DeepMind
+  authors: "Daniel J. Mankowitz et al."
+  date: 2023-06
+  venue: Nature 2023
+  url: https://www.nature.com/articles/s41586-023-06004-9
+  repo: google-deepmind/alphadev
+  areas: [classic-rl]
+  facets: [algorithm]
+  tier: must
+  evidence: [industrial, open-source, community]
+  evidence_note: "发现的排序例程已并入 LLVM 标准 C++ 库（libc++）的 sort 实现，是强化学习发现的算法直接替换生产代码组件的罕见案例；仓库公开了 AssemblyGame 伪代码，以及 sort3–sort8 等汇编程序与正确性测试。"
+  summary: "把写更快的排序汇编变成单人游戏 AssemblyGame：每步追加一条汇编指令，奖励由测试输入上的正确性与实测延迟组成；AlphaZero 式智能体从零发现了优于人类基准的短序列排序例程。"
+  plain: "让 AI 一条一条地写汇编：写对了、跑得快就加分。它写出的小排序程序比人类专家的更短更快，最后被合并进了 C++ 标准库。"
+  takeaways:
+    - "“正确性 + 实测延迟”双奖励是代码优化类 RL 的通用配方；让 LLM 做性能优化时，也应把延迟测出来放进奖励，而不是只看测试是否通过。"
+    - "从小而关键的例程下手（如 3–5 个元素的排序）：搜索空间可控，收益却会在海量调用中被放大。"
+  tags: [算法发现, 代码优化, AlphaZero]
+
+- id: alphaproof
+  title: "Olympiad-level formal mathematical reasoning with reinforcement learning"
+  short: AlphaProof
+  kind: paper
+  org: Google DeepMind
+  authors: "Thomas Hubert et al."
+  date: 2024-07
+  venue: Nature 2025
+  url: https://www.nature.com/articles/s41586-025-09833-y
+  links:
+    - { label: "2024 年 IMO 银牌水平博客（AlphaProof 与 AlphaGeometry 2）", url: https://deepmind.google/discover/blog/ai-solves-imo-problems-at-silver-medal-level/ }
+  areas: [classic-rl, rl-llm]
+  facets: [algorithm]
+  tier: rec
+  evidence: [community, ablation]
+  evidence_note: "2024 年 7 月以 IMO 银牌水平成绩首次公开，完整论文 2025 年 11 月发表于 Nature；在历史竞赛题与 PutnamBench 等基准上系统评测，补充材料给出逐项求解率与超参数。未开源代码，论文附伪代码。"
+  summary: "AlphaZero 式智能体在 Lean 中学习证明：把数百万道自动形式化的题目作为训练环境，用证明/证伪经验做 RL；最难的题用测试时 RL，生成并学习数百万个相关变体。IMO 2024 解出 5 道非几何题中的 3 道（含最难一题）。"
+  plain: "让 AI 在一个能自动判对错的数学语言（Lean）里自己出题、自己证明、自己学。遇到特别难的题，就先练一大堆“改编版”，练熟了再回来攻原题。"
+  takeaways:
+    - "有精确验证器（Lean、单元测试）的领域，搜索 + RL 的上限最高：奖励不会被钻空子，才敢放开做大规模自我提升。"
+    - "测试时针对单题生成变体并在线训练，是把算力花在难题上的另一种方式；它的前提是能自动构造可验证的相关问题。"
+  tags: [形式化数学, Lean, 测试时 RL]
+
+# ---------- 立场与方向 ----------
+
+- id: era-of-experience
+  title: "Welcome to the Era of Experience"
+  short: 经验时代
+  kind: paper
+  org: Google DeepMind · University of Alberta
+  authors: "David Silver, Richard S. Sutton"
+  date: 2025-04
+  venue: 《Designing an Intelligence》（MIT Press）章节预印本
+  url: https://storage.googleapis.com/deepmind-media/Era-of-Experience%20/The%20Era%20of%20Experience%20Paper.pdf
+  links:
+    - { label: "Sutton 访谈：Father of RL thinks LLMs are a dead end（Dwarkesh Podcast，2025-09）", url: https://www.dwarkesh.com/p/richard-sutton }
+    - { label: "Karpathy 回应：Animals vs Ghosts（2025-10）", url: https://karpathy.bearblog.dev/animals-vs-ghosts/ }
+  areas: [classic-rl, agentic-rl]
+  facets: [theory]
+  tier: rec
+  evidence: [community, adopted]
+  evidence_note: "两位作者分别是 AlphaGo 的主要负责人与 2024 年图灵奖得主之一；文章被广泛引用与讨论，Kimi K2 技术报告（Moonshot AI）在引言中以它作为 agentic intelligence 的立论依据。它是观点性文章，没有实验，证据是论证与 AlphaProof、DeepSeek-R1 等案例。"
+  summary: "立场文章：人类数据的红利正在见顶，下一代智能体将主要从自身经验中学习——活在长期的经验流里，动作与观测扎根于环境，奖励来自环境信号而非人类预判，并借助世界模型做规划与推理。"
+  plain: "照着人类写下的东西学，最多学到人类的水平。想超越，就得让 AI 自己去做事、看结果、从结果里学，就像 AlphaGo 靠自我对弈超过了人类棋谱。"
+  takeaways:
+    - "设计智能体训练时，优先寻找环境自己给出的信号（测试是否通过、任务是否完成、指标是否改善），少依赖人类或模型的主观打分。"
+    - "把能持续产生新经验的环境当作核心资产来建设：静态合成数据会被越来越强的模型迅速用完。"
+  builds_on: [alphaproof, deepseek-r1]
+  tags: [经验学习, Agentic RL, 立场文章]

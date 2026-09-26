@@ -1,0 +1,104 @@
+# 环境与评测相关术语（/topics/multi-env、/lenses/eval）。
+
+- id: environment
+  term: Environment
+  zh: 环境
+  area: agentic-rl
+  plain: "模型的“练习场”：给它出题、让它动手、告诉它做得对不对。在 RL 里，环境就是新的训练数据。"
+  definition: "智能体与之交互并据此获得奖励的完整系统，包括任务分布、观测与动作接口、工具、状态与重置机制、终止条件以及给出奖励的验证器；形式上可看作（部分可观测的）MDP 的一个实例化。LLM 场景下常分为无状态（单轮判分）与有状态（多轮、带沙箱或数据库）两类。"
+  see: [/topics/multi-env#anatomy]
+
+- id: verifier
+  term: Verifier
+  zh: 验证器
+  area: agentic-rl
+  plain: "环境里的“判卷老师”：可以是一段检查答案的代码、一组单元测试，也可以是一个按评分细则打分的模型。"
+  definition: "根据回答或轨迹（及环境终态）计算奖励的组件：规则匹配、程序执行与单元测试、数据库状态比对属于可验证奖励；奖励模型或按 rubric 打分的 LLM 评审属于模型判分。验证器的假阳性与假阴性直接决定奖励作弊空间与学习信号质量。"
+  see: [/topics/multi-env#anatomy, /topics/rl-for-llm#reward-design]
+
+- id: environment-hub
+  term: Environment Hub
+  zh: 环境 Hub
+  area: agentic-rl
+  plain: "RL 环境的“应用商店”：别人写好的练习场可以直接下载安装，拿来评测或训练自己的模型。"
+  definition: "以统一接口打包、版本化并分发 RL 环境与评测的平台或约定，如 Prime Intellect 的 Environments Hub（基于 verifiers）、Hugging Face 上的 OpenEnv 环境、NVIDIA NeMo Gym 的环境集合；目标是让环境像数据集和模型权重一样可复用、可组合。"
+  see: [/topics/multi-env#hubs]
+
+- id: task-synthesis
+  term: Task synthesis
+  zh: 任务合成
+  area: agentic-rl
+  plain: "不再只靠人出题，而是让程序或模型批量造题，同时造出能自动判卷的标准。"
+  definition: "规模化生成“任务 + 可执行环境 + 验证器”三元组的方法：程序化生成器（按参数出题）、从真实数据回译（由 commit/PR 构造 SWE 任务）、注入扰动（向仓库注入 bug）、以及由智能体搭建工具与数据库并提出“难解易验”的任务。质量控制通常包括可解性检查、难度标定、验证器校验与去污染。"
+  see: [/topics/multi-env#synthesis]
+
+- id: user-simulator
+  term: User simulator
+  zh: 用户模拟器
+  area: agentic-rl
+  plain: "让另一个模型扮演顾客或用户，和被测智能体多轮对话，省去真人陪练。"
+  definition: "在对话式或工具使用环境中，由 LLM 按给定意图、人设与约束扮演用户的组件（如 τ-bench、Kimi K2 的工具使用数据合成）。它让多轮交互可以自动化评测与训练，但模拟器的偏差与不稳定会直接进入奖励和分数，需要固定其模型与提示并报告版本。"
+  see: [/lenses/eval#agent-eval]
+
+- id: pass-at-k
+  term: pass@k
+  full: pass at k
+  plain: "给模型 k 次机会，至少答对一次的概率，衡量“能力上限”。"
+  definition: "对每道题，k 个独立样本中至少一个正确的概率 1−(1−p)^k 的期望（p 为该题单次正确率）。常用无偏估计：每题采样 n≥k 个、数出 c 个正确，估计量为 1−C(n−c,k)/C(n,k)，再对所有题取平均；直接用 1−(1−c/n)^k 会系统性偏低。"
+  see: [/lenses/eval#pass-at-k, /lenses/principles#pass-at-k-debate]
+
+- id: pass-hat-k
+  term: pass^k
+  full: pass hat k
+  plain: "同一道题连做 k 次都要全对，衡量“稳不稳”，对上线的智能体比 pass@k 更重要。"
+  definition: "τ-bench 提出的可靠性指标：每道题 k 次独立尝试全部成功的概率 p^k 的期望。无偏估计为 C(c,k)/C(n,k)（n 次尝试中成功 c 次），对题目取平均；k 增大时下降越快，说明模型越不稳定。"
+  see: [/lenses/eval#pass-at-k]
+
+- id: avg-at-k
+  term: avg@k
+  full: average at k
+  plain: "每道题做 k 遍取平均正确率，本质还是 pass@1，只是估得更准、波动更小。"
+  definition: "每题采样 k 个回答、计算平均正确率，再对题目取平均，是 pass@1（单次期望正确率）的低方差估计；常用于 AIME 这类题量很少的基准（如 avg@16、avg@32），与 mean@k 同义。"
+  see: [/lenses/eval#pass-at-k, /lenses/eval#variance]
+
+- id: standard-error
+  term: Standard error
+  zh: 标准误
+  plain: "分数的“误差棒”：题目少、答题有随机性时，分数本身就会晃，标准误告诉你它大概会晃多少。"
+  definition: "估计量的抽样标准差。对 N 道题的平均分，标准误约为逐题得分标准差除以 √N；比较两个模型时应对同一批题的逐题差值计算标准误（配对）。95% 置信区间约为估计值 ±1.96 倍标准误。"
+  see: [/lenses/eval#variance]
+
+- id: contamination
+  term: Data contamination
+  zh: 数据污染
+  plain: "考题或答案提前混进了训练数据，模型是“背”出来的，分数不代表真实能力。"
+  definition: "评测样本（题面、答案、解题过程或其改写）出现在预训练、中训练、微调或 RL 数据中，或在评测时可被检索到，导致分数高估泛化能力。检测手段包括 n-gram 与语义相似度比对、按发布时间切分对比、扰动与改写测试、以及 canary 字符串；预防手段包括去污染与动态基准。"
+  see: [/lenses/eval#contamination, /lenses/data]
+
+- id: dynamic-benchmark
+  term: Dynamic benchmark
+  zh: 动态基准
+  plain: "题库定期换新题，只用模型训练之后才出现的题来考，避免“背答案”。"
+  definition: "持续收集新样本并记录其发布日期、按时间窗口评测的基准，如 LiveCodeBench（新竞赛题）、SWE-rebench 与 SWE-bench-Live（新 GitHub issue）、MathArena（新数学竞赛）。它以时间切分对抗污染，代价是版本不断变化、跨时间比较需要固定窗口。"
+  see: [/lenses/eval#contamination]
+
+- id: llm-as-judge
+  term: LLM-as-a-judge
+  zh: LLM 评审
+  plain: "请一个强模型当阅卷老师给答案打分；省人力，但它也有偏心和盲点。"
+  definition: "用 LLM 按提示或 rubric 对回答、轨迹进行打分或成对比较的评测与奖励方式。已知问题包括位置偏差、冗长偏差、自我偏好、对特定格式或“万能词”敏感而产生假阳性，以及难以判断复杂推理的正确性；需用人工标注校准一致率，并交换顺序、固定模型版本。"
+  see: [/lenses/eval#agent-eval]
+
+- id: benchmark-saturation
+  term: Benchmark saturation
+  zh: 基准饱和
+  plain: "大家都考到接近满分，这张卷子就分不出高下了，只能换新卷子。"
+  definition: "头部模型成绩接近上限（或接近题目本身的标签错误率）后，基准失去区分度：剩余错题往往是坏题或歧义题，分数差异主要反映噪声与过拟合。常见应对是发布经人工复核的子集、更难的续作或动态版本（如 SWE-bench → Verified → Pro）。"
+  see: [/lenses/eval#benchmarks]
+
+- id: time-horizon
+  term: Time horizon
+  zh: 时间视界
+  plain: "模型能独立完成“人类专家需要多长时间”的任务：能干完 1 小时的活，还是 1 天的活。"
+  definition: "METR 提出的智能体能力度量：以人类专家完成时间标定任务难度，对模型拟合成功率关于 log(任务时长) 的逻辑回归，取成功率 50%（或 80%）处的任务时长。2019–2025 年前沿模型的 50% 时间视界约每 7 个月翻一番。"
+  see: [/lenses/eval#agent-eval]

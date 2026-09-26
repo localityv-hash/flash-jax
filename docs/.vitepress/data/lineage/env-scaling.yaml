@@ -1,0 +1,138 @@
+id: env-scaling
+title: 从静态基准到环境 Hub：环境是怎样规模化的
+description: 时间自上而下。左列是“只能考试”的静态基准，第二列是把考题改造成训练场的 Gym，第三列是批量“造题”的合成方法，右列是让环境可安装、可共享的标准与 Hub。每条边写的是后者补上了前者的什么短板；悬停或点击节点查看说明。
+lanes:
+  - { id: bench, label: 静态基准 }
+  - { id: gym, label: 训练用 Gym }
+  - { id: synth, label: 规模化合成 }
+  - { id: hub, label: 标准与 Hub }
+nodes:
+  - id: webarena
+    label: WebArena
+    date: 2023-07
+    lane: bench
+    note: "自托管真实网站 + 按最终状态判分：网页任务第一次能在本地可复现地大规模运行。"
+    entry: webarena
+  - id: swe-bench
+    label: SWE-bench
+    date: 2023-10
+    lane: bench
+    note: "真实 GitHub issue + 仓库自带单元测试：把“修 bug”变成可执行判分的评测。"
+    entry: swe-bench
+  - id: osworld
+    label: OSWorld
+    date: 2024-04
+    lane: bench
+    note: "从网页扩展到整台电脑：虚拟机快照负责重置，逐任务检查脚本负责判分。"
+    entry: osworld
+  - id: tau-bench
+    label: τ-bench
+    date: 2024-06
+    lane: bench
+    note: "引入 LLM 扮演的用户，以数据库终态判分，并用 pass^k 衡量稳定性。"
+    entry: tau-bench
+  - id: swe-gym
+    label: SWE-Gym
+    date: 2024-12
+    lane: gym
+    note: "第一次把 SWE 评测题改造成可以反复训练的环境；但环境靠人工配置，只有 2.4K 个任务。"
+    entry: swe-gym
+  - id: verifiers
+    label: verifiers
+    date: 2025-02
+    lane: hub
+    note: "环境 = 数据集 + 交互逻辑 + Rubric，打包成可安装模块，评测、合成数据与训练共用一份代码。"
+    href: "#hubs"
+    entry: verifiers
+  - id: r2e-gym
+    label: R2E-Gym
+    date: 2025-04
+    lane: synth
+    note: "从 commit 回译任务描述、自动生成测试，摆脱对人工 PR 与 issue 的依赖。"
+    entry: r2e-gym
+  - id: swe-smith
+    label: SWE-smith
+    date: 2025-04
+    lane: synth
+    note: "一个仓库一个镜像，在里面批量注入 bug：SWE 任务从“找”变成“造”，规模到 5 万级。"
+    href: "#synthesis"
+    entry: swe-smith
+  - id: reasoning-gym
+    label: Reasoning Gym
+    date: 2025-05
+    lane: gym
+    note: "100 多个程序化出题机 + 验证器：推理环境可以无限供给、难度可调、天然无污染。"
+    href: "#synthesis"
+    entry: reasoning-gym
+  - id: kimi-k2
+    label: Kimi K2
+    date: 2025-07
+    lane: synth
+    note: "3000+ 真实 MCP 工具与 2 万+ 合成工具，配用户与工具模拟器，工业级合成工具使用任务。"
+    entry: kimi-k2
+  - id: env-hub
+    label: Environments Hub
+    date: 2025-08
+    lane: hub
+    note: "Prime Intellect 的社区环境平台：环境像模型权重一样发布、安装、复用，并直接服务于开源模型训练。"
+    href: "#hubs"
+  - id: gem-env
+    label: GEM
+    date: 2025-08
+    lane: gym
+    note: "为多轮智能体定义 Gym 式统一接口，适配多个训练框架，并给出多轮场景的算法基线。"
+    entry: gem-env
+  - id: agentscaler
+    label: AgentScaler
+    date: 2025-09
+    lane: synth
+    note: "把数万 API 聚类成上千个“数据库世界”，工具调用即读写，以终态比对验证轨迹。"
+    entry: agentscaler
+  - id: openenv
+    label: OpenEnv
+    date: 2025-10
+    lane: hub
+    note: "Meta 与 Hugging Face 推动的 reset/step/state + 容器化开放标准，环境可直接部署到 HF Spaces。"
+    entry: openenv
+  - id: rlve
+    label: RLVE
+    date: 2025-11
+    lane: gym
+    note: "400 个环境各自按模型当前水平自动升档，解决静态题库被“做穿”后梯度消失的问题。"
+    href: "#mixing"
+    entry: rlve
+  - id: nemo-gym
+    label: NeMo Gym
+    date: 2025-11
+    lane: hub
+    note: "NVIDIA 生产训练所用的环境库：数据集、harness、验证器、状态解耦，兼容多家环境生态。"
+    entry: nemo-gym
+  - id: deepseek-v3-2
+    label: DeepSeek-V3.2
+    date: 2025-12
+    lane: synth
+    note: "由智能体自动搭数据库、写工具、出“难解易验”的任务，合成 1,800+ 个环境与 8.5 万+ 个提示。"
+    href: "#synthesis"
+    entry: deepseek-v3-2
+  - id: kimi-k3
+    label: Kimi K3
+    date: 2026-07
+    lane: synth
+    note: "把 harness 做成可配置模块避免过拟合单一脚手架，用隐藏验证器防作弊，microVM 沙箱支撑长程环境。"
+    href: "#anatomy"
+    entry: kimi-k3
+edges:
+  - { from: webarena, to: osworld, label: 网页到整机 }
+  - { from: swe-bench, to: swe-gym, label: 评测变训练 }
+  - { from: swe-gym, to: r2e-gym, label: 去掉人工配置 }
+  - { from: swe-gym, to: swe-smith, label: 一仓批量造题 }
+  - { from: r2e-gym, to: deepseek-v3-2, label: 自动建环境 }
+  - { from: tau-bench, to: kimi-k2, label: 用户与工具模拟 }
+  - { from: tau-bench, to: agentscaler, label: 数据库终态判分 }
+  - { from: kimi-k2, to: deepseek-v3-2, label: 智能体造环境 }
+  - { from: kimi-k2, to: kimi-k3, label: 白盒环境 }
+  - { from: reasoning-gym, to: gem-env, label: 统一接口 }
+  - { from: reasoning-gym, to: rlve, label: 自适应难度 }
+  - { from: verifiers, to: env-hub, label: 模块化到社区化 }
+  - { from: verifiers, to: nemo-gym, label: 生态互通 }
+  - { from: env-hub, to: openenv, label: 走向开放标准 }

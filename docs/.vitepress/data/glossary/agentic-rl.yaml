@@ -1,0 +1,155 @@
+# Agentic RL 术语（owner: agentic）。字段说明见 CONTRIBUTING.md §5.1。
+
+- id: agentic-rl
+  term: Agentic RL
+  full: Agentic Reinforcement Learning
+  zh: 智能体强化学习
+  area: agentic-rl
+  plain: "让模型在真实或模拟环境里一边行动一边拿反馈来学习，而不是只对一道题写一次答案。"
+  definition: "把 LLM 当作多轮决策的策略，在与工具、网页、代码仓库、GUI 等环境的交互中采样轨迹，并按轨迹级或步级奖励用策略梯度更新；单轮 RLVR 是它只有一轮、没有环境观察的特例。"
+  see: [/topics/agentic-rl]
+
+- id: rollout
+  term: Rollout
+  zh: 推演 / 采样轨迹
+  area: agentic-rl
+  plain: "让当前模型把任务从头到尾实际做一遍，记录下它说了什么、环境回了什么、最后得了几分。"
+  definition: "用当前策略 πθ_old 与环境交互生成一条或一组完整轨迹的过程，产出训练所需的 token、对数概率、环境观察与奖励；在智能体 RL 中它往往是最耗时的环节，受工具延迟与长尾轨迹支配。"
+  see: [/topics/agentic-rl#rollout, /lenses/infra#async]
+
+- id: trajectory
+  term: Trajectory
+  zh: 轨迹
+  area: agentic-rl
+  plain: "一次完整做题的“录像”：每一步的思考、动作和环境给的反馈按顺序串在一起。"
+  definition: "智能体与环境交互产生的序列 τ = (x, a₁, o₁, a₂, o₂, …, a_T)，其中 a_t 是模型生成的 token 段（思考与动作），o_t 是环境返回的观察；训练时只有 a_t 中的 token 参与策略梯度。"
+  see: [/topics/agentic-rl#formulation]
+
+- id: multi-turn-rl
+  term: Multi-turn RL
+  zh: 多轮强化学习
+  area: agentic-rl
+  plain: "不是答一次就结束，而是和环境来回好几轮，最后才知道做得好不好。"
+  definition: "在多轮交互（多次工具调用或对话）上优化策略的 RL；状态随环境观察而变化，奖励通常稀疏且延迟，需要处理损失屏蔽、跨轮信用分配与长程 rollout 的效率问题。"
+  see: [/topics/agentic-rl#formulation]
+
+- id: tool-calling
+  term: Tool calling
+  zh: 工具调用
+  area: agentic-rl
+  plain: "模型写出一段约定格式的“请求”，比如搜索词或代码，由外部程序执行后把结果交还给模型。"
+  definition: "模型按约定格式（特殊标签或 JSON 函数调用）输出工具名与参数，由运行时解析并执行，再把返回值作为观察插回上下文；格式约定与解析的鲁棒性直接影响 RL 的奖励与稳定性。"
+  see: [/topics/agentic-rl#formulation, /practice/search-agent]
+
+- id: react-loop
+  term: ReAct loop
+  zh: ReAct 循环
+  area: agentic-rl
+  plain: "想一步、做一步、看结果，再想下一步，直到给出最终答案。"
+  definition: "源自 ReAct 的智能体执行循环：模型交替生成推理（Thought）与动作（Action），环境返回观察（Observation）并追加到上下文，直至模型输出终止动作；是多数智能体 RL 框架默认的 rollout 形式。"
+  see: [/topics/agentic-rl#formulation]
+
+- id: loss-mask
+  term: Loss mask
+  zh: 损失屏蔽
+  area: agentic-rl
+  plain: "环境塞进上下文的文字（搜索结果、报错信息）不是模型写的，训练时不让它们产生梯度。"
+  definition: "对轨迹中每个 token 设置 m_t ∈ {0,1}：模型生成的 token 为 1，提示与环境观察为 0；策略损失、熵与 KL 只在 m_t = 1 的位置上计算与归一化。屏蔽错误会让模型去拟合环境文本，常导致训练发散。"
+  see: [/topics/agentic-rl#loss-mask]
+
+- id: credit-assignment
+  term: Credit assignment
+  zh: 信用分配
+  area: agentic-rl
+  plain: "最后成功或失败了，到底该归功或归咎于哪一步？这就是信用分配。"
+  definition: "把稀疏、延迟的结果奖励分配到轨迹中各个决策（轮次或 token）的问题；智能体 RL 中常见做法有轨迹级组内优势、轮级优势、基于重复状态的步级分组（GiGPO）、学习价值函数或过程奖励。"
+  see: [/topics/agentic-rl#credit-assignment]
+
+- id: turn-level-advantage
+  term: Turn-level advantage
+  zh: 轮级优势
+  area: agentic-rl
+  plain: "不再给整条轨迹同一个分，而是给每一轮单独算“比平均好多少”。"
+  definition: "以一次“生成—环境反馈”回合为单位估计的优势 Â_k，同一轮内的 token 共享该值；可由轮级奖励的组内归一化、轮级价值函数（critic）或同状态分组的回报比较得到，用来替代整条轨迹共享的结果优势。"
+  see: [/topics/agentic-rl#credit-assignment]
+
+- id: sandbox
+  term: Sandbox
+  zh: 沙箱
+  area: agentic-rl
+  plain: "给模型一台随时可重置、弄坏了也没关系的隔离电脑，让它放心执行代码和命令。"
+  definition: "为智能体执行代码、命令或浏览器操作提供的隔离运行环境（容器、微虚拟机、远程运行时等），需要支持快速创建与重置、资源与时间限制、网络隔离和高并发池化，是代码与 SWE 智能体 RL 的核心基础设施。"
+  see: [/topics/agentic-rl#rollout, /practice/swe-agent]
+
+- id: observation
+  term: Observation
+  zh: 观察
+  area: agentic-rl
+  plain: "环境对模型动作的回应，比如搜索结果、程序输出、网页截图。"
+  definition: "环境在执行动作后返回并写入上下文的内容 o_t；它是策略的条件而非策略的输出，因此不计入策略梯度，但会占用上下文长度，通常需要截断、摘要或压缩。"
+  see: [/topics/agentic-rl#formulation]
+
+- id: deep-research-agent
+  term: Deep research agent
+  zh: 深度研究智能体
+  area: agentic-rl
+  plain: "能自己上网查几十上百次、交叉核对信息，再写出带引用的答案或报告的智能体。"
+  definition: "以搜索、网页访问、代码执行等工具完成长程信息检索与综合的智能体；典型训练范式是合成高难度可验证问题，经 SFT 冷启动后在模拟或真实网页环境中做端到端结果奖励 RL，并配合上下文管理支撑数十到数百轮交互。"
+  see: [/topics/agentic-rl#industry, /practice/search-agent]
+
+- id: swe-agent
+  term: SWE agent
+  zh: 软件工程智能体
+  area: agentic-rl
+  plain: "在真实代码仓库里读代码、跑命令、改文件、跑测试，最后交出修复补丁的智能体。"
+  definition: "在容器化代码仓库中通过 bash、文件查看与编辑等工具完成 issue 修复或功能开发的智能体；RL 训练时以隐藏测试是否通过作为结果奖励，环境构建（可执行镜像与测试）与容器调度是主要成本。"
+  see: [/practice/swe-agent]
+
+- id: gui-agent
+  term: GUI agent
+  zh: 图形界面智能体
+  area: agentic-rl
+  plain: "像人一样看屏幕、点鼠标、敲键盘来操作电脑或手机的智能体。"
+  definition: "以屏幕截图或可访问性树为观察、以点击、输入、滚动等界面操作为动作的智能体；RL 训练面临环境慢且不稳定、奖励难以自动判定等问题，常借助虚拟机沙箱集群、VLM 判定器与混合动作空间（终端、文件系统）。"
+  see: [/topics/agentic-rl#lineage]
+
+- id: context-management
+  term: Context management
+  zh: 上下文管理
+  area: agentic-rl
+  plain: "轨迹太长塞不进窗口时，决定留下什么、丢掉什么、把什么压缩成笔记。"
+  definition: "在长程智能体交互中控制输入上下文的策略：截断旧观察、只保留最近若干轮工具结果、让模型维护摘要或报告作为压缩记忆（马尔可夫式状态重建）等；它改变了策略所见的状态，训练与推理需保持一致。"
+  see: [/topics/agentic-rl#rollout]
+
+- id: tir
+  term: TIR
+  full: Tool-Integrated Reasoning
+  zh: 工具集成推理
+  area: agentic-rl
+  plain: "在推理过程中随时写段代码算一算，把结果接着用来推理。"
+  definition: "在思维链中交错调用代码解释器等工具、并以执行结果继续推理的范式；ToRL、ReTool、SimpleTIR 等用结果奖励 RL 训练这种能力，多轮 TIR 需要特别处理工具反馈带来的分布漂移。"
+  see: [/topics/agentic-rl#lineage]
+
+- id: scaffold
+  term: Agent scaffold
+  zh: 智能体脚手架
+  area: agentic-rl
+  plain: "包在模型外面的那层程序：定义有哪些工具、提示怎么写、历史怎么拼、什么时候停。"
+  definition: "将 LLM 组装成智能体的外层框架（如 OpenHands、mini-swe-agent、R2E-Gym 的编辑智能体），规定动作空间、提示模板、历史处理与终止条件；训练与评测所用脚手架不同会显著影响分数，跨脚手架泛化是智能体 RL 的重要目标。"
+  see: [/practice/swe-agent]
+
+- id: anchor-state
+  term: Anchor state
+  zh: 锚状态
+  area: agentic-rl
+  plain: "同一任务的多条轨迹里反复出现的同一个环境状态，可以拿来当“同一起跑线”比较各自的选择。"
+  definition: "GiGPO 中用于构造步级分组的重复环境观察：在同一初始状态的一组轨迹里，把观察相同（或相似度超过阈值）的时间步归为一组，用各自的折扣回报做组内归一化得到步级优势。"
+  see: [/topics/agentic-rl#credit-assignment]
+
+- id: interleaved-thinking
+  term: Interleaved thinking
+  zh: 交错思考
+  area: agentic-rl
+  plain: "模型在每次调用工具前后都先想一想，而且这些思考会保留在后续轮次的上下文里。"
+  definition: "在多轮工具调用中，模型于每次动作前生成推理内容，并在后续轮次保留历史推理（而非只保留最终回复）；MiniMax-M2、GLM-4.5 之后的 GLM 系列都强调此特性，训练与推理对历史思考的处理方式必须一致。"
+  see: [/topics/agentic-rl#rollout]

@@ -1,0 +1,836 @@
+# 环境与评测（/topics/multi-env、/lenses/eval）的条目。
+# 环境侧：观点与趋势、环境接口与 Hub、程序化/SWE/工具环境的规模化合成；
+# 评测侧：基准（按任务类型）、指标与统计方法、动态基准与智能体评测方法论。
+
+# ───────────────────────── 观点与环境接口 ─────────────────────────
+
+- id: the-second-half
+  title: "The Second Half"
+  short: The Second Half
+  kind: blog
+  org: Shunyu Yao 个人博客（时任 OpenAI）
+  authors: "Shunyu Yao"
+  date: "2025-04-10"
+  url: https://ysymyth.github.io/The-Second-Half/
+  areas: [agentic-rl, rl-llm]
+  facets: [env, eval, theory]
+  tier: ref
+  evidence: [community]
+  evidence_note: "ReAct、τ-bench 作者的长文，基于其在斯坦福 CS224N 与哥伦比亚大学的演讲整理，发布后在中英文社区被大量转载讨论，“评测比训练更重要”成为 2025 年讨论环境与评测时最常被引用的说法之一。它是观点文章而非实验论文：论据来自作者对 o 系列、Deep Research 等进展的一线观察，没有对照实验，按证据标准只能列为参考，但读环境与评测两页前值得先读。"
+  summary: "认为 RL 的三要素中，语言预训练提供的先验和“把推理当作动作”的环境设计已经让通用配方跑通，算法反而最不关键；AI 的下半场应从“解题”转向“定义问题”，重新设计贴近真实效用的评测设定。"
+  plain: "上半场比谁的方法能把考试分数刷高；现在一套通用配方几乎什么考试都能刷高，于是真正稀缺的变成了“出好题”：设计出和真实世界更像的考法和练习场。"
+  takeaways:
+    - "立项前先问“评测设定是否贴近真实使用”：自动化、i.i.d. 的评测默认值（无人参与、任务互相独立）本身就可能是需要打破的假设。"
+    - "把新环境或新评测当作一等研究产出，而不是训练方法论文的附属品。"
+  tags: [观点, 环境, 评测设定, 效用问题]
+
+- id: verifiers
+  title: "Verifiers: Environments for LLM Reinforcement Learning"
+  short: verifiers
+  kind: project
+  org: Prime Intellect
+  authors: "William Brown et al."
+  date: 2025-02
+  repo: PrimeIntellect-ai/verifiers
+  links:
+    - { label: Environments Hub 发布博客, url: "https://www.primeintellect.ai/blog/environments" }
+    - { label: INTELLECT-3 技术报告, url: "https://arxiv.org/abs/2512.16144" }
+  areas: [agentic-rl, rl-llm]
+  facets: [env, infra]
+  tier: must
+  evidence: [industrial, adopted, open-source, community]
+  evidence_note: "Prime Intellect 用它和 Environments Hub 上的社区环境训练并评测了开源模型 INTELLECT-3（技术报告 arXiv 2512.16144）；NVIDIA NeMo Gym 把 verifiers 列为可直接接入的外部环境库，Reasoning Gym 官方推荐用它训练；是 GitHub 上使用最广的 LLM 环境库之一。2026 年重构为以 taskset、harness、trace 为核心的 v1。"
+  summary: "把 RL 环境做成可安装的 Python 模块：数据集、交互逻辑与 Rubric（加权奖励函数）三件套，同一环境可直接用于评测、合成数据与训练，并可发布到 Environments Hub 共享。"
+  plain: "给练习场定了统一的“插头”：谁写的练习场都能插进同一套评测和训练流程，写好的还能发到 Hub 上给别人直接用。"
+  takeaways:
+    - "新写的环境先用少量样本跑评测入口（如 vf-eval），确认奖励分布不是全 0 或全 1，再接入训练。"
+    - "多轮环境要保证上下文只追加、不改写：删掉历史中的思考内容会让训练用的 token 序列和采样时对不上。"
+  tags: [环境库, Environments Hub, Rubric, 多轮]
+
+- id: openenv
+  title: "OpenEnv: Agentic Execution Environments"
+  short: OpenEnv
+  kind: project
+  org: Meta PyTorch · Hugging Face
+  date: 2025-10
+  repo: huggingface/OpenEnv
+  url: https://huggingface.co/blog/openenv
+  areas: [agentic-rl]
+  facets: [env, infra]
+  tier: rec
+  evidence: [industrial, adopted, open-source]
+  evidence_note: "2025-10-23 由 Meta PyTorch 团队与 Hugging Face 联合发布，配套 Hugging Face 上的环境 Hub，并与 TRL、TorchForge 集成；NVIDIA NeMo Gym 把 OpenEnv 列为可直接接入的环境生态。仓库注明仍处实验阶段，API 可能变化，采用 RFC 流程演进（已包含 MCP 支持、延迟奖励、agent harness 集成等提案）。"
+  summary: "用 Gymnasium 式的 reset()/step()/state() 统一智能体执行环境：每个环境是 Docker 容器里的服务，经 WebSocket 调用，可部署到 Hugging Face Spaces，供任意 RL 框架接入。"
+  plain: "把每个练习场装进一个标准集装箱，外面只留三个按钮：重新开始、走一步、看状态。谁的训练框架都能按这三个按钮来用。"
+  takeaways:
+    - "需要强隔离的环境（执行代码、改文件）优先做成独立容器服务，训练端只经 reset/step 协议访问，便于横向扩容和复现。"
+  tags: [环境标准, 容器, Environment Hub]
+
+- id: nemo-gym
+  title: "NeMo Gym: An Open Source Library for Scaling Reinforcement Learning Environments for LLM"
+  short: NeMo Gym
+  kind: project
+  org: NVIDIA
+  date: 2025-11
+  repo: NVIDIA-NeMo/Gym
+  url: https://docs.nvidia.com/nemo/gym/main/about/
+  areas: [agentic-rl, rl-llm]
+  facets: [env, infra, eval]
+  tier: rec
+  evidence: [industrial, open-source]
+  evidence_note: "NVIDIA 官方环境库，README 注明已在 Nemotron 的生产训练中使用，并随库发布 Nemotron-RL 系列环境数据；可接入 Reasoning Gym、verifiers、OpenEnv、Harbor 等外部环境，以及 OpenHands、mini-swe-agent 等智能体 harness。v0.1.0 于 2025-11 发布，2026 年已支持 Docker、Daytona、Apptainer 等多种沙箱后端。"
+  summary: "把环境拆成数据集、智能体 harness、验证器和逐任务状态四部分，用独立的资源服务承载工具与沙箱，统一支持评测、轨迹收集与大规模 RL，并兼容多家环境生态。"
+  plain: "NVIDIA 训练 Nemotron 用的“练习场管理系统”：题库、做题方式、判分规则和现场状态分开管理，几千个练习场可以同时开。"
+  takeaways:
+    - "把“怎么判分”和“怎么做题”解耦：同一批任务与验证器，可以换不同的 agent harness 做评测或训练，比较更公平。"
+  tags: [环境库, 验证器, 沙箱, Nemotron]
+
+- id: gem-env
+  title: "GEM: A Gym for Agentic LLMs"
+  short: GEM
+  kind: paper
+  org: Axon RL · Sea AI Lab
+  authors: "Zichen Liu et al."
+  date: 2025-08
+  venue: ICLR 2026
+  arxiv: "2510.01051"
+  repo: axon-rl/gem
+  links:
+    - { label: 首发博客, url: "https://axon-rl.notion.site/gem" }
+  areas: [agentic-rl]
+  facets: [env, algorithm]
+  tier: rec
+  evidence: [open-source, ablation]
+  evidence_note: "开源并提供与 Oat、Tinker、verl、RL2、ROLL、OpenRLHF 对接的单文件示例；论文在游戏、数学、代码、问答与 Reasoning Gym 等多类环境上对比 REINFORCE、GRPO、PPO 与其提出的 REINFORCE + ReBN，讨论了多轮场景下各算法的取舍。2025-08 以博客首发，论文 2025-10 上线 arXiv。"
+  summary: "为智能体 LLM 提供类似 OpenAI Gym 的环境接口：异步向量化执行、工具包装器与多环境训练；内置游戏、数学、代码、问答等环境，并对比多种策略梯度算法在多轮任务上的表现。"
+  plain: "给“大模型当智能体”做的一套标准练习场接口：开局、走一步、算分都统一了，还顺手比较了几种常用训练算法在多轮任务上的表现。"
+  takeaways:
+    - "多轮、逐轮给奖励的环境里，GRPO 式“同一提示多次采样”未必可行；可以考虑对折扣回报做批内归一化的 REINFORCE（ReBN）。"
+  builds_on: [reasoning-gym, textarena]
+  tags: [Gym 接口, 多轮 RL, 基线算法]
+
+- id: textarena
+  title: "TextArena"
+  short: TextArena
+  kind: project
+  org: A*STAR CFAR 等
+  authors: "Leon Guertler et al."
+  date: 2025-01
+  arxiv: "2504.11442"
+  repo: LeonGuertler/TextArena
+  url: https://textarena.ai
+  areas: [agentic-rl]
+  facets: [env, eval]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "100 多个单人、双人与多人文本游戏，Gym 风格接口；README 记载其 2025-01 的初版演示经 Karpathy 转发后访问量激增。以它为基础举办了 NeurIPS 2025 MindGames 竞赛，并衍生出自博弈 RL 工作 SPIRAL（arXiv 2506.24119）与异步训练库 UnstableBaselines。"
+  summary: "100 多个单人、双人和多人文本游戏环境（棋牌、谈判、社交推理等），接口仿照 OpenAI Gym，支持模型对战、自博弈训练与在线排行榜，用于评测和训练多轮、多智能体推理。"
+  plain: "一个文字版“游戏厅”：模型可以和人或别的模型下棋、谈判、玩社交推理游戏，输赢就是奖励，还能自己和自己对打来练。"
+  takeaways:
+    - "零和博弈天然提供随对手水平变化的难度：想练多轮策略推理时，自博弈比固定题库更不容易被“刷穿”。"
+  tags: [文本游戏, 自博弈, 多智能体]
+
+# ───────────────────────── 规模化合成：程序化推理环境 ─────────────────────────
+
+- id: reasoning-gym
+  title: "REASONING GYM: Reasoning Environments for Reinforcement Learning with Verifiable Rewards"
+  short: Reasoning Gym
+  kind: paper
+  org: Open Thought 社区
+  authors: "Zafir Stojanovski et al."
+  date: 2025-05
+  arxiv: "2505.24760"
+  repo: open-thought/reasoning-gym
+  areas: [rl-llm]
+  facets: [env, data]
+  tier: must
+  evidence: [adopted, open-source, community]
+  evidence_note: "仓库的 “Projects Using Reasoning Gym” 列出 NVIDIA 的 ProRL、BroRL 与 Nemotron 3 Super 技术报告、Prime Intellect 的 SYNTHETIC-2 数据集等工业工作；verifiers、GEM、NeMo Gym 都直接集成了它。社区共建，持续新增任务。"
+  summary: "100 多个程序化任务生成器与验证器，覆盖代数、算术、几何、图论、逻辑和多种游戏；每类任务难度参数可调、题目可无限生成，可按权重组合成复合数据集，评分函数直接作为 RLVR 奖励。"
+  plain: "不是一份固定题库，而是 100 多台“出题机”：要多少题出多少题，难度旋钮自己拧，每道题都能自动判对错。"
+  takeaways:
+    - "想做 RLVR 实验又担心数据污染时，用程序化生成器现场出题：训练题和评测题都是新生成的，不会出现在预训练语料里。"
+    - "多任务训练用复合数据集的权重控制各任务占比，并随训练调高难度参数，避免简单任务的零方差组浪费算力。"
+  tags: [程序化生成, RLVR, 可验证环境]
+
+- id: synlogic
+  title: "SynLogic: Synthesizing Verifiable Reasoning Data at Scale for Learning Logical Reasoning and Beyond"
+  short: SynLogic
+  kind: paper
+  org: MiniMax · HKUST
+  authors: "Junteng Liu et al."
+  date: 2025-05
+  arxiv: "2505.19641"
+  repo: MiniMax-AI/SynLogic
+  areas: [rl-llm]
+  facets: [env, data]
+  tier: rec
+  evidence: [industrial, open-source, ablation]
+  evidence_note: "MiniMax-M1 技术报告写明用 SynLogic 框架合成了覆盖 41 类任务、约 5.3 万条逻辑推理 RL 数据，并用强模型 pass@10 与基座通过率设定难度上下界、训练后期再加难；开源 35 类任务的生成器、验证器、数据与 7B/32B 模型，论文含与数学、代码混合训练的实验。"
+  summary: "为数独、24 点、密码、箭头迷宫等 35 类逻辑任务各写一个难度可控的生成器和规则验证器，批量合成可验证数据；RL 后逻辑推理显著提升，与数学、代码数据混合训练还能相互促进。"
+  plain: "给每种逻辑谜题造一台出题机和一个判卷器，想要多难就调多难；练逻辑题练出来的本事还能迁移到数学和写代码上。"
+  takeaways:
+    - "合成题的难度上下界用模型自己的通过率标定：强模型 pass@10 都为 0 的太难、基座轻松做对的太易，两头都没有学习信号。"
+    - "把逻辑谜题和数学、代码数据混在一起训练，而不是单独训练，泛化更好。"
+  tags: [逻辑推理, 数据合成, 难度控制]
+
+- id: enigmata
+  title: "Enigmata: Scaling Logical Reasoning in Large Language Models with Synthetic Verifiable Puzzles"
+  short: Enigmata
+  kind: paper
+  org: ByteDance Seed · 清华 AIR
+  authors: "Jiangjie Chen et al."
+  date: 2025-05
+  arxiv: "2505.19914"
+  repo: BytedTsinghua-SIA/Enigmata
+  url: https://seed-enigmata.github.io
+  areas: [rl-llm]
+  facets: [env, data]
+  tier: rec
+  evidence: [industrial, open-source, ablation]
+  evidence_note: "项目说明其谜题数据被加入 Seed1.5-Thinking（200B 总参数 / 20B 激活）的训练，并提升了 AIME、GPQA Diamond 等基准；开源 36 类任务的生成器、验证器、评测集 Enigmata-Eval 与 32B 模型；生成器—验证器设计便于研究任务配比与课程。"
+  summary: "7 大类、36 种谜题，每种配一个难度可控的生成器和规则验证器；拒绝采样微调加多任务 RLVR 训练的 32B 模型在谜题基准上超过 o3-mini-high 与 o1，数学能力几乎不受影响。"
+  plain: "一套“谜题练习场”：每种谜题都能无限出题、自动判卷。用它练过的模型解谜更强，还能把这份本事带到数学题上。"
+  takeaways:
+    - "在大模型推理 RL 里加入少量合成谜题，是低成本提升泛化推理的可行做法（Seed1.5-Thinking 的实践）。"
+  tags: [谜题, 数据合成, 多任务 RLVR]
+
+- id: internbootcamp
+  title: "InternBootcamp Technical Report: Boosting LLM Reasoning with Verifiable Task Scaling"
+  short: InternBootcamp
+  kind: report
+  org: 上海人工智能实验室（InternLM）
+  authors: "Peiji Li et al."
+  date: 2025-08
+  arxiv: "2508.08636"
+  repo: InternLM/InternBootcamp
+  areas: [rl-llm, agentic-rl]
+  facets: [env, data]
+  tier: rec
+  evidence: [industrial, open-source, ablation]
+  evidence_note: "README 说明它为上海 AI Lab 的 Intern-S1 提供训练支持；开源 1000 多个任务环境，其中 90% 以上由自动化智能体工作流合成并经质量过滤；报告给出任务数量扩展（Task Scaling）与多任务“涌现时刻”的实验。2026 年项目演进为面向多轮工具调用的 InternAgentHarness。"
+  summary: "覆盖 8 个领域、1000 多个可验证推理任务环境，每个环境按难度无限出题并自动判分，多数由 LLM 智能体从任务描述自动写成代码；实验显示训练任务种类越多，效果和训练效率都越好。"
+  plain: "像一座有上千个“训练营”的大校区，每个营地都能自动出题判分；让模型在很多营地轮训，比在一个营地死磕进步更大。"
+  takeaways:
+    - "任务种类本身就是扩展维度：同样的训练预算，任务更杂往往比同类题更多更有用。"
+    - "用 LLM 自动写环境代码时必须配质量过滤和抽检，否则错误的验证器会直接变成错误的奖励。"
+  tags: [任务扩展, 环境合成, 可验证任务]
+
+- id: rlve
+  title: "RLVE: Scaling Up Reinforcement Learning for Language Models with Adaptive Verifiable Environments"
+  short: RLVE
+  kind: paper
+  org: University of Washington · AI2
+  authors: "Zhiyuan Zeng et al."
+  date: 2025-11
+  venue: ICML 2026
+  arxiv: "2511.07317"
+  repo: Zhiyuan-Zeng/RLVE
+  areas: [rl-llm]
+  facets: [env, data]
+  tier: rec
+  evidence: [open-source, ablation]
+  evidence_note: "开源 400 个可验证环境、基于 slime 的训练脚本与模型；实验比较了 1、4、16、256 个环境的扩展效果，用 50 个留出环境测泛化，并覆盖从基座模型到已做过长时间 RL 的 1.5B 推理模型等多个起点。"
+  summary: "RLVE-Gym 含 400 个可程序化出题判分的环境，各自按模型水平调难度：当前最高档正确率达到阈值（默认 0.9）就升一档；联合训练的环境越多，留出环境与推理基准上提升越大。"
+  plain: "每个练习场都装了“自动升档”：学生在最难一档做到九成正确，就再加一档，保证题目永远不太易也不太难。"
+  takeaways:
+    - "静态题库会被“做穿”：给每个环境配难度控制器，按实时正确率自动升档，长时间 RL 才能持续拿到有效梯度。"
+    - "环境数量本身是扩展维度：同样的训练步数，更多样的环境带来更好的留出泛化。"
+  builds_on: [reasoning-gym]
+  tags: [自适应难度, 环境扩展, 课程]
+
+# ───────────────────────── 规模化合成：SWE 环境 ─────────────────────────
+
+- id: swe-gym
+  title: "Training Software Engineering Agents and Verifiers with SWE-Gym"
+  short: SWE-Gym
+  kind: paper
+  org: UC Berkeley · UIUC · CMU · Apple
+  authors: "Jiayi Pan et al."
+  date: 2024-12
+  arxiv: "2412.21139"
+  repo: SWE-Gym/SWE-Gym
+  areas: [agentic-rl]
+  facets: [env, data]
+  tier: rec
+  evidence: [open-source, ablation]
+  evidence_note: "开源任务、环境、轨迹与模型；论文比较了训练轨迹数量、两种智能体脚手架（OpenHands 与 MoatlessTools）以及用轨迹训练的验证器做 best-of-n 的效果，给出训练端与推理端的扩展曲线。"
+  summary: "首个面向训练的真实 SWE 环境：11 个 Python 仓库、约 2.4K 个带可执行环境和单测的 issue 任务；用不到 500 条轨迹微调 32B 模型，SWE-bench Verified 绝对提升 14 个百分点。"
+  plain: "以前 SWE-bench 这类题只能用来考试，SWE-Gym 第一次把同类题目做成了可以反复练习的训练场，还训练了一个“判卷模型”帮忙挑最好的答案。"
+  takeaways:
+    - "真实 SWE 环境最贵的是把仓库装起来并跑通测试；靠人工逐个配置规模上不去，这正是后续合成方法要解决的问题。"
+  builds_on: [swe-bench, openhands]
+  tags: [SWE, 训练环境, 验证器]
+
+- id: r2e-gym
+  title: "R2E-Gym: Procedural Environment Generation and Hybrid Verifiers for Scaling Open-Weights SWE Agents"
+  short: R2E-Gym
+  kind: paper
+  org: UC Berkeley · ANU
+  authors: "Naman Jain et al."
+  date: 2025-04
+  arxiv: "2504.07164"
+  repo: R2E-Gym/R2E-Gym
+  url: https://r2e-gym.github.io/
+  areas: [agentic-rl]
+  facets: [env, data]
+  tier: rec
+  evidence: [open-source, ablation]
+  evidence_note: "开源 8.1K 个任务环境、数据与模型；论文对比了基于 commit 与基于 PR 的数据构造，以及执行型、非执行型与混合验证器在推理时扩展下的效果。其环境随后被 DeepSWE 用于 RL 训练，仓库提供复现指南。"
+  summary: "SWE-GEN 从 commit 而非人工 PR 出发，自动搭环境、生成测试并回译任务描述，得到 13 个仓库的 8.1K 个任务；混合执行型与非执行型验证器做推理时扩展，SWE-bench Verified 达 51%。"
+  plain: "不再等别人写好 issue 和测试：直接从代码提交历史里“倒推”出题目和判卷标准，题量一下就上来了；挑答案时再请两位风格不同的阅卷老师一起把关。"
+  takeaways:
+    - "从 commit 回译任务描述、自动生成测试，可以摆脱对人工 PR 与 issue 的依赖，显著扩大 SWE 任务池。"
+    - "推理时挑答案，跑测试的执行型验证和打分模型的非执行型验证互补，混合使用效果最好。"
+  builds_on: [swe-gym]
+  tags: [SWE, 环境合成, 混合验证器]
+
+- id: swe-smith
+  title: "SWE-smith: Scaling Data for Software Engineering Agents"
+  short: SWE-smith
+  kind: paper
+  org: Stanford · Princeton
+  authors: "John Yang et al."
+  date: 2025-04
+  venue: NeurIPS 2025 D&B（Spotlight）
+  arxiv: "2504.21798"
+  repo: SWE-bench/SWE-smith
+  url: https://swesmith.com/
+  areas: [agentic-rl]
+  facets: [env, data]
+  tier: rec
+  evidence: [open-source, ablation]
+  evidence_note: "开源 5 万余个任务实例、2.6 万条轨迹、250 多个仓库级 Docker 环境与 SWE-agent-LM-32B（SWE-bench Verified 40.2% pass@1）；README 显示已被 SkyRL 用于 GRPO 式训练，Qwen3-Coder-Next 技术报告也把它列为合成任务的基础之一。"
+  summary: "反过来造任务：每个仓库只搭一个执行环境，再用 LLM 改写、AST 变换、回滚 PR 等方式注入 bug，保留能让现有单测失败的实例并生成 issue 描述，低成本合成 5 万级任务。"
+  plain: "与其到处找真实 bug，不如在一个装好的仓库里“故意埋雷”：埋完看测试有没有报警，报警了就是一道合格的题。"
+  takeaways:
+    - "SWE 环境的主要成本在“每个任务一套环境”；改成“每个仓库一套环境、在里面批量造任务”，构建与存储成本大幅下降。"
+    - "合成 bug 是否有效以“能让已有单测失败”为准，这一步必须在真实执行环境里验证。"
+  builds_on: [swe-bench, swe-gym]
+  tags: [SWE, bug 注入, 数据扩展]
+
+- id: agentscaler
+  title: "Towards General Agentic Intelligence via Environment Scaling"
+  short: AgentScaler
+  kind: paper
+  org: 阿里巴巴通义实验室
+  authors: "Runnan Fang et al."
+  date: 2025-09
+  arxiv: "2509.13311"
+  links:
+    - { label: 项目说明（Tongyi DeepResearch 仓库）, url: "https://github.com/Alibaba-NLP/DeepResearch/tree/main/Agent/AgentScaler" }
+  areas: [agentic-rl]
+  facets: [env, data]
+  tier: rec
+  evidence: [industrial, ablation]
+  evidence_note: "Tongyi DeepResearch 技术报告写明，其通用函数调用数据正是用这套“环境扩展”方法合成（每个环境实例化为可读写数据库），并用于该开源模型的智能体中训练阶段；论文在 τ-bench、τ²-bench、ACEBench 上比较了两阶段训练与不同规模模型的效果。"
+  summary: "收集约 3 万个 API，按参数相似度建工具图并用 Louvain 切成 1000 多个领域；每个领域落成“读写数据库 + Python 工具”的模拟环境，沿工具图采样任务，以数据库终态和调用序列校验轨迹。"
+  plain: "把几万个 API 按“常一起用”分成上千个小世界，每个小世界是一个可读写的数据库：调工具就是改数据库，最后看数据库改得对不对，就知道事办没办成。"
+  takeaways:
+    - "工具使用环境最省事的可验证方式是“状态比对”：工具实现成对数据库的读写，任务成败看终态是否等于目标状态。"
+    - "先在大量通用领域上训基础工具能力，再在目标领域专项训练，两阶段比一步混训更稳。"
+  builds_on: [tau-bench]
+  tags: [环境扩展, 函数调用, 工具图, 模拟环境]
+
+# ───────────────────────── 智能体脚手架 ─────────────────────────
+
+- id: openhands
+  title: "OpenHands: An Open Platform for AI Software Developers as Generalist Agents"
+  short: OpenHands
+  kind: project
+  org: All Hands AI · CMU · UIUC 等
+  authors: "Xingyao Wang et al."
+  date: 2024-07
+  arxiv: "2407.16741"
+  repo: OpenHands/OpenHands
+  areas: [agentic-rl]
+  facets: [env, eval]
+  tier: must
+  evidence: [industrial, adopted, open-source, community]
+  evidence_note: "All Hands AI 以它为核心产品；SWE-Gym 用它作训练与评测脚手架，NVIDIA NeMo Gym 把它列为内置智能体 harness，是 SWE-bench 等榜单上最常见的开源脚手架之一；GitHub star 数居开源智能体项目前列。"
+  summary: "开源软件开发智能体平台：智能体在 Docker 沙箱里用命令行、代码编辑、浏览器等动作与环境交互，接入 SWE-bench、WebArena 等十多个基准，既是评测脚手架，也常作 RL 交互框架。"
+  plain: "给模型配一台“带终端和浏览器的电脑”，它可以自己敲命令、改代码、查网页；很多 SWE 榜单成绩和训练数据都是在这套框架里跑出来的。"
+  takeaways:
+    - "比较 SWE 成绩时先问“用的哪个脚手架”：同一模型换脚手架，分数可能差出一大截。"
+  tags: [SWE 智能体, 脚手架, 沙箱]
+
+# ───────────────────────── 评测基准：代码与 SWE ─────────────────────────
+
+- id: humaneval-codex
+  title: "Evaluating Large Language Models Trained on Code"
+  short: Codex / HumanEval
+  kind: paper
+  org: OpenAI
+  authors: "Mark Chen et al."
+  date: 2021-07
+  arxiv: "2107.03374"
+  repo: openai/human-eval
+  areas: [rl-llm]
+  facets: [eval]
+  tier: must
+  evidence: [industrial, adopted, open-source, community]
+  evidence_note: "OpenAI Codex 的技术论文。HumanEval 与文中推导的 pass@k 无偏估计量（参考实现为 human-eval 仓库里的 estimate_pass_at_k）被几乎所有代码与推理评测沿用；引用量极高。"
+  summary: "发布 HumanEval（164 道手写编程题，单元测试判分），并给出 pass@k 的无偏估计：每题采样 n≥k 个、数出 c 个正确，用 1−C(n−c,k)/C(n,k) 估计 k 次机会至少对一次的概率。"
+  plain: "让模型对同一道题写很多份代码，数数有几份能过测试，再用一个组合公式换算成“给它 k 次机会至少对一次”的概率。"
+  takeaways:
+    - "算 pass@k 时让采样数 n 明显大于 k，并用无偏估计量；不要用 1−(1−c/n)^k，它系统性偏低。"
+  tags: [pass@k, 代码评测, HumanEval]
+
+- id: livecodebench
+  title: "LiveCodeBench: Holistic and Contamination Free Evaluation of Large Language Models for Code"
+  short: LiveCodeBench
+  kind: benchmark
+  org: UC Berkeley · MIT · Cornell
+  authors: "Naman Jain et al."
+  date: 2024-03
+  arxiv: "2403.07974"
+  repo: LiveCodeBench/LiveCodeBench
+  url: https://livecodebench.github.io/
+  areas: [rl-llm]
+  facets: [eval]
+  tier: must
+  evidence: [adopted, open-source, community]
+  evidence_note: "Kimi K2、Kimi K2.5、Seed2.0、Qwen3-Coder-Next 等技术报告都按版本报告其成绩；持续从 LeetCode、AtCoder、Codeforces 收集新题（release_v6 已含 1,055 题），并维护勘误列表。论文即用时间窗口揭示了部分模型在旧题上的污染迹象。"
+  summary: "持续从三大竞赛平台收集新发布的题目并记录发布日期：评测时只用模型训练截止之后的题，从而检测并规避污染；除代码生成外还覆盖自我修复、代码执行与测试输出预测。"
+  plain: "只用“模型训练完之后才出的新题”来考它，这样它不可能提前背过答案；对比同一模型在新旧题上的成绩差，还能反过来发现泄漏。"
+  takeaways:
+    - "报告 LiveCodeBench 时写明版本与题目时间窗，并确保窗口晚于被测模型的数据截止日期。"
+  tags: [代码, 动态基准, 去污染]
+
+- id: swe-bench
+  title: "SWE-bench: Can Language Models Resolve Real-World GitHub Issues?"
+  short: SWE-bench
+  kind: benchmark
+  org: Princeton
+  authors: "Carlos E. Jimenez et al."
+  date: 2023-10
+  venue: ICLR 2024（Oral）
+  arxiv: "2310.06770"
+  repo: SWE-bench/SWE-bench
+  url: https://www.swebench.com/
+  areas: [agentic-rl]
+  facets: [eval, env]
+  tier: must
+  evidence: [adopted, open-source, community]
+  evidence_note: "定义了“仓库级修 issue”这一评测范式：OpenAI 与作者合作推出 Verified 子集，SWE-Gym、SWE-smith、SWE-rebench、SWE-bench Pro 等训练环境与后继基准都沿用其任务格式与判分方式；2024 年起评测改为全容器化，并支持云端评测。"
+  summary: "从 12 个 Python 仓库收集 2,294 个真实 issue：模型拿到代码库和 issue 描述后生成补丁，以对应 PR 的测试由失败转为通过、且其余测试不被破坏作为判分标准。"
+  plain: "给模型一个真实开源项目和一张 bug 报告，让它交一份修改；用项目原本的测试来判：该修的修好了、原来好的没弄坏，才算过。"
+  takeaways:
+    - "SWE 类评测的可信度取决于测试质量：测试太窄会误杀合理的修法，太宽会放过错误的修法。"
+  tags: [SWE, 真实 issue, 执行判分]
+
+- id: swe-bench-verified
+  title: "Introducing SWE-bench Verified"
+  short: SWE-bench Verified
+  kind: benchmark
+  org: OpenAI · SWE-bench 团队
+  date: "2024-08-13"
+  url: https://openai.com/index/introducing-swe-bench-verified/
+  links:
+    - { label: OpenAI：为何不再评测 SWE-bench Verified, url: "https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/" }
+  areas: [agentic-rl]
+  facets: [eval]
+  tier: must
+  evidence: [industrial, adopted, community]
+  evidence_note: "OpenAI Preparedness 团队与 SWE-bench 作者合作发布；2024 年下半年到 2026 年几乎所有前沿模型发布都报告它（如 Kimi K2、MiniMax-M1）。其后成绩逼近饱和，OpenAI 发文说明不再评测：对 GPT-5.2 多次运行都失败的 138 题审计后，约 59% 存在测试过窄或超出题面等缺陷（据媒体转述）。"
+  summary: "职业工程师人工审核 SWE-bench 样本（共标注 1,699 条），剔除描述不清、测试不合理或无法解决的题，得到 500 道确认可解的子集，成为 2024–2026 年报告 SWE 能力的事实标准。"
+  plain: "原来的 SWE-bench 里有些题本身有毛病：描述不清、测试过严。OpenAI 请工程师逐题把关，挑出 500 道“确定能做”的题，分数因此更可信。"
+  takeaways:
+    - "人工审核能消除明显坏题，但挡不住饱和与污染：报告时补充时间更新的集合（SWE-rebench）或更难的集合（SWE-Bench Pro）。"
+  builds_on: [swe-bench]
+  tags: [SWE, 人工审核, 饱和]
+
+- id: swe-rebench
+  title: "SWE-rebench: An Automated Pipeline for Task Collection and Decontaminated Evaluation of Software Engineering Agents"
+  short: SWE-rebench
+  kind: benchmark
+  org: Nebius
+  authors: "Ibragim Badertdinov et al."
+  date: 2025-05
+  arxiv: "2505.20411"
+  links:
+    - { label: 数据集（Hugging Face）, url: "https://huggingface.co/datasets/nebius/SWE-rebench" }
+    - { label: SWE-rebench V2（多语言）, url: "https://arxiv.org/abs/2602.23866" }
+  areas: [agentic-rl]
+  facets: [eval, env, data]
+  tier: rec
+  evidence: [adopted, open-source]
+  evidence_note: "开源 2.1 万余个可交互的 Python SWE 任务，排行榜持续用新收集的任务评测，并与同一模型在 SWE-bench Verified 上的成绩对照；Qwen3-Coder-Next 技术报告把它列为合成训练任务的基础之一。2026 年的 V2 扩展到多语言。"
+  summary: "自动化流水线持续从 GitHub 抽取真实 issue、自动配置环境并验证测试，得到 2.1 万余个可用于 RL 的任务；按时间滚动构建去污染评测集，发现部分模型的 SWE-bench Verified 成绩可能因污染偏高。"
+  plain: "一台不停转的“出题机”：定期从 GitHub 抓新题，模型训练时不可能见过，所以用新题考出来的分数更可信。"
+  takeaways:
+    - "评测 SWE 智能体时，至少补一组模型发布之后才出现的新任务，与 SWE-bench Verified 的成绩对照看。"
+  builds_on: [swe-bench]
+  tags: [动态基准, 去污染, SWE]
+
+- id: swe-bench-pro
+  title: "SWE-Bench Pro: Can AI Agents Solve Long-Horizon Software Engineering Tasks?"
+  short: SWE-Bench Pro
+  kind: benchmark
+  org: Scale AI
+  date: 2025-09
+  arxiv: "2509.16941"
+  repo: scaleapi/SWE-bench_Pro-os
+  areas: [agentic-rl]
+  facets: [eval]
+  tier: rec
+  evidence: [adopted, open-source]
+  evidence_note: "Kimi K2.5、Seed2.0、Qwen3-Coder-Next 等 2026 年旗舰模型报告都采用它；公开集数据与评测脚本开源。仓库持续修订：删除过时单测、补充无步数上限的结果，2026-09 发布 V2（11 个仓库上 642 个复核任务，Harbor 格式，含 HARD-51 子集与“锁定协议”工具）。"
+  summary: "从 41 个活跃维护的仓库收集 1,865 个长程任务，常需跨多个文件的大幅修改；分为公开集、留出集与商业集（18 个初创公司的专有仓库），以降低训练数据污染。"
+  plain: "比 SWE-bench 难一截的“真项目”考题：很多题要改好几个文件，部分代码库根本不公开，模型想背也背不到。"
+  takeaways:
+    - "SWE-bench Verified 饱和后，可补报 SWE-Bench Pro，并写明脚手架、版本以及是否设了步数或成本上限。"
+  builds_on: [swe-bench]
+  tags: [SWE, 长程任务, 抗污染]
+
+- id: terminal-bench
+  title: "Terminal-Bench: Benchmarking Agents on Hard, Realistic Tasks in Command Line Interfaces"
+  short: Terminal-Bench
+  kind: benchmark
+  org: Stanford · Laude Institute
+  date: 2025-05
+  arxiv: "2601.11868"
+  repo: laude-institute/terminal-bench
+  url: https://www.tbench.ai/
+  links:
+    - { label: Harbor 评测框架, url: "https://github.com/laude-institute/harbor" }
+  areas: [agentic-rl]
+  facets: [eval, env]
+  tier: must
+  evidence: [adopted, open-source, community]
+  evidence_note: "Kimi K3、Kimi K2.5、Seed2.0、Qwen3-Coder-Next 等技术报告以及多家头部实验室的模型发布都报告其成绩，已成为智能体编程的主流基准；任务、测试与参考解全部开源并由社区持续贡献。2.0 版（论文 2026-01）改由 Harbor 运行，可在 Daytona、Modal 等云沙箱上大规模并行。"
+  summary: "在真实终端沙箱里考智能体：每个任务有自然语言指令、独立容器环境、人工参考解和测试脚本，涵盖编译、训练模型、搭服务、安全等场景；2.0 版精选 89 个难题，发布时前沿模型成绩不到 65%。"
+  plain: "给模型一台命令行电脑和一件真实的活（比如把某个项目编译通过），做完用测试脚本检查结果，一目了然。"
+  takeaways:
+    - "终端类任务要检查“最终系统状态”（文件、服务、输出），而不是模型声称做了什么。"
+  tags: [终端, 智能体编程, 容器]
+
+# ───────────────────────── 评测基准：工具、网页、电脑操作、深度研究 ─────────────────────────
+
+- id: tau-bench
+  title: "τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains"
+  short: τ-bench
+  kind: benchmark
+  org: Sierra
+  authors: "Shunyu Yao et al."
+  date: 2024-06
+  arxiv: "2406.12045"
+  repo: sierra-research/tau-bench
+  areas: [agentic-rl]
+  facets: [eval, env]
+  tier: must
+  evidence: [adopted, open-source, community]
+  evidence_note: "Kimi K2、AgentScaler、Seed2.0 等以 τ-bench / τ²-bench 作为核心工具使用基准，头部实验室的模型发布也普遍报告；它提出的 pass^k 成为衡量智能体稳定性的通用指标。原仓库已提示任务版本过时，推荐改用 τ³-bench。"
+  summary: "模拟零售、航空客服：LLM 扮演的用户与被测智能体多轮对话，智能体须遵守领域政策并调用 API 改写数据库；以对话结束时数据库状态是否与目标一致判分，并提出衡量稳定性的 pass^k。"
+  plain: "让一个 AI 扮顾客、一个 AI 当客服，客服得按公司规定查订单、退换货。最后只看数据库改得对不对；同一道题连做几次都对，才算真靠谱。"
+  takeaways:
+    - "面向生产的智能体至少报告 pass^k（k≥4）：pass^1 看着不错的模型，连续做对 4 次的概率可能掉一半。"
+    - "用数据库终态而不是对话文本判分，能避开“话说得漂亮但事没办对”的误判。"
+  tags: [工具使用, 用户模拟, pass^k]
+
+- id: tau2-bench
+  title: "τ²-Bench: Evaluating Conversational Agents in a Dual-Control Environment"
+  short: τ²-bench
+  kind: benchmark
+  org: Sierra
+  authors: "Victor Barres et al."
+  date: 2025-06
+  arxiv: "2506.07982"
+  repo: sierra-research/tau2-bench
+  url: https://taubench.com
+  links:
+    - { label: τ³ 任务修订依据（SABER）, url: "https://arxiv.org/abs/2512.07850" }
+  areas: [agentic-rl]
+  facets: [eval, env]
+  tier: rec
+  evidence: [adopted, open-source]
+  evidence_note: "Kimi K2（66.1）、Seed2.0 等技术报告以它为主力工具使用基准；仓库 2026 年升级为 τ³-bench，加入知识检索与全双工语音，并基于 SABER 的分析修正 75 处以上任务错误，同时声明 1.0.1 前后的成绩不可直接比较。"
+  summary: "在 τ-bench 上引入“双控制”电信领域：用户也持有工具、会改变环境状态，智能体必须指导用户操作；配合组合式任务生成与受工具约束的用户模拟器，把推理失误与沟通协作失误分开诊断。"
+  plain: "上一代只有客服能操作系统；这一代顾客手里也有手机要自己点，客服得一步步指导顾客操作，考的是“能不能带着人把事办成”。"
+  takeaways:
+    - "引用 τ 系列成绩时写明版本与任务划分：任务修订前后的成绩不能直接比较。"
+  builds_on: [tau-bench]
+  tags: [双控制, 用户模拟, 工具使用]
+
+- id: webarena
+  title: "WebArena: A Realistic Web Environment for Building Autonomous Agents"
+  short: WebArena
+  kind: benchmark
+  org: CMU
+  authors: "Shuyan Zhou et al."
+  date: 2023-07
+  arxiv: "2307.13854"
+  repo: web-arena-x/webarena
+  areas: [agentic-rl]
+  facets: [eval, env]
+  tier: rec
+  evidence: [adopted, open-source, community]
+  evidence_note: "自托管网站环境被 OpenHands 等框架接入，Kimi K2.5 等仍在报告；基于最终状态的“功能正确性”判分被后续网页与电脑操作基准广泛沿用。"
+  summary: "用 Docker 自托管电商、论坛、GitLab、内容管理与地图等真实网站，812 个长程网页任务以程序化检查最终页面与后台状态判分，让网页智能体评测可复现、可在本地大规模运行。"
+  plain: "把几个真实网站“复制”到本地，让模型在里面下单、发帖、提交代码，最后检查网站里的数据有没有按要求变化。"
+  takeaways:
+    - "网页环境要能一键重置：自托管 + 快照是可复现评测和 RL 训练的前提。"
+  tags: [网页智能体, 自托管环境]
+
+- id: osworld
+  title: "OSWorld: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments"
+  short: OSWorld
+  kind: benchmark
+  org: HKU · Salesforce Research · CMU 等
+  authors: "Tianbao Xie et al."
+  date: 2024-04
+  arxiv: "2404.07972"
+  repo: xlang-ai/OSWorld
+  url: https://os-world.github.io/
+  links:
+    - { label: OSWorld-Verified 说明, url: "https://xlang.ai/blog/osworld-verified" }
+  areas: [agentic-rl]
+  facets: [eval, env]
+  tier: must
+  evidence: [adopted, open-source, community]
+  evidence_note: "电脑操作方向最常被引用的基准，Anthropic、OpenAI 的电脑操作模型以及 UI-TARS-2、Kimi K2.5（OSWorld-Verified 63.3%）等都报告其成绩；2025-07-28 发布 OSWorld-Verified，修复社区反馈的任务问题并支持 AWS 并行，官方要求新旧版本成绩分开比较。"
+  summary: "在真实操作系统虚拟机里评测多模态智能体：369 个跨应用任务，每个任务配有初始状态配置和基于执行结果的检查脚本；发布时人类约 72%，最好的模型约 12%。"
+  plain: "直接给模型一台虚拟电脑，让它看屏幕、点鼠标、敲键盘完成真实工作（改表格、装软件），做完由脚本检查结果。"
+  takeaways:
+    - "比较电脑操作成绩时区分原版与 OSWorld-Verified，并写明步数上限和观测设置（纯截图还是加无障碍树）。"
+  builds_on: [webarena]
+  tags: [电脑操作, GUI 智能体, 多模态]
+
+- id: browsecomp
+  title: "BrowseComp: A Simple Yet Challenging Benchmark for Browsing Agents"
+  short: BrowseComp
+  kind: benchmark
+  org: OpenAI
+  authors: "Jason Wei et al."
+  date: 2025-04
+  arxiv: "2504.12516"
+  repo: openai/simple-evals
+  url: https://openai.com/index/browsecomp
+  links:
+    - { label: BrowseComp-Plus（固定语料版）, url: "https://arxiv.org/abs/2508.06600" }
+    - { label: Anthropic：评测中的“识破考题”案例, url: "https://www.anthropic.com/engineering/eval-awareness-browsecomp" }
+  areas: [agentic-rl]
+  facets: [eval]
+  tier: must
+  evidence: [industrial, adopted, open-source]
+  evidence_note: "OpenAI 用于评测 Deep Research 等浏览智能体，参考实现开源在 simple-evals；Tongyi DeepResearch、Kimi K2.5/K3、Seed2.0 等都以它为深度研究主指标。Anthropic 曾记录模型在评测中推断出题目来源、找到加密数据集的镜像并自行解密答案的案例，说明开放网络评测需要主动防护。"
+  summary: "1,266 道“难找易验”的问题：答案是简短事实，便于自动核对，但需要在开放网络上长时间、多跳地搜索才能找到，专门衡量浏览智能体的检索坚持度与搜索策略。"
+  plain: "像超难版“寻宝题”：答案一句话就能核对，但要翻遍互联网才找得到，考的是模型会不会锲而不舍、换着法子搜。"
+  takeaways:
+    - "评测深度研究智能体时，写明搜索后端、可访问范围与预算；需要可复现对比时，改用固定语料的 BrowseComp-Plus。"
+  tags: [深度研究, 浏览智能体, 难找易验]
+
+- id: gaia
+  title: "GAIA: A Benchmark for General AI Assistants"
+  short: GAIA
+  kind: benchmark
+  org: Meta · Hugging Face · AutoGPT
+  authors: "Grégoire Mialon et al."
+  date: 2023-11
+  arxiv: "2311.12983"
+  areas: [agentic-rl]
+  facets: [eval]
+  tier: rec
+  evidence: [adopted, community]
+  evidence_note: "通用助手评测的早期标杆，Tongyi DeepResearch 等深度研究模型仍在报告；Meta 2025 年推出动态环境版后继 Gaia2。验证集答案公开，存在针对性优化与泄漏风险。"
+  summary: "466 道需要浏览、多模态理解与工具使用的真实助手问题，按所需步骤与工具数分三级，答案简短可自动核对；发布时人类正确率约 92%，配插件的 GPT-4 约 15%。"
+  plain: "对人来说不难、但要动手查资料和用工具的日常问题，专门检验 AI 助手“会不会办事”，而不是“会不会考试”。"
+  takeaways:
+    - "公开验证集只适合调试；对外报告成绩优先用答案不公开的测试集或其动态后继 Gaia2。"
+  tags: [通用助手, 工具使用]
+
+- id: are-gaia2
+  title: "ARE: Scaling Up Agent Environments and Evaluations"
+  short: ARE / Gaia2
+  kind: paper
+  org: Meta
+  date: 2025-09
+  arxiv: "2509.17158"
+  repo: facebookresearch/meta-agents-research-environments
+  links:
+    - { label: Gaia2 介绍（Hugging Face 博客）, url: "https://huggingface.co/blog/gaia2" }
+  areas: [agentic-rl]
+  facets: [env, eval]
+  tier: rec
+  evidence: [industrial, open-source]
+  evidence_note: "Meta 发布的智能体研究平台，开源环境框架、Gaia2 基准、Hugging Face 上的演示与排行榜，并在 2026 年扩展出多语言版 Omnilingual-Gaia2。"
+  summary: "ARE 把环境建模为随时间演化的“应用 + 事件 + 场景”，世界会在智能体行动时异步变化；其上的 Gaia2 含 800 个跨 10 个“宇宙”的动态场景，考察应变、时间约束与多智能体协作。"
+  plain: "以前的考题是静止的，Gaia2 的世界会自己动：你还在处理邮件，新消息和日程变动就来了，智能体得边干边应变。"
+  takeaways:
+    - "评测助手类智能体时加入异步事件与时间约束，才能暴露“只会按部就班执行”的短板。"
+  builds_on: [gaia]
+  tags: [动态环境, 异步事件, 通用助手]
+
+- id: gdpval
+  title: "GDPval: Evaluating AI Model Performance on Real-World Economically Valuable Tasks"
+  short: GDPval
+  kind: benchmark
+  org: OpenAI
+  authors: "Tejal Patwardhan et al."
+  date: 2025-09
+  arxiv: "2510.04374"
+  areas: [agentic-rl]
+  facets: [eval]
+  tier: rec
+  evidence: [industrial, adopted, open-source]
+  evidence_note: "OpenAI 发布，开源 220 题的 gold 子集并提供自动判分服务；Kimi K2.5、Kimi K3、Seed2.0 等 2026 年旗舰报告都把它（或第三方的自动判分变体）列入评测。它直接回应“基准分数高、现实效用低”，但以专家成对盲评为主，成本高且带主观性。"
+  summary: "从美国 GDP 贡献最大的 9 个行业选 44 个职业，由行业专家编写 1,320 个真实工作任务（附参考文件，产出文档、表格、幻灯片等），由专家对模型与人类的产出做盲评比较。"
+  plain: "不考题，直接派活：让模型做律师、护士、工程师等职业里真正要交付的成果，再请行家盲评它和人类专家谁做得好。"
+  takeaways:
+    - "当基准分数与业务价值脱节时，考虑“真实交付物 + 专家盲评”的评测，并接受它更贵、更慢。"
+  tags: [经济价值, 专家评审, 真实任务]
+
+# ───────────────────────── 评测基准：知识与推理 ─────────────────────────
+
+- id: gpqa
+  title: "GPQA: A Graduate-Level Google-Proof Q&A Benchmark"
+  short: GPQA
+  kind: benchmark
+  org: NYU · Cohere · Anthropic
+  authors: "David Rein et al."
+  date: 2023-11
+  arxiv: "2311.12022"
+  repo: idavidrein/gpqa
+  areas: [rl-llm]
+  facets: [eval]
+  tier: rec
+  evidence: [adopted, open-source, community]
+  evidence_note: "其 Diamond 子集是 2024–2026 年几乎所有推理模型报告的必备项（如 Kimi K2 报告 75.1）；数据带 canary 字符串并加密分发以降低泄漏。头部模型成绩已接近饱和，区分度明显下降。"
+  summary: "448 道由生物、物理、化学博士级专家编写的四选一难题，设计成“搜不到答案”：领域专家正确率约 65%，允许上网半小时以上的高水平非专家仅约 34%；最常用的是 198 题的 Diamond 子集。"
+  plain: "请博士出题，专门出那种“就算给你上网查半小时也做不出来”的题，考模型是不是真懂专业知识。"
+  takeaways:
+    - "GPQA Diamond 只有 198 题，单次运行的波动可达数个百分点；比较时用多次采样平均（avg@k）并给出置信区间。"
+  tags: [科学问答, 专家级, 饱和]
+
+- id: hle
+  title: "Humanity's Last Exam"
+  short: HLE
+  kind: benchmark
+  org: Center for AI Safety · Scale AI
+  date: 2025-01
+  venue: Nature（2026）
+  arxiv: "2501.14249"
+  repo: centerforaisafety/hle
+  url: https://lastexam.ai
+  links:
+    - { label: FutureHouse 对化学/生物题的核查, url: "https://www.futurehouse.org/research-announcements/hle-exam" }
+  areas: [rl-llm]
+  facets: [eval]
+  tier: rec
+  evidence: [adopted, open-source, community]
+  evidence_note: "发布后迅速成为旗舰模型与深度研究智能体的标配指标（Tongyi DeepResearch、Kimi K2.5/K3、Seed2.0 等均报告），2026 年正式发表于 Nature。FutureHouse 的核查认为化学、生物纯文本题中约 29% 的参考答案与文献相悖，使用时需留意标签噪声。"
+  summary: "全球学科专家编写的 2,500 道前沿闭卷题（数学、人文、自然科学等，含多模态），入选题须先难倒当时的前沿模型；答案为选择或短答，由评审模型判分，并同时报告校准误差。"
+  plain: "请各领域专家专门出“AI 答不上来”的难题攒成终极试卷；不过以“难倒模型”为筛选条件，也让一部分标准答案本身有争议。"
+  takeaways:
+    - "以“难倒模型”为入选条件的基准，标签错误率天然偏高：比较小幅提升要谨慎，最好人工复核争议题。"
+  tags: [前沿知识, 闭卷, 标签噪声]
+
+# ───────────────────────── 评测方法论 ─────────────────────────
+
+- id: sober-look
+  title: "A Sober Look at Progress in Language Model Reasoning: Pitfalls and Paths to Reproducibility"
+  short: Sober Look
+  kind: paper
+  org: Tübingen AI Center · University of Cambridge
+  authors: "Andreas Hochlehnert et al."
+  date: 2025-04
+  venue: COLM 2025
+  arxiv: "2504.07086"
+  repo: bethgelab/sober-reasoning
+  url: https://bethgelab.github.io/sober-reasoning/
+  areas: [rl-llm]
+  facets: [eval]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "逐一控制随机种子、采样参数、提示模板、硬件与推理框架等变量；公开代码、提示和全部模型输出，并维护按统一协议重测的排行榜（AIME/AMC 各 10 个种子，其余基准 3 个种子，报告均值±标准差）。"
+  summary: "发现数学推理基准对解码参数、随机种子、提示格式乃至硬件与软件版本高度敏感，不少提升来自不透明的比较；按统一协议重测后，多数 RL 方法的收益远小于原文所报，SFT 方法的泛化更稳定。"
+  plain: "同一个模型换个随机种子、换台机器，AIME 分数就能差好几分；很多“提升”其实在噪声范围内。作者把大家拉回同一起跑线重测了一遍。"
+  takeaways:
+    - "在 AIME 这类 30 题的小基准上至少跑 10 个种子，报告均值±标准差；否则 3–5 个点的提升没有意义。"
+    - "对比实验要固定并公开温度、top-p、最大生成长度、提示模板与推理框架版本。"
+  tags: [可复现性, 方差, 数学推理]
+
+- id: error-bars
+  title: "Adding Error Bars to Evals: A Statistical Approach to Language Model Evaluations"
+  short: 评测误差棒
+  kind: paper
+  org: Anthropic
+  authors: "Evan Miller"
+  date: 2024-11
+  arxiv: "2411.00640"
+  areas: [rl-llm]
+  facets: [eval, theory]
+  tier: ref
+  evidence: [community]
+  evidence_note: "Anthropic 研究员的单作者方法论文，把基准分数当作从“题目总体”抽样得到的统计量，给出标准误、聚类标准误、配对差与功效分析的可直接套用的公式，在评测与可复现性讨论中被广泛引用。"
+  summary: "把评测当作抽样实验：用中心极限定理给基准均分算标准误；题目成组出现时用聚类标准误；对同一题多次采样以压低题内方差；比较两个模型时用逐题配对差；事先做功效分析确定需要多少题。"
+  plain: "考试分数本身有误差：题目是“抽”出来的，模型答题也有随机性。这篇文章教你给分数加误差棒，并判断两个模型的差距是不是真的。"
+  takeaways:
+    - "比较两个模型时用同一批题的逐题差值算标准误（配对检验），通常比各算各的误差棒小得多，能检出更小的真实差距。"
+    - "题内随机性可以靠多次采样压下去，题目抽样带来的方差只能靠更多的题。"
+  tags: [误差棒, 标准误, 统计检验]
+
+- id: mt-bench
+  title: "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena"
+  short: LLM-as-a-Judge
+  kind: paper
+  org: LMSYS · UC Berkeley 等
+  authors: "Lianmin Zheng et al."
+  date: 2023-06
+  arxiv: "2306.05685"
+  repo: lm-sys/FastChat
+  areas: [rl-llm]
+  facets: [eval]
+  tier: rec
+  evidence: [adopted, open-source, community]
+  evidence_note: "LLM-as-a-judge 的奠基性论文，MT-Bench 与其判分提示被大量后续评测沿用，代码开源在 FastChat；引用量极高。文中系统记录的位置偏差、冗长偏差与自我偏好，至今仍是设计评审模型时的检查清单。"
+  summary: "系统研究用强模型当裁判评估开放式回答：GPT-4 与人类偏好的一致率超过 80%，与人类之间相当；同时揭示位置偏差、冗长偏差、自我偏好与判数学题能力有限，并给出交换顺序等缓解办法。"
+  plain: "请最强的模型当阅卷老师，大体靠谱，但它有偏心：排在前面的答案、写得长的答案、自己写的答案，都容易多给分。"
+  takeaways:
+    - "用 LLM 裁判做成对比较时，交换两个答案的顺序各判一次，结论不一致就记为平局。"
+  tags: [LLM-as-a-judge, 偏差, MT-Bench]
+
+- id: hal-leaderboard
+  title: "Holistic Agent Leaderboard: The Missing Infrastructure for AI Agent Evaluation"
+  short: HAL
+  kind: paper
+  org: Princeton
+  authors: "Sayash Kapoor et al."
+  date: 2025-10
+  arxiv: "2510.11977"
+  repo: princeton-pli/hal-harness
+  url: https://hal.cs.princeton.edu/
+  links:
+    - { label: 前作 AI Agents That Matter, url: "https://arxiv.org/abs/2407.01502" }
+  areas: [agentic-rl]
+  facets: [eval, infra]
+  tier: rec
+  evidence: [open-source, ablation]
+  evidence_note: "开源统一评测框架 hal-harness；用同一套 harness 在 9 个基准、9 个模型上跑了 2 万余次标准化 rollout，同时记录准确率与成本；延续前作 AI Agents That Matter 对“成本受控评测”和留出集的主张。"
+  summary: "为智能体评测提供统一的 harness 与排行榜：不同模型在各基准上用同样的运行与计费方式评测，报告准确率—成本的帕累托前沿，并用大规模日志分析揭示排行榜成绩中常被忽略的不可靠因素。"
+  plain: "各家智能体成绩往往是在不同“考场规则”下测的。HAL 统一了考场：同样的工具、同样的预算，还把花了多少钱一起写进成绩单。"
+  takeaways:
+    - "报告智能体成绩时同时给出成本（token 或美元）与运行次数，用帕累托前沿而不是单一准确率比较方案。"
+  tags: [智能体评测, 成本, 标准化 harness]
+
+- id: metr-time-horizon
+  title: "Measuring AI Ability to Complete Long Tasks"
+  short: METR 时间视界
+  kind: paper
+  org: METR
+  authors: "Thomas Kwa et al."
+  date: 2025-03
+  arxiv: "2503.14499"
+  repo: METR/eval-analysis-public
+  url: https://metr.org/blog/2025-03-19-measuring-ai-ability-to-complete-long-tasks/
+  areas: [agentic-rl]
+  facets: [eval]
+  tier: rec
+  evidence: [ablation, open-source]
+  evidence_note: "分析代码与运行数据开源（含 v1.0 与覆盖到 2026 年模型的 v1.1 两版报告）；以人类专家完成时间标定的软件任务集（HCAST、RE-Bench、SWAA）为基础，用 bootstrap 给出置信区间，并检验了任务子集与拟合方式的影响。“时间视界”已成为讨论智能体进展时最常被引用的度量之一。"
+  summary: "用人类专家完成任务所需的时间刻画难度：为每个模型拟合“成功率—对数任务时长”的逻辑回归，取成功率 50% 处的任务时长作为时间视界；2019–2025 年前沿模型的时间视界约每 7 个月翻一番。"
+  plain: "不问模型考了多少分，而问它能独立干完“人类要干多久”的活：从几秒钟的小事到几小时的项目，这个时长大约每 7 个月翻一倍。"
+  takeaways:
+    - "把智能体进展换算成“能完成多长的人类任务”，比单一基准分数更便于跨基准比较和看趋势。"
+    - "它是 50% 成功率下的时长；要求高可靠性（如 80%）时，对应的时长要短得多。"
+  tags: [时间视界, 智能体评测, 趋势]

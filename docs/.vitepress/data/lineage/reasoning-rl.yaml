@@ -1,0 +1,164 @@
+id: reasoning-rl
+title: 推理 RL 演化：从 o1 的信号到可预测的扩展
+description: 纵向是时间，四列分别是闭源信号、工业报告、开源复现与方法修正；箭头表示“直接基于或回应”。悬停或点击节点，看它修了前任的什么问题，并高亮上下游。
+lanes:
+  - { id: signal, label: 闭源信号 }
+  - { id: industry, label: 工业报告 }
+  - { id: open, label: 开源复现 }
+  - { id: method, label: 方法修正 }
+nodes:
+  - id: lets-verify
+    label: Let's Verify
+    date: 2023-05
+    lane: signal
+    note: "过程监督的 PRM 在重排上胜过只看结果的 ORM；它也定义了后来“要不要用 PRM”的争论。"
+    href: "#reward-design"
+    entry: lets-verify
+  - id: grpo
+    label: GRPO
+    date: 2024-02
+    lane: method
+    note: "用组内均值与标准差当基线，去掉与策略同规模的价值网络，让大模型 RL 的显存负担减半。"
+    href: /lenses/algorithms#grpo
+    entry: grpo
+  - id: openai-o1
+    label: OpenAI o1
+    date: 2024-09
+    lane: signal
+    note: "公开“RL 训练算力与测试时思考算力都能换来推理提升”，但不给配方，开启了复现竞赛。"
+    entry: openai-o1
+  - id: deepseek-r1
+    label: DeepSeek-R1
+    date: 2025-01
+    lane: industry
+    note: "给出第一份可复现的答案：GRPO + 规则奖励即可从基座涌现长 CoT；放弃 PRM 与 MCTS。"
+    href: "#rlvr"
+    entry: deepseek-r1
+  - id: kimi-k1-5
+    label: Kimi k1.5
+    date: 2025-01
+    lane: industry
+    note: "同日给出另一条路线：镜像下降式目标、长度惩罚与 partial rollout，同样不用价值网络与 PRM。"
+    href: "#recipes"
+    entry: kimi-k1-5
+  - id: deepscaler
+    label: DeepScaleR
+    date: 2025-02
+    lane: open
+    note: "证明小模型也吃 RL：1.5B 蒸馏模型配合 8K→16K→24K 逐步加长上下文，超过 o1-preview。"
+    entry: deepscaler
+  - id: open-reasoner-zero
+    label: Open-Reasoner
+    date: 2025-03
+    lane: open
+    note: "去掉一切花样：原版 PPO（λ=γ=1）、无 KL、只奖励正确性，就能以约 1/10 步数复现 R1-Zero。"
+    entry: open-reasoner-zero
+  - id: simplerl-zoo
+    label: SimpleRL-Zoo
+    date: 2025-03
+    lane: open
+    note: "把 zero-RL 搬到 10 个基座上，发现格式奖励与题目难度必须随基座调整，不能只看 Qwen。"
+    entry: simplerl-zoo
+  - id: dapo
+    label: DAPO
+    date: 2025-03
+    lane: method
+    note: "修朴素 GRPO 的熵坍缩与奖励噪声：clip-higher、动态采样、token 级损失、超长惩罚，逐项消融。"
+    href: /lenses/algorithms#dapo
+    entry: dapo
+  - id: dr-grpo
+    label: Dr. GRPO
+    date: 2025-03
+    lane: method
+    note: "指出 GRPO 的长度与标准差归一化会让错误回答越写越长，去掉两个除法即可。"
+    href: /lenses/algorithms#dr-grpo
+    entry: dr-grpo
+  - id: vapo
+    label: VAPO
+    date: 2025-04
+    lane: method
+    note: "把价值模型请回来：价值预训练与解耦、长度自适应 GAE 修好了长 CoT 上的价值偏差。"
+    entry: vapo
+  - id: seed-thinking-1-5
+    label: Seed1.5-Thinking
+    date: 2025-04
+    lane: industry
+    note: "VAPO 与 DAPO 进入工业模型；用会推理的验证器替代原则型验证器，减少误判与奖励黑客。"
+    href: "#recipes"
+    entry: seed-thinking-1-5
+  - id: qwen3
+    label: Qwen3
+    date: 2025-05
+    lane: industry
+    note: "把 R1 式配方扩展为四阶段，推理 RL 只用 3,995 组精选题；小模型改走在线策略蒸馏。"
+    href: "#recipes"
+    entry: qwen3
+  - id: skywork-or1
+    label: Skywork-OR1
+    date: 2025-05
+    lane: open
+    note: "把熵坍缩当作一等问题：自适应熵控制加 8K→16K→32K 多阶段训练，权重、数据、代码全开。"
+    entry: skywork-or1
+  - id: prorl
+    label: ProRL
+    date: 2025-05
+    lane: open
+    note: "回应“RL 只会锐化”的质疑：长程训练加参考策略重置，能解出基座大量采样也做不出的题。"
+    entry: prorl
+  - id: minimax-m1
+    label: MiniMax-M1
+    date: 2025-06
+    lane: industry
+    note: "CISPO 改为裁剪重要性权重而不丢 token，保住低概率的反思类 token；一半步数追平 DAPO。"
+    href: /lenses/algorithms#cispo
+    entry: minimax-m1
+  - id: gspo
+    label: GSPO
+    date: 2025-07
+    lane: method
+    note: "把比率与裁剪从 token 级搬到序列级，与序列级奖励对齐，稳定了 Qwen3 MoE 的 RL。"
+    href: /lenses/algorithms#gspo
+    entry: gspo
+  - id: scale-rl
+    label: ScaleRL
+    date: 2025-10
+    lane: method
+    note: "用 sigmoid 曲线把 RL 扩展变成可预测的工程：区分抬高上限的设计与只提升效率的设计。"
+    href: "#frontier"
+    entry: scale-rl
+  - id: deepseek-v3-2
+    label: DeepSeek-V3.2
+    date: 2025-12
+    lane: industry
+    note: "RL 算力超过预训练的 10%，稳定性的主要矛盾转向训推不一致：无偏 KL、离策略掩码、保持路由。"
+    href: "#recipes"
+    entry: deepseek-v3-2
+  - id: kimi-k3
+    label: Kimi K3
+    date: 2026-07
+    lane: industry
+    note: "2026 年的典型形态：分领域、分推理强度训练九个 RL 专家，再用多教师在线蒸馏合成一个模型。"
+    href: "#frontier"
+    entry: kimi-k3
+edges:
+  - { from: lets-verify, to: deepseek-r1, label: 评估后放弃 PRM }
+  - { from: grpo, to: deepseek-r1, label: 沿用 GRPO }
+  - { from: openai-o1, to: deepseek-r1, label: 公开复现 o1 路线 }
+  - { from: openai-o1, to: kimi-k1-5, label: 对标 o1 }
+  - { from: deepseek-r1, to: deepscaler, label: 从 R1 蒸馏模型起步 }
+  - { from: deepseek-r1, to: open-reasoner-zero, label: 复现 R1-Zero }
+  - { from: deepseek-r1, to: simplerl-zoo, label: zero-RL 推广到多基座 }
+  - { from: grpo, to: dapo, label: 四处修改 GRPO }
+  - { from: grpo, to: dr-grpo, label: 修正长度与方差偏置 }
+  - { from: dapo, to: vapo, label: 技巧并入价值路线 }
+  - { from: dapo, to: seed-thinking-1-5, label: 上线 }
+  - { from: vapo, to: seed-thinking-1-5, label: 上线 }
+  - { from: deepseek-r1, to: qwen3, label: 类 R1 多阶段 }
+  - { from: deepseek-r1, to: skywork-or1, label: 在 R1 蒸馏模型上 RL }
+  - { from: dapo, to: prorl, label: 沿用 DAPO 技巧并加长训练 }
+  - { from: dapo, to: minimax-m1, label: 改为裁剪 IS 权重 }
+  - { from: grpo, to: gspo, label: token 级比率改为序列级 }
+  - { from: qwen3, to: gspo, label: 稳定 Qwen3 MoE RL }
+  - { from: minimax-m1, to: scale-rl, label: 采用 CISPO 损失 }
+  - { from: deepseek-r1, to: deepseek-v3-2, label: RL 规模化 }
+  - { from: kimi-k1-5, to: kimi-k3, label: 经 K2、K2.5 一脉相承 }

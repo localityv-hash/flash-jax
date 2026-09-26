@@ -1,0 +1,509 @@
+# Mid-training 专题（/topics/mid-training）的条目。
+# 覆盖：学习率调度与退火、中训练数据（质量筛选 / 改写 / 数学与代码语料）、长上下文扩展、面向 RL 与智能体的中训练。
+# 关键数字均可在对应论文、官方仓库配置或模型卡中核对；指标（引用 / star）由 CI 抓取，不手填。
+
+# ───────────── 学习率调度与退火 ─────────────
+
+- id: minicpm
+  title: "MiniCPM: Unveiling the Potential of Small Language Models with Scalable Training Strategies"
+  short: MiniCPM（WSD）
+  kind: paper
+  org: 清华大学 · 面壁智能（OpenBMB）
+  authors: "Shengding Hu et al."
+  date: "2024-04"
+  venue: COLM 2024
+  arxiv: "2404.06395"
+  repo: OpenBMB/MiniCPM
+  areas: [mid-training]
+  facets: [algorithm, data]
+  tier: must
+  evidence: [industrial, adopted, ablation, open-source]
+  evidence_note: "面壁智能 MiniCPM 系列的正式训练方案，MiniCPM4 继续沿用 WSD（7T 稳定 + 1.3T 退火）。Kimi K2 技术报告把它列为所用 WSD 调度的出处，GLM-4.5 报告也以它为对照（并说明自己为何改用余弦）；SmolLM3 同样采用 WSD、在最后 10% 步数衰减。论文含 0.036B–2.4B 的调度与“衰减期加入 SFT 数据”对照实验。"
+  summary: "提出 Warmup-Stable-Decay 调度：大部分时间保持恒定学习率，最后约 10% token 快速衰减，损失随之骤降；并主张把高质量数据与 SFT 数据混进衰减期，实验显示比只在 SFT 阶段加入效果更好。"
+  plain: "先用大步子跑很久，最后一小段放慢脚步“收尾”，成绩会明显变好；收尾这段吃什么数据，模型就往哪边靠。"
+  takeaways:
+    - "总训练量还没定时用 WSD：从任一稳定期检查点起做约 10% 的衰减，就能得到一个可用的模型。"
+    - "想强化某项能力，从衰减期就开始混入高质量 / 指令数据，而不是全押在 SFT 上。"
+  tags: [WSD, 退火, 学习率调度]
+
+- id: cooldown-scaling
+  title: "Scaling Laws and Compute-Optimal Training Beyond Fixed Training Durations"
+  short: 冷却与缩放律
+  kind: paper
+  org: EPFL · Hugging Face
+  authors: "Alexander Hägele et al."
+  date: "2024-05"
+  venue: NeurIPS 2024 Spotlight
+  arxiv: "2405.18392"
+  repo: epfml/schedules-and-scaling
+  areas: [mid-training]
+  facets: [algorithm, theory]
+  tier: ref
+  evidence: [ablation, open-source]
+  evidence_note: "NeurIPS 2024 Spotlight，代码开源（含 WSD 调度与权重平均实现）。它把“恒定学习率 + 末段冷却”当作余弦的直接替代做了系统对比，是后来大量用 WSD 做缩放律实验的依据之一；实验规模以中小模型为主。"
+  summary: "论证余弦调度把训练长度写死，不同长度无法复用同一条曲线；“恒定学习率 + 末段冷却”的效果可预测地与余弦相当，随机权重平均还能沿轨迹免费提升，因此缩放律实验可以只跑少数长程、从中途检查点分别冷却。"
+  plain: "不必为每个训练长度从头跑一遍：跑一条长的，在想要的位置“刹车冷却”，就能拿到对应长度的结果。"
+  takeaways:
+    - "做数据或缩放律实验时，用“一条恒定学习率长跑 + 多个中途冷却分支”代替多次从头训练。"
+  builds_on: [minicpm]
+  tags: [WSD, 冷却, 缩放律, 权重平均]
+
+- id: llama3
+  title: "The Llama 3 Herd of Models"
+  short: Llama 3
+  kind: report
+  org: Meta
+  authors: "Llama Team, AI @ Meta"
+  date: "2024-07"
+  arxiv: "2407.21783"
+  repo: meta-llama/llama-models
+  areas: [mid-training]
+  facets: [data, eval]
+  tier: must
+  evidence: [industrial, adopted, ablation, open-source, community]
+  evidence_note: "Meta Llama 3/3.1 的完整技术报告，开源权重是大量下游模型的底座。“用退火评估数据价值”被 MiniCPM4 明确借鉴（同样取新数据 30%、默认配比 70%），ProLong 等工作直接在 Llama-3 上继续训练长上下文。"
+  summary: "405B 预训练分初始、长上下文（六段 8K→128K，约 800B token）与退火三段；退火期上采样最高质量数据、学习率降到 0 并平均检查点；还用“半程 8B + 40B token 退火”低成本评估新数据。"
+  plain: "Llama 3 把预训练最后一小段当成“精修”：换上最好的数据、学习率降到 0、再把几个检查点平均；还把这段精修当成快速“试吃”新数据的工具。"
+  takeaways:
+    - "评估新数据源不必从头训：拿中途检查点做一次短退火（新数据约占 30%），与只用默认配比的退火对比。"
+    - "长上下文扩展的验收标准要双管齐下：短文本评测完全恢复，目标长度的大海捞针全对。"
+    - "退火数据里不要放常用评测的训练集，否则分数会高估真实的少样本与泛化能力。"
+  tags: [退火, 长上下文, 数据评估, 检查点平均]
+
+- id: olmo2
+  title: "2 OLMo 2 Furious"
+  short: OLMo 2
+  kind: report
+  org: Allen Institute for AI (AI2)
+  authors: "Team OLMo"
+  date: "2024-11"
+  arxiv: "2501.00656"
+  repo: allenai/OLMo
+  links:
+    - { label: Dolmino Mix 1124 数据, url: "https://huggingface.co/datasets/allenai/dolmino-mix-1124" }
+  areas: [mid-training]
+  facets: [data, algorithm]
+  tier: must
+  evidence: [industrial, adopted, ablation, open-source]
+  evidence_note: "AI2 全开源模型：权重、数据、代码、日志与中间检查点全部公开，OLMo 仓库里能直接看到 stage 2 每个随机种子的配置与 microanneal 配置。Dolmino Mix 1124 被后续研究直接当作中训练语料（如 Meta 等的 KD 中训练实验），SmolLM3 沿用了它“嵌入层不做权重衰减”的稳定性设置。"
+  summary: "通用预训练后，用 Dolmino Mix 1124（DCLM 高分网页、FLAN、学术文本与大量合成数学）做学习率线性降到 0 的中训练；7B 以三种数据顺序各训 50B 再平均成模型汤，13B 用 3×100B + 1×300B。"
+  plain: "先把模型养大，再用一小锅精选食材（高质量网页 + 数学题）收汁；同一锅换三种下料顺序各做一遍，最后把三份平均成一份。"
+  takeaways:
+    - "中训练预算有限时，“同一配比、不同数据顺序多跑几次再平均”往往比只跑一次更稳。"
+    - "新数据源上线前先做 microanneal：从稳定期检查点起短退火，比较加 / 不加该数据的差异。"
+  builds_on: [dclm, llama3]
+  tags: [Dolmino, 模型汤, microanneal, 全开源]
+
+# ───────────── 中训练数据：筛选、改写、专门语料 ─────────────
+
+- id: physics-of-lms
+  title: "Physics of Language Models: Part 3.1, Knowledge Storage and Extraction"
+  short: Physics of LMs 3.1
+  kind: paper
+  org: Meta FAIR · MBZUAI
+  authors: "Zeyuan Allen-Zhu, Yuanzhi Li"
+  date: "2023-09"
+  venue: ICML 2024
+  arxiv: "2309.14316"
+  repo: facebookresearch/PhysicsLM4
+  links:
+    - { label: "Part 3.3 知识容量缩放律", url: "https://arxiv.org/abs/2404.05405" }
+  areas: [mid-training]
+  facets: [theory]
+  tier: rec
+  evidence: [ablation, community, open-source]
+  evidence_note: "ICML 2024；在可控的合成传记数据上用（近）线性探针观察知识如何被存储，结论与 Kimi K2、Nemotron-CC 等“改写数据”的工业实践方向一致。系列的 bioS/bioR 数据生成器已随 facebookresearch/PhysicsLM4 开源。注意结论来自合成数据与中小模型。"
+  summary: "用合成传记数据证明：知识只有在预训练时被充分增广（改写、句子重排）才能在之后被问答提取，否则模型背得下却提不出，准确率为 0%，指令微调也补不回；作者据此建议用小模型改写预训练数据，并尽早把指令数据混进预训练。"
+  plain: "只以一种说法见过一次的知识，模型“背得出原文却答不出问题”；同一件事换多种说法见过，才算真学会。"
+  takeaways:
+    - "知识密集的高质量语料，宁可改写多遍（换风格、换视角），也不要原样重复多轮。"
+    - "如果后续要靠问答使用这些知识，在中训练就混入 QA / 指令格式数据，别等到 SFT。"
+  tags: [知识存储, 改写, 理论, 探针]
+
+- id: fineweb
+  title: "The FineWeb Datasets: Decanting the Web for the Finest Text Data at Scale"
+  short: FineWeb / FineWeb-Edu
+  kind: dataset
+  org: Hugging Face
+  authors: "Guilherme Penedo et al."
+  date: "2024-06"
+  venue: NeurIPS 2024 Datasets & Benchmarks
+  arxiv: "2406.17557"
+  repo: huggingface/datatrove
+  links:
+    - { label: FineWeb-Edu 数据集, url: "https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu" }
+    - { label: 教育质量分类器, url: "https://huggingface.co/HuggingFaceFW/fineweb-edu-classifier" }
+  areas: [mid-training]
+  facets: [data]
+  tier: rec
+  evidence: [industrial, adopted, open-source, community]
+  evidence_note: "Hugging Face 的开放预训练语料：SmolLM3 以 FineWeb-Edu / FineWeb2 为网页主干，ProLong 的短数据混合里 FineWeb 与 FineWeb-Edu 各占 10%，NVIDIA Nemotron-CC 把它和 DCLM 作为主要对照。处理代码在 datatrove，分类器训练代码在 huggingface/smollm。"
+  summary: "从 96 个 Common Crawl 快照构建 15T token 的 FineWeb；再用 Llama-3-70B-Instruct 标注的教育价值训练小分类器，筛出 1.3T token 的 FineWeb-Edu，在知识与推理基准上显著领先。"
+  plain: "先请大模型当“阅卷老师”给一小批网页打分，再训练一个便宜的小模型按同样标准给海量网页打分，只留下有教育意义的。"
+  takeaways:
+    - "做质量筛选时，“强模型标注小样本 → 蒸馏成小分类器 → 全量打分”是性价比最高的流程。"
+    - "教育价值筛选对知识 / 推理类基准最有效，但会大幅减少数据量；训练预算很长时要权衡保留量。"
+  tags: [质量分类器, 预训练数据, 开放数据集]
+
+- id: dclm
+  title: "DataComp-LM: In search of the next generation of training sets for language models"
+  short: DCLM
+  kind: dataset
+  org: UW · Apple · TRI 等
+  authors: "Jeffrey Li et al."
+  date: "2024-06"
+  venue: NeurIPS 2024 Datasets & Benchmarks
+  arxiv: "2406.11794"
+  repo: mlfoundations/dclm
+  areas: [mid-training]
+  facets: [data, eval]
+  tier: rec
+  evidence: [adopted, ablation, open-source, community]
+  evidence_note: "OLMo 2 的 Dolmino 中训练直接使用按 DCLM 分类器筛出的前 7% 网页（OLMo 仓库 stage 2 配置可查），SmolLM3 的网页主干也包含 DCLM。平台提供 240T token 原始池、53 项评测与 412M–7B 的标准化训练配方。"
+  summary: "固定模型与配方、只比较数据的测试平台（240T token 池、53 项评测）。结论：模型过滤最关键，以 OH-2.5 与 ELI5 为正样本的 fastText 分类器筛出 DCLM-Baseline，7B 用 2.6T token 达约 64% MMLU。"
+  plain: "与其凭感觉挑数据，不如固定模型和训练方式、只换数据来比较；结果发现“像高质量问答”的网页最值钱。"
+  takeaways:
+    - "质量分类器的正样本优先选指令 / 问答风格的高质量文本（如 OH-2.5、ELI5），往往比只用百科更能提升下游。"
+    - "比较数据方案时固定模型规模与训练 token，只改数据，否则结论不可比。"
+  tags: [质量分类器, fastText, 数据测试平台]
+
+- id: nemotron-cc
+  title: "Nemotron-CC: Transforming Common Crawl into a Refined Long-Horizon Pretraining Dataset"
+  short: Nemotron-CC
+  kind: dataset
+  org: NVIDIA
+  authors: "Dan Su et al."
+  date: "2024-12"
+  arxiv: "2412.02595"
+  url: "https://data.commoncrawl.org/contrib/Nemotron/Nemotron-CC/index.html"
+  areas: [mid-training]
+  facets: [data]
+  tier: rec
+  evidence: [adopted, ablation, open-source]
+  evidence_note: "数据集在 Common Crawl 上公开；AI2 在 Olmo 3 的中训练配比里放入 5% 的 Nemotron-CC 高质量合成 QA（dolma3 仓库配置可查）。论文在 1T 与 15T 两个 token 尺度上与 DCLM、Llama 3.1 做了对照。"
+  summary: "针对 FineWeb-Edu、DCLM 丢弃约 90% 数据的问题，用分类器集成、合成改写与更少的启发式过滤得到 6.3T token（含 1.9T 合成）；1T 训练下高质量子集比 DCLM 高 5.6 MMLU。"
+  plain: "不是把“差”网页一扔了之，而是请模型把它们重写一遍，再给“好”网页出几套练习题，数据量和质量兼得。"
+  takeaways:
+    - "训练预算很长（10T 以上）时，别只用激进过滤后的小语料；用改写把中低质量数据“救回来”。"
+    - "对高质量文档生成多种形式的合成数据（问答、蒸馏、知识抽取），可直接充当中训练里的 QA 配料。"
+  builds_on: [fineweb, dclm]
+  tags: [改写, 合成数据, 分类器集成]
+
+- id: phi-4
+  title: "Phi-4 Technical Report"
+  short: Phi-4
+  kind: report
+  org: Microsoft Research
+  authors: "Marah Abdin et al."
+  date: "2024-12"
+  arxiv: "2412.08905"
+  links:
+    - { label: 模型权重, url: "https://huggingface.co/microsoft/phi-4" }
+  areas: [mid-training]
+  facets: [data]
+  tier: rec
+  evidence: [industrial, ablation]
+  evidence_note: "微软 Phi 系列正式发布的 14B 模型；报告给出完整的预训练配比表（各类数据的独立 token 数与轮数）和合成数据对照实验，是“合成数据能反复用多少轮”最直接的公开证据之一。"
+  summary: "约 10T token 预训练，合成数据占 40%（约 290B 独立 token、13.8 轮）；随后 250B token 中训练把上下文从 4K 扩到 16K：30% 新长文本 + 70% 回放，RoPE base 升到 250K。"
+  plain: "Phi-4 的主食是“教科书式”的合成题，反复吃十几遍也不腻；但只吃合成题会缺常识，所以还得搭配真实网页。"
+  takeaways:
+    - "合成数据可以多轮复用（Phi-4 达 13.8 轮），但必须混入真实网页 / 书籍来保住知识类能力。"
+    - "扩上下文优先用天然长文档，而不是把短样本拼接凑长；并保留大比例预训练回放防遗忘。"
+  tags: [合成数据, 数据配比, 长上下文]
+
+- id: megamath
+  title: "MegaMath: Pushing the Limits of Open Math Corpora"
+  short: MegaMath
+  kind: dataset
+  org: LLM360 · MBZUAI
+  authors: "Fan Zhou et al."
+  date: "2025-04"
+  venue: COLM 2025
+  arxiv: "2504.02807"
+  repo: LLM360/MegaMath
+  areas: [mid-training]
+  facets: [data]
+  tier: rec
+  evidence: [adopted, ablation, open-source]
+  evidence_note: "OctoThinker 的中训练以其 Web-Pro 子集为核心，并证明它优于 FineMath-4+；Hugging Face 的 SmolLM3 在第二阶段引入 MegaMath（含 QA 合成、Pro 改写与文本-代码交错块）；Olmo 3 中训练使用其衍生的 MegaMath-Web-Pro-Max。"
+  summary: "从 Common Crawl 重新抽取数学网页（面向数学的 HTML 处理、fastText 筛选与去重），从 Stack-v2 召回数学相关代码，并合成 QA、数学代码与文本-代码交错数据，共 371B token，是规模最大的开放数学预训练语料之一。"
+  plain: "把全网的数学内容重新“淘”一遍，配上代码和合成习题，做成一个超大题库，供中训练直接取用。"
+  takeaways:
+    - "数学中训练优先选经过 LLM 改写 / 精筛的子集（如 MegaMath-Web-Pro），而不是只按分类器分数截断的语料。"
+  tags: [数学语料, 预训练数据, 合成数据]
+
+- id: swallowcode-math
+  title: "Rewriting Pre-Training Data Boosts LLM Performance in Math and Code"
+  short: SwallowCode / SwallowMath
+  kind: paper
+  org: Institute of Science Tokyo
+  authors: "Kazuki Fujii et al."
+  date: "2025-05"
+  venue: ICLR 2026
+  arxiv: "2505.02881"
+  repo: rioyokotalab/swallow-code-math
+  links:
+    - { label: SwallowCode 数据, url: "https://huggingface.co/datasets/tokyotech-llm/swallow-code" }
+    - { label: SwallowMath 数据, url: "https://huggingface.co/datasets/tokyotech-llm/swallow-math" }
+  areas: [mid-training]
+  facets: [data]
+  tier: rec
+  evidence: [adopted, ablation, open-source]
+  evidence_note: "Kimi K2 技术报告说明其数学数据改写“遵循 SwallowMath 的方法”写成学习笔记风格；AI2 在 Olmo 3 中训练配比里放入 10% 的 SwallowCode，并把 SwallowMath 纳入数学桶（dolma3 仓库配置可查）。数据与流水线开源。"
+  summary: "用 70B 模型把代码与数学语料“改写后保留”而非过滤丢弃，得到 SwallowCode（16.1B token）与 SwallowMath（2.3B）；50B token 续训 8B 模型，HumanEval +17.0、GSM8K +12.4。"
+  plain: "网上的代码和数学题常常写得乱、缺上下文；与其扔掉，不如请大模型改写成“标准答案”风格再拿来学。"
+  takeaways:
+    - "代码与数学语料优先“改写后保留”，尤其是被分类器打低分、但内容本身有价值的样本。"
+  tags: [改写, 代码数据, 数学数据]
+
+- id: smollm3
+  title: "SmolLM3: smol, multilingual, long-context reasoner"
+  short: SmolLM3
+  kind: blog
+  org: Hugging Face
+  authors: "Elie Bakouch et al."
+  date: "2025-07-08"
+  url: "https://huggingface.co/blog/smollm3"
+  repo: huggingface/smollm
+  links:
+    - { label: 训练配置, url: "https://huggingface.co/datasets/HuggingFaceTB/smollm3-configs" }
+  areas: [mid-training]
+  facets: [data]
+  tier: rec
+  evidence: [industrial, ablation, open-source, community]
+  evidence_note: "Hugging Face 正式发布 3B 模型时附带的完整配方：各阶段配比、学习率、长上下文与推理中训练、模型合并都写明，训练配置公开，是 2025 年传播最广的全开源训练手册之一。消融多在 3B、50B–100B token 规模上完成。"
+  summary: "3B 模型约 11T token 三阶段预训练（WSD，衰减期上调代码与数学）；随后的长上下文适配（4K→64K，共 100B）与推理中训练（约 140B token）被统称为中训练，后者损伤的长文能力靠模型合并补回。"
+  plain: "一份小模型的完整菜谱：主餐三道，收尾再加两道专项小灶（读长文、学推理）；小灶吃伤了长文胃口，就用“合并模型”调回来。"
+  takeaways:
+    - "推理中训练和长上下文能力会互相干扰：做完要复测 RULER 类长文基准，必要时与长上下文检查点线性合并（SmolLM3 用 0.9/0.1）。"
+    - "若已用 NoPE / 大 RoPE θ 并在长序列上训练衰减期配比，不一定要专门上采样代码仓库、书籍等长数据。"
+  builds_on: [minicpm, fineweb, megamath]
+  tags: [WSD, 推理中训练, 长上下文, 模型合并]
+
+# ───────────── 长上下文扩展 ─────────────
+
+- id: yarn
+  title: "YaRN: Efficient Context Window Extension of Large Language Models"
+  short: YaRN
+  kind: paper
+  org: Nous Research · EleutherAI · University of Geneva
+  authors: "Bowen Peng, Jeffrey Quesnelle, Honglu Fan, Enrico Shippole"
+  date: "2023-08"
+  venue: ICLR 2024
+  arxiv: "2309.00071"
+  repo: jquesnelle/yarn
+  areas: [mid-training]
+  facets: [algorithm]
+  tier: must
+  evidence: [adopted, ablation, open-source, community]
+  evidence_note: "事实标准的 RoPE 扩展方法：DeepSeek-V3（代码中 s=40、β_fast=32、β_slow=1）、Qwen2.5 / Qwen3（YaRN + DCA 推理期 4 倍外推）、Kimi K2（扩到 128K）、Olmo 3（8K→64K）、SmolLM3 都在技术报告或官方代码里明确使用。"
+  summary: "按 RoPE 各维度的波长区别对待：波长远短于原上下文的高频维度不插值，波长超过上下文的低频维度按比例 s 插值，中间线性过渡（NTK-by-parts）；再给注意力 logit 乘一个随 ln s 增长的系数。约 0.1% 预训练量的微调即可把窗口扩展数倍。"
+  plain: "位置编码像一组转速不同的指针：快指针在训练里早已转满很多圈，不用动；慢指针还没转满一圈，就按比例放慢，免得出现没见过的角度。"
+  takeaways:
+    - "扩上下文优先用 YaRN 或调大 RoPE base，而不是朴素的位置插值；Llama 系可直接用 α=1、β=32。"
+    - "推理时想超过训练长度，可以叠加 YaRN / Dynamic NTK 外推，但必须在目标长度上实测。"
+  tags: [RoPE, 长上下文, 位置编码]
+
+- id: prolong
+  title: "How to Train Long-Context Language Models (Effectively)"
+  short: ProLong
+  kind: paper
+  org: Princeton University
+  authors: "Tianyu Gao, Alexander Wettig, Howard Yen, Danqi Chen"
+  date: "2024-10"
+  venue: ACL 2025
+  arxiv: "2410.02660"
+  repo: princeton-nlp/ProLong
+  areas: [mid-training]
+  facets: [data, eval]
+  tier: rec
+  evidence: [ablation, open-source, community]
+  evidence_note: "长上下文训练最系统的公开消融之一：长数据来源、长短配比、训练长度、RoPE base、SFT 数据都有对照；模型、打包好的 64K / 512K 训练数据与训练脚本（含逐域配比）全部开源，评测改用 HELMET 并在 SFT 之后进行。"
+  summary: "从 Llama-3-8B-Instruct 续训 40B token 得到 512K 上下文模型。结论：代码仓库与书籍是好的长数据，但要混约四成高质量短数据；训练长度超过评测长度有益；SFT 只用短指令数据就够。"
+  plain: "教模型读长书，光给长书不够，要夹着短文章一起读，否则短文能力会退化；考试也别只考“找针”，要考真正的长文理解。"
+  takeaways:
+    - "长上下文配比可从“约 60% 长数据（代码仓库 + 书籍）+ 40% 高质量短数据”起步。"
+    - "用 SFT 之后的下游长文任务（如 HELMET）评估，别只看困惑度和大海捞针。"
+  builds_on: [llama3]
+  tags: [长上下文, RoPE base, HELMET, 数据配比]
+
+- id: deepseek-v3
+  title: "DeepSeek-V3 Technical Report"
+  short: DeepSeek-V3
+  kind: report
+  org: DeepSeek
+  authors: "DeepSeek-AI"
+  date: "2024-12"
+  arxiv: "2412.19437"
+  repo: deepseek-ai/DeepSeek-V3
+  links:
+    - { label: V3.1 模型卡（扩展阶段加量）, url: "https://huggingface.co/deepseek-ai/DeepSeek-V3.1" }
+  areas: [mid-training]
+  facets: [algorithm, data]
+  tier: must
+  evidence: [industrial, adopted, open-source, community]
+  evidence_note: "DeepSeek-V3 / R1 系列的底座报告，权重与推理代码开源（inference/model.py 中可直接看到 YaRN 的 s=40、β_fast=32、β_slow=1 与注意力缩放）。Kimi K2 的架构明确沿用 DeepSeek-V3 的设计；V3.1 沿用同一套两段扩展，并把 32K / 128K 两段加到 630B / 209B token。"
+  summary: "14.8T token 预训练：学习率恒定到 10T，再 4.3T 余弦衰减，最后 500B 分两段常数；随后用 YaRN 分两段各 1000 步，把上下文从 4K 扩到 32K 再到 128K，学习率沿用预训练末值。"
+  plain: "先用大学习率跑到 10T，再慢慢降，最后两小段“定型”；扩长文时不重新训练，只用很少的步数分两级把窗口拉长。"
+  takeaways:
+    - "长上下文扩展可以放在预训练之后单独做，学习率沿用预训练末值，分两级（如 32K→128K）逐步拉长。"
+    - "扩展阶段的 token 预算值得加：V3.1 把两段分别加到 630B / 209B token。"
+  builds_on: [yarn]
+  tags: [YaRN, 学习率调度, 长上下文, MoE]
+
+# ───────────── 面向后训练（RL / 智能体）的中训练 ─────────────
+
+- id: octothinker
+  title: "OctoThinker: Mid-training Incentivizes Reinforcement Learning Scaling"
+  short: OctoThinker
+  kind: paper
+  org: 上海交通大学 GAIR
+  authors: "Zengzhi Wang, Fan Zhou, Xuefeng Li, Pengfei Liu"
+  date: "2025-04"
+  arxiv: "2506.20512"
+  repo: GAIR-NLP/OctoThinker
+  links:
+    - { label: MegaMath-Web-Pro-Max 数据, url: "https://huggingface.co/datasets/OctoThinker/MegaMath-Web-Pro-Max" }
+  areas: [mid-training, rl-llm]
+  facets: [data, algorithm]
+  tier: must
+  evidence: [adopted, ablation, open-source, community]
+  evidence_note: "2025-04 先以 Notion 博客与模型发布，2025-06 发布技术报告。其释出的 MegaMath-Web-Pro-Max 被 AI2 放进 Olmo 3 的中训练配比（dolma3 仓库配置中的改写版）；论文在 Llama-3.2 上对语料、QA 格式、指令数据、长短 CoT 与学习率调度做了成组消融，模型、代码与数据开源。"
+  summary: "探究 Llama 为何比 Qwen 难做 RL：优质数学语料（MegaMath-Web-Pro）同时抬高 base 与 RL；QA 式长 CoT 与指令数据再加分，但长 CoT 易致冗长与不稳；据此提出 Stable-then-Decay 两段中训练。"
+  plain: "同样参加“RL 集训”，有的学生一点就通、有的怎么练都不进步；差别在集训前的“预习”：预习材料质量高、题型贴近考试，集训效果才好。"
+  takeaways:
+    - "RL 不涨时先查 base：用小规模 RL 探针比较不同中训练配方，而不是只调 RL 超参。"
+    - "中训练加入 QA 式推理数据与少量指令数据，但控制长 CoT 比例，避免 RL 阶段回复冗长、训练不稳。"
+  builds_on: [megamath, minicpm]
+  tags: [RL-ready, Llama vs Qwen, Stable-then-Decay, 数学语料]
+
+- id: agentfounder
+  title: "Scaling Agents via Continual Pre-training"
+  short: AgentFounder
+  kind: paper
+  org: 阿里巴巴通义实验室
+  authors: "Su et al."
+  date: "2025-09"
+  arxiv: "2509.13310"
+  repo: Alibaba-NLP/DeepResearch
+  areas: [mid-training, agentic-rl]
+  facets: [data]
+  tier: rec
+  evidence: [industrial, ablation]
+  evidence_note: "同团队已开源的 Tongyi DeepResearch（30B-A3B）在技术报告中把两阶段 Agentic CPT 作为核心中训练阶段；论文给出数据量与模型规模的扩展曲线。合成数据本身未公开。"
+  summary: "在后训练前插入智能体继续预训练（Agentic CPT）：基于开放世界记忆合成问题及规划、推理、决策动作数据，先 32K 再 128K 两阶段训练；AgentFounder-30B 在 BrowseComp-en/zh 达 39.9%/43.3%。"
+  plain: "先让模型大量“看”智能体怎么拆问题、怎么决策（仍是预测下一个词），再去做强化学习，就不用在 RL 里同时学“怎么当智能体”和“怎么做对”。"
+  takeaways:
+    - "深度研究类智能体的后训练总学不稳时，考虑先用合成的规划 / 推理 / 决策轨迹做一段继续预训练。"
+    - "智能体中训练里也要穿插少量通用预训练数据，防止通用能力被侵蚀。"
+  tags: [Agentic CPT, 深度研究, 数据合成]
+
+- id: front-loading-reasoning
+  title: "Front-Loading Reasoning: The Synergy between Pretraining and Post-Training Data"
+  short: Front-Loading Reasoning
+  kind: paper
+  org: NVIDIA · CMU · Boston University · Stanford
+  authors: "Syeda Nahida Akter et al."
+  date: "2025-10"
+  venue: ICLR 2026
+  arxiv: "2510.03264"
+  areas: [mid-training, sft]
+  facets: [data]
+  tier: rec
+  evidence: [ablation, community]
+  evidence_note: "NVIDIA 主导、ICLR 2026 接收；从零训练 8B 模型 1T token，再在 SFT 与 RL 两段做全交叉对照，是少见的“预训练 × 后训练数据分配”控制实验。代码未公开，结论来自单一团队。"
+  summary: "在固定推理数据预算下比较放进预训练还是后训练：前置到预训练带来 19% 平均增益，且后续 SFT 加数据也补不回；预训练更吃推理数据的多样性（11%），SFT 更吃质量（15%）；高质量预训练数据有“潜伏效应”，SFT 后才显现。"
+  plain: "推理能力像地基，越早打越牢；预训练阶段要见多识广，SFT 阶段要精挑细选。"
+  takeaways:
+    - "推理数据不要全留给 SFT：在预训练后段或中训练就混入多样的推理语料。"
+    - "SFT 数据宁精勿滥：盲目扩充中等质量的 SFT 数据，可能冲掉前期注入推理数据的收益。"
+  tags: [推理数据, 数据分配, 预训练 vs SFT]
+
+- id: midtraining-bridges
+  title: "Midtraining Bridges Pretraining and Posttraining Distributions"
+  short: Midtraining Bridges
+  kind: paper
+  org: Carnegie Mellon University
+  authors: "Emmy Liu, Graham Neubig, Chenyan Xiong"
+  date: "2025-10"
+  venue: ICML 2026 Oral
+  arxiv: "2510.14865"
+  repo: nightingal3/midtraining
+  areas: [mid-training]
+  facets: [theory, data]
+  tier: rec
+  evidence: [ablation, open-source, community]
+  evidence_note: "ICML 2026 Oral；在从零预训练的 Pythia 系小模型上做可控实验（仓库里有 70M–160M 的时机与配比消融配置）。规模小但变量控制干净，是少有的专门解释“中训练为什么有效”的工作。"
+  summary: "把中训练看成预训练与后训练分布之间的桥：数学、代码等与通用语料差距最大的领域收益最大；相比只用专门数据继续预训练，中训练的域内损失更低、后训练后遗忘更少；插入时机比混合比例更重要，越早越好。"
+  plain: "从“读百科”直接跳到“做编程题”跨度太大；中间先读些带代码的教程过渡，学得更快、忘得更少。"
+  takeaways:
+    - "目标领域离通用语料越远（数学、代码），越值得单独安排中训练。"
+    - "与其纠结专门数据占 10% 还是 30%，不如先把它提前引入，并保留通用数据混合以减少遗忘。"
+  tags: [分布桥接, 遗忘, 继续预训练]
+
+- id: olmo3
+  title: "Olmo 3"
+  short: Olmo 3
+  kind: report
+  org: Allen Institute for AI (AI2)
+  authors: "Team Olmo"
+  date: "2025-11"
+  arxiv: "2512.13961"
+  repo: allenai/OLMo-core
+  links:
+    - { label: Dolma 3 数据与配置, url: "https://github.com/allenai/dolma3" }
+    - { label: 发布博客, url: "https://allenai.org/blog/olmo3" }
+  areas: [mid-training]
+  facets: [data, eval]
+  tier: must
+  evidence: [industrial, ablation, open-source]
+  evidence_note: "AI2 的 7B / 32B 全开源模型：OLMo-core 给出每个阶段的官方训练脚本与数据清单（7B：5.93T 预训练 → 100B 中训练 → 50B 长上下文），dolma3 仓库公开了多轮中训练配比与去污染工具 decon，每个数字都可以对着配置核对。"
+  summary: "三段式 base 训练：Dolma 3 预训练、Dolmino 中训练（100B token，含数学、代码、QA、指令与思维链，全部去污染）、Longmino 长上下文（YaRN 扩到 64K）；32B 对两次中训练结果做模型汤。"
+  plain: "像公开了完整菜谱和每一步用料清单的厨房：什么时候放什么、放多少、为什么，都能对着账本复现。"
+  takeaways:
+    - "搭中训练配比可以 Dolmino 的类别比例为起点（网页、代码、数学各约两成，再加 QA、指令与思维链），再用微退火逐项调。"
+    - "中训练数据要做 n-gram 级去污染：数学与 QA 合成数据最容易混入评测题。"
+  builds_on: [olmo2, octothinker, nemotron-cc, swallowcode-math, yarn]
+  tags: [Dolmino, Longmino, 去污染, 全开源, 模型汤]
+
+# ───────────── 2026：新近值得跟踪 ─────────────
+
+- id: fim-midtraining
+  title: "Function-Aware Fill-in-the-Middle as Mid-Training for Coding Agent Foundation Models"
+  short: FIM 中训练
+  kind: paper
+  org: TIGER-Lab（University of Waterloo）
+  date: "2026-07"
+  arxiv: "2607.12463"
+  repo: TIGER-AI-Lab/FIM-Midtraining
+  areas: [mid-training, agentic-rl]
+  facets: [data]
+  tier: ref
+  evidence: [ablation, open-source]
+  evidence_note: "2026-07 的新工作：语料（40 万样本）、六个检查点与数据构建流水线全部开源；在三种基座、三条现成智能体后训练流水线上做了“同一流水线、有无中训练”的成对对照，尚待外部复现。"
+  summary: "按程序依赖图挑出复杂且可推断的函数挖空，让模型先写推理再补全函数体，作为代码智能体的中训练（约 2.6B token）；接上三条现成后训练流水线后，SWE-bench Verified 提升 2.8–5.3 分。"
+  plain: "写代码的智能体每一步都是“调用—拿结果—接着写”，和普通代码里的函数调用长得一样；先拿海量代码练“补函数”，再学当智能体就更顺。"
+  takeaways:
+    - "评估中训练收益要自己复现“无中训练”基线，并走同一套后训练与评测框架，别拿论文报告值对比。"
+  tags: [代码智能体, FIM, SWE-bench]
+
+- id: kd-midtraining
+  title: "Knowledge Distillation During Mid-Training Favors Reasoning over Factual Recall"
+  short: 中训练蒸馏
+  kind: paper
+  org: Meta FAIR 等
+  authors: "Jacqueline He et al."
+  date: "2026-09"
+  arxiv: "2609.01532"
+  repo: facebookresearch/midtraining-distillation
+  areas: [mid-training, opd]
+  facets: [algorithm]
+  tier: ref
+  evidence: [ablation, open-source]
+  evidence_note: "2026-09 的新工作，代码开源；以 OLMo-2 1B 为学生、7B 为教师，在 Dolmino 语料上做约 60B token 的中训练对照，并对每个检查点跑 Tulu-3 式后训练，检验收益能否保留。规模较小，尚待更大模型验证。"
+  summary: "中训练阶段做蒸馏会以事实召回（TriviaQA、NQ）换推理（GSM8K、MATH），从零预训练则无此代价；Switch Distillation 只把教师熵最低的 20% token 交给反向 KL、其余用交叉熵，两头兼顾。"
+  plain: "中训练时让大模型手把手教小模型，推理变强了、记事实却变差；只在大模型“很有把握”的那些词上跟着学，就能两头兼顾。"
+  takeaways:
+    - "中训练里用蒸馏时，同时盯推理与事实召回两类指标，别只看推理分。"
+  builds_on: [olmo2]
+  tags: [知识蒸馏, 反向 KL, 事实召回]

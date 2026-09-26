@@ -1,0 +1,81 @@
+# 原理与可解释性视角（/lenses/principles）的术语。字段均按纯文本渲染，公式用 Unicode 书写。
+
+- id: entropy
+  term: 策略熵
+  full: Policy Entropy
+  zh: 策略熵
+  area: rl-llm
+  plain: "模型在某一步有多“拿不准”下一个词：候选越多、概率越平均，熵越高；几乎只会选一个词时，熵接近 0。"
+  definition: "在前缀 s 处 H(s) = −Σ_a π_θ(a∣s)·log π_θ(a∣s)；RL 训练中通常对生成的 token 取平均，用来监控探索程度。对 softmax 策略，一步更新带来的熵变化约为 −Cov_{a∼π}(log π(a∣s), Δz_a)，其中 Δz_a 是 logit 的变化量。"
+  see: [/lenses/principles#entropy]
+
+- id: entropy-collapse
+  term: 熵塌缩
+  full: Entropy Collapse
+  zh: 熵塌缩
+  area: rl-llm
+  plain: "RL 训练开始没多久，模型就变得过分笃定，几乎每次都走同一条路，再也探索不到新解法，成绩随之停滞。"
+  definition: "RLVR 训练早期策略熵急剧下降并趋近于零的现象：高概率且优势为正的 token 被持续强化，协方差项为正，熵单调下降，性能随之饱和。常见对策有放宽上裁剪（clip-higher）、只约束高协方差 token（Clip-Cov / KL-Cov）、自适应熵控制等。"
+  see: [/lenses/principles#entropy, /lenses/algorithms#dapo]
+
+- id: forking-token
+  term: 分叉 token
+  full: Forking Token / High-Entropy Minority Token
+  zh: 高熵少数 token
+  area: rl-llm
+  plain: "推理中决定“接下来往哪走”的那些词，比如“不过”“等等”“假设”；数量不多，却决定了整条思路的走向。"
+  definition: "CoT 中熵显著高于其余位置的少数 token（约占两成），多出现在推理转折、假设与反思处，其余 token 大多在补全既定内容。研究发现 RLVR 主要调整这些 token 的熵，只对它们回传策略梯度即可达到甚至超过全量训练。"
+  see: [/lenses/principles#entropy]
+
+- id: sparse-update
+  term: 稀疏更新
+  full: Parameter Update Sparsity
+  zh: 参数更新稀疏性
+  area: rl-llm
+  plain: "RL 训完后，模型里大部分参数一个比特都没变，只有一小部分被改动，但行为已经明显不同。"
+  definition: "RL 微调后（bf16 精度下）仅约 5%–30% 的参数发生变化，且无需任何稀疏正则；变化位置由模型本身决定、在不同种子与数据间高度一致。后续分析认为更新偏离权重的主方向、落在低曲率子空间，而 SFT 更倾向改动主方向。"
+  see: [/lenses/principles#sparse-updates]
+
+- id: catastrophic-forgetting
+  term: 灾难性遗忘
+  full: Catastrophic Forgetting
+  zh: 灾难性遗忘
+  plain: "学新本事时把旧本事忘了：比如专门练完数学，指令遵循或常识问答反而变差。"
+  definition: "在新任务上微调导致原有能力下降的现象。LLM 后训练中，遗忘程度与“在新任务输入上测得的微调模型相对基座的 KL”高度相关；使用 on-policy 数据（RL、自采样 SFT、on-policy 蒸馏）通常比离线 SFT 遗忘更少。"
+  see: [/lenses/principles#forgetting]
+
+- id: reasoning-boundary
+  term: 推理边界
+  full: Reasoning Boundary
+  zh: 推理边界
+  area: rl-llm
+  plain: "给模型足够多次机会时，它“至少能做对一次”的题目范围；衡量的是能力上限，而不是平均发挥。"
+  definition: "通常用大 k（如 256、1024）的 pass@k 近似，无偏估计为 E_x[1 − C(n−c, k)/C(n, k)]，n 为每题采样数、c 为其中正确数。若 RL 后小 k 上升而大 k 下降，说明主要在锐化分布而非扩展边界；答案可猜的任务还要检查推理过程是否正确。"
+  see: [/lenses/principles#pass-at-k-debate]
+
+- id: cot-faithfulness
+  term: CoT 忠实性
+  full: Chain-of-Thought Faithfulness
+  zh: 思维链忠实性
+  area: rl-llm
+  plain: "模型写出来的思路，是否真的反映了它得出答案的原因；比如它参考了小抄，会不会在思路里承认。"
+  definition: "衡量 CoT 是否如实反映影响输出的因素。常用干预法：在提示中埋入线索，若模型因线索改变了答案，再看 CoT 是否提及该线索。已有研究显示，推理模型在多数设置下的承认率低于 20%。"
+  see: [/lenses/principles#faithfulness]
+
+- id: cot-monitorability
+  term: CoT 可监控性
+  full: Chain-of-Thought Monitorability
+  zh: 思维链可监控性
+  area: rl-llm
+  plain: "能不能通过读模型的草稿纸，及时发现它打算做坏事；前提是它把关键想法写出来了，而且写得看得懂。"
+  definition: "用自动监控器阅读 CoT、识别不当意图（如 reward hacking）的可行程度。它依赖“难任务必须把推理写出来”与“模型倾向于写出来”两点，可能被对 CoT 的直接优化、结果导向 RL 的规模化或潜空间推理架构削弱。"
+  see: [/lenses/principles#faithfulness]
+
+- id: spurious-reward
+  term: 伪奖励
+  full: Spurious Reward
+  zh: 伪奖励
+  area: rl-llm
+  plain: "和答案对错无关甚至相反的奖励，比如随机给分、只看格式、故意用错误答案打分；它们居然也能让某些模型涨分。"
+  definition: "与正确性弱相关、无关或负相关的训练信号（随机奖励、格式奖励、错误标签等）。它们在 Qwen2.5-Math 上能带来接近真实奖励的提升，在 Llama、OLMo 上基本无效，说明增益主要来自放大已有先验，也可能源于评测污染。"
+  see: [/lenses/principles#spurious-rewards]

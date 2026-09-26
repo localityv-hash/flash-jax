@@ -1,0 +1,155 @@
+id: mid-training
+title: Mid-training：从“退火小技巧”到“为后训练铺路”
+description: 纵向是时间，四列分别是学习率与退火、数据与改写、长上下文、面向 RL 与智能体。悬停节点看它解决了什么问题，点击跳到本页对应小节。
+lanes:
+  - { id: schedule, label: 学习率与退火 }
+  - { id: data, label: 数据与改写 }
+  - { id: longctx, label: 长上下文 }
+  - { id: post, label: 面向 RL / 智能体 }
+nodes:
+  - id: yarn
+    label: YaRN
+    date: 2023-08
+    lane: longctx
+    note: "按波长分维处理 RoPE：高频维不动、低频维插值，再加注意力温度；成为扩上下文的事实标准。"
+    href: "#yarn"
+    entry: yarn
+  - id: physics-of-lms
+    label: Physics 3.1
+    date: 2023-09
+    lane: data
+    note: "知识要以多种表述出现才能被提取：为“改写数据”和“早放指令数据”提供机制解释。"
+    href: "#rephrasing"
+    entry: physics-of-lms
+  - id: minicpm
+    label: MiniCPM · WSD
+    date: 2024-04
+    lane: schedule
+    note: "恒定学习率 + 末段约 10% 衰减；主张在衰减期就混入高质量与 SFT 数据。"
+    href: "#annealing"
+    entry: minicpm
+  - id: fineweb
+    label: FineWeb-Edu
+    date: 2024-06
+    lane: data
+    note: "大模型标注 + 小分类器筛出教育价值高的网页，知识与推理基准显著提升。"
+    href: "#data"
+    entry: fineweb
+  - id: llama3
+    label: Llama 3
+    date: 2024-07
+    lane: schedule
+    note: "退火期上采样最优数据并平均检查点；用短退火给新数据做“体检”；六段扩到 128K。"
+    href: "#annealing"
+    entry: llama3
+  - id: prolong
+    label: ProLong
+    date: 2024-10
+    lane: longctx
+    note: "长数据要混约四成高质量短数据；训练长度超过评测长度更好；SFT 用短数据即可。"
+    href: "#long-context"
+    entry: prolong
+  - id: olmo2
+    label: OLMo 2
+    date: 2024-11
+    lane: schedule
+    note: "把中训练做成一次带新配比的退火；同配比、不同数据顺序多跑几次再做模型汤。"
+    href: "#soup"
+    entry: olmo2
+  - id: deepseek-v3
+    label: DeepSeek-V3
+    date: 2024-12
+    lane: longctx
+    note: "YaRN 两段各 1000 步：4K→32K→128K，学习率沿用预训练末值。"
+    href: "#long-context"
+    entry: deepseek-v3
+  - id: nemotron-cc
+    label: Nemotron-CC
+    date: 2024-12
+    lane: data
+    note: "分类器集成 + 合成改写，保住 4 倍独立真实 token，撑起超长训练。"
+    href: "#data"
+    entry: nemotron-cc
+  - id: phi-4
+    label: Phi-4
+    date: 2024-12
+    lane: data
+    note: "合成数据占 40%、复用 13.8 轮；纯合成会伤知识类能力，必须搭配真实网页。"
+    href: "#rephrasing"
+    entry: phi-4
+  - id: megamath
+    label: MegaMath
+    date: 2025-04
+    lane: data
+    note: "371B token 开放数学语料；其 Web-Pro 子集成为“RL 友好”中训练的核心配料。"
+    href: "#data"
+    entry: megamath
+  - id: octothinker
+    label: OctoThinker
+    date: 2025-04
+    lane: post
+    note: "中训练决定 RL 能走多远：优质数学语料 + QA / 指令数据，Stable-then-Decay。"
+    href: "#rl-readiness"
+    entry: octothinker
+  - id: kimi-k2
+    label: Kimi K2 改写
+    date: 2025-07
+    lane: data
+    note: "知识与数学数据改写：改写 10 次各训 1 轮，优于原文重复 10 轮。"
+    href: "#rephrasing"
+    entry: kimi-k2
+  - id: smollm3
+    label: SmolLM3
+    date: 2025-07
+    lane: schedule
+    note: "三阶段 WSD 配比逐步收紧到代码与数学；长上下文 + 推理中训练，再用模型合并补回长文能力。"
+    href: "#annealing"
+    entry: smollm3
+  - id: agentfounder
+    label: AgentFounder
+    date: 2025-09
+    lane: post
+    note: "智能体继续预训练：合成规划 / 推理 / 决策动作数据，32K→128K 两阶段。"
+    href: "#agentic"
+    entry: agentfounder
+  - id: front-loading
+    label: Front-Loading
+    date: 2025-10
+    lane: post
+    note: "推理数据前置到预训练带来 19% 增益且 SFT 补不回；预训练重多样、SFT 重质量。"
+    href: "#rl-readiness"
+    entry: front-loading-reasoning
+  - id: midtraining-bridges
+    label: 分布桥接
+    date: 2025-10
+    lane: post
+    note: "数学 / 代码收益最大；比只用专门数据继续预训练遗忘更少；插入时机比比例更重要。"
+    href: "#rl-readiness"
+    entry: midtraining-bridges
+  - id: olmo3
+    label: Olmo 3
+    date: 2025-11
+    lane: schedule
+    note: "完全公开的三段式：100B Dolmino 中训练（含思维链、全部去污染）→ YaRN 长上下文 → 模型汤。"
+    href: "#olmo3"
+    entry: olmo3
+edges:
+  - { from: minicpm, to: olmo2, label: 衰减期换数据 }
+  - { from: llama3, to: olmo2, label: 短退火测数据 }
+  - { from: minicpm, to: smollm3, label: 末 10% 衰减 }
+  - { from: minicpm, to: octothinker, label: 稳定→衰减 }
+  - { from: olmo2, to: olmo3, label: Dolmino 升级 }
+  - { from: octothinker, to: olmo3, label: Pro-Max 入配比 }
+  - { from: nemotron-cc, to: olmo3, label: 合成 QA 入配比 }
+  - { from: yarn, to: olmo3, label: 扩到 64K }
+  - { from: yarn, to: deepseek-v3, label: 两段 YaRN }
+  - { from: llama3, to: prolong, label: 基于 Llama-3 续训 }
+  - { from: fineweb, to: nemotron-cc, label: 少丢数据 }
+  - { from: fineweb, to: smollm3, label: 网页主干 }
+  - { from: megamath, to: octothinker, label: Web-Pro 语料 }
+  - { from: megamath, to: smollm3, label: 二阶段数学 }
+  - { from: physics-of-lms, to: kimi-k2, label: 改写的机制解释 }
+  - { from: phi-4, to: kimi-k2, label: 合成扩充 token }
+  - { from: octothinker, to: front-loading, label: 推理数据前移 }
+  - { from: olmo2, to: midtraining-bridges, label: 解释为何有效 }
+  - { from: octothinker, to: agentfounder, label: 延伸到智能体 }

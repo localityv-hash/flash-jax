@@ -1,0 +1,23 @@
+{
+  "name": "post-training-atlas",
+  "private": true,
+  "type": "module",
+  "description": "后训练图谱：Agentic RL、On-Policy 蒸馏、SFT、Mid-training 与 LLM 强化学习的中文知识库",
+  "scripts": {
+    "dev": "vitepress dev docs",
+    "build": "node scripts/validate-data.mjs && vitepress build docs",
+    "preview": "vitepress preview docs",
+    "validate": "node scripts/validate-data.mjs",
+    "metrics": "node scripts/fetch-metrics.mjs"
+  },
+  "devDependencies": {
+    "@mdit/plugin-katex": "^0.24.1",
+    "js-yaml": "^4.1.0",
+    "katex": "^0.16.22",
+    "markdown-it": "^14.3.2",
+    "markdown-it-container": "^4.0.0",
+    "markdown-it-footnote": "^4.0.0",
+    "mermaid": "^11.12.0",
+    "vitepress": "^1.6.4"
+  }
+}

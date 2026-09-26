@@ -1,0 +1,123 @@
+/* 设计令牌：暖白纸面 + 墨色正文 + 青绿主色；领域色只做点缀。 */
+:root {
+  --vp-font-family-base: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'HarmonyOS Sans SC', 'MiSans', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans SC',
+    'Source Han Sans SC', sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
+
+  --vp-c-bg: #fcfcfa;
+  --vp-c-bg-alt: #f6f5f1;
+  --vp-c-bg-soft: #f1f0eb;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-divider: #e8e6df;
+  --vp-c-border: #dcdad2;
+  --vp-c-gutter: #ecebe5;
+  --vp-c-text-1: #1a1b1e;
+  --vp-c-text-2: #55575d;
+  --vp-c-text-3: #8c8e94;
+
+  --vp-c-brand-1: #0f766e;
+  --vp-c-brand-2: #0d8a80;
+  --vp-c-brand-3: #14a394;
+  --vp-c-brand-soft: rgba(13, 148, 136, 0.11);
+
+  --vp-c-tip-1: var(--vp-c-brand-1);
+  --vp-c-tip-soft: var(--vp-c-brand-soft);
+
+  --vp-home-hero-name-color: var(--vp-c-text-1);
+  --vp-nav-bg-color: rgba(252, 252, 250, 0.82);
+  --vp-sidebar-bg-color: var(--vp-c-bg);
+  --vp-code-bg: #f3f2ed;
+  --vp-code-block-bg: #f6f5f1;
+  --vp-code-font-size: 0.86em;
+  --vp-layout-max-width: 1480px;
+
+  --area-agentic: #7c3aed;
+  --area-opd: #0d9488;
+  --area-sft: #2563eb;
+  --area-mid: #c2410c;
+  --area-rl: #db2777;
+  --area-classic: #52606d;
+
+  --box-human-bg: #fff8ec;
+  --box-human-border: #f1d9ab;
+  --box-human-ink: #955a00;
+  --box-takeaway-bg: #edfaf5;
+  --box-takeaway-border: #b9e5d6;
+  --box-takeaway-ink: #0b6b5f;
+  --box-pitfall-bg: #fff3f3;
+  --box-pitfall-border: #f5caca;
+  --box-pitfall-ink: #b42323;
+  --box-insight-bg: #f5f2ff;
+  --box-insight-border: #d9cffb;
+  --box-insight-ink: #5b3cc4;
+  --box-evidence-bg: #f2f5f8;
+  --box-evidence-border: #d5dde6;
+  --box-evidence-ink: #3d4f63;
+  --box-derive-bg: #f8f7f3;
+  --box-derive-border: #e3e1d9;
+  --box-derive-ink: #3f4046;
+
+  --card-bg: #ffffff;
+  --card-border: #e7e5de;
+  --card-shadow: 0 1px 2px rgba(24, 22, 16, 0.04), 0 2px 10px rgba(24, 22, 16, 0.035);
+  --card-shadow-hover: 0 2px 6px rgba(24, 22, 16, 0.05), 0 14px 34px rgba(24, 22, 16, 0.08);
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.dark {
+  --vp-c-bg: #0d0f12;
+  --vp-c-bg-alt: #111418;
+  --vp-c-bg-soft: #171a1f;
+  --vp-c-bg-elv: #15181d;
+  --vp-c-divider: #23272e;
+  --vp-c-border: #2d323a;
+  --vp-c-gutter: #1b1e24;
+  --vp-c-text-1: #e9e8e4;
+  --vp-c-text-2: #a8aab0;
+  --vp-c-text-3: #6e7178;
+
+  --vp-c-brand-1: #3ad1bd;
+  --vp-c-brand-2: #1fb9a5;
+  --vp-c-brand-3: #0f9f8d;
+  --vp-c-brand-soft: rgba(58, 209, 189, 0.13);
+
+  --vp-nav-bg-color: rgba(13, 15, 18, 0.8);
+  --vp-code-bg: #1a1d23;
+  --vp-code-block-bg: #14171c;
+
+  --area-agentic: #a78bfa;
+  --area-opd: #2dd4bf;
+  --area-sft: #60a5fa;
+  --area-mid: #fb923c;
+  --area-rl: #f472b6;
+  --area-classic: #94a3b8;
+
+  --box-human-bg: rgba(245, 166, 35, 0.07);
+  --box-human-border: rgba(245, 166, 35, 0.26);
+  --box-human-ink: #f5b544;
+  --box-takeaway-bg: rgba(45, 212, 191, 0.07);
+  --box-takeaway-border: rgba(45, 212, 191, 0.25);
+  --box-takeaway-ink: #4fdcc8;
+  --box-pitfall-bg: rgba(248, 113, 113, 0.07);
+  --box-pitfall-border: rgba(248, 113, 113, 0.26);
+  --box-pitfall-ink: #fb8a8a;
+  --box-insight-bg: rgba(167, 139, 250, 0.08);
+  --box-insight-border: rgba(167, 139, 250, 0.26);
+  --box-insight-ink: #c0a8ff;
+  --box-evidence-bg: rgba(148, 163, 184, 0.07);
+  --box-evidence-border: rgba(148, 163, 184, 0.22);
+  --box-evidence-ink: #b6c2d1;
+  --box-derive-bg: rgba(255, 255, 255, 0.025);
+  --box-derive-border: #2a2e36;
+  --box-derive-ink: #d5d5d2;
+
+  --card-bg: #14171c;
+  --card-border: #252a31;
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --card-shadow-hover: 0 10px 30px rgba(0, 0, 0, 0.45);
+}

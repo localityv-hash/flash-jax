@@ -1,0 +1,320 @@
+/* ---------- 全局 ---------- */
+html {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  scroll-padding-top: 88px;
+}
+::selection {
+  background: rgba(20, 163, 148, 0.22);
+}
+body {
+  font-feature-settings: 'cv11', 'ss01', 'tnum' 0;
+}
+
+/* 正文列略宽于默认，公式与表格更从容 */
+@media (min-width: 1280px) {
+  .VPDoc.has-aside .content-container {
+    max-width: 780px;
+  }
+}
+.VPDoc .container {
+  max-width: 1240px;
+}
+
+/* ---------- 正文排版（中文优先） ---------- */
+.vp-doc {
+  font-size: 16px;
+  color: var(--vp-c-text-1);
+}
+.vp-doc p,
+.vp-doc li {
+  line-height: 1.86;
+  letter-spacing: 0.012em;
+}
+.vp-doc p {
+  margin: 14px 0;
+}
+.vp-doc h1 {
+  font-size: 34px;
+  line-height: 1.25;
+  font-weight: 750;
+  letter-spacing: -0.012em;
+  margin-bottom: 10px;
+}
+.vp-doc h2 {
+  margin: 60px 0 18px;
+  padding-top: 0;
+  border-top: none;
+  font-size: 25px;
+  line-height: 1.35;
+  font-weight: 720;
+  letter-spacing: -0.005em;
+}
+.vp-doc h2::after {
+  content: '';
+  display: block;
+  width: 36px;
+  height: 3px;
+  margin-top: 12px;
+  border-radius: 3px;
+  background: var(--vp-c-brand-2);
+  opacity: 0.85;
+}
+.vp-doc h3 {
+  margin: 38px 0 12px;
+  font-size: 19.5px;
+  font-weight: 680;
+}
+.vp-doc h4 {
+  margin: 26px 0 8px;
+  font-size: 16.5px;
+  font-weight: 680;
+}
+.vp-doc strong {
+  font-weight: 650;
+  color: var(--vp-c-text-1);
+}
+.vp-doc a {
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--vp-c-brand-1) 35%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.2s;
+}
+.vp-doc a:hover {
+  text-decoration-color: var(--vp-c-brand-1);
+}
+.vp-doc .header-anchor {
+  text-decoration: none;
+}
+.vp-doc blockquote {
+  border-left: 3px solid var(--vp-c-border);
+  padding: 2px 0 2px 18px;
+  color: var(--vp-c-text-2);
+}
+.vp-doc hr {
+  margin: 44px 0;
+  border-top: 1px solid var(--vp-c-divider);
+}
+.vp-doc :not(pre) > code {
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 0.86em;
+}
+.vp-doc div[class*='language-'] {
+  border-radius: var(--radius-md);
+}
+
+/* 表格：圆角卡片 + 细分隔线 */
+.vp-doc table {
+  display: table;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  font-size: 14.5px;
+  margin: 22px 0;
+}
+.vp-doc tr {
+  border-top: none;
+  background: transparent !important;
+}
+.vp-doc th,
+.vp-doc td {
+  border: none;
+  border-bottom: 1px solid var(--vp-c-divider);
+  padding: 10px 14px;
+  line-height: 1.65;
+  vertical-align: top;
+}
+.vp-doc tr:last-child td {
+  border-bottom: none;
+}
+.vp-doc th {
+  background: var(--vp-c-bg-soft);
+  font-weight: 650;
+  color: var(--vp-c-text-1);
+  white-space: nowrap;
+}
+@media (max-width: 767px) {
+  .vp-doc table {
+    display: block;
+    overflow-x: auto;
+  }
+}
+
+/* KaTeX */
+.vp-doc .katex {
+  font-size: 1.06em;
+}
+.vp-doc .katex-display {
+  margin: 18px 0;
+  padding: 4px 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.vp-doc .katex-display > .katex {
+  font-size: 1.1em;
+}
+
+/* 脚注：带回跳链接 */
+.vp-doc .footnotes {
+  margin-top: 48px;
+  font-size: 14px;
+  color: var(--vp-c-text-2);
+}
+.vp-doc .footnotes-sep {
+  margin: 40px 0 16px;
+}
+.vp-doc .footnote-ref a,
+.vp-doc .footnote-backref {
+  text-decoration: none;
+}
+
+/* ---------- 内容盒子 ---------- */
+.vp-doc .box {
+  margin: 22px 0;
+  padding: 14px 18px 4px;
+  border: 1px solid var(--box-border);
+  border-radius: var(--radius-md);
+  background: var(--box-bg);
+}
+.vp-doc .box > p:not(.box-title),
+.vp-doc .box li {
+  font-size: 15px;
+  line-height: 1.8;
+}
+.vp-doc .box-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 4px !important;
+  font-size: 13.5px;
+  line-height: 1.5 !important;
+}
+.vp-doc .box-label {
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  color: var(--box-ink);
+}
+.vp-doc .box-sub {
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+  font-size: 14.5px;
+}
+.vp-doc .box > *:last-child {
+  margin-bottom: 12px;
+}
+.vp-doc .box-human {
+  --box-bg: var(--box-human-bg);
+  --box-border: var(--box-human-border);
+  --box-ink: var(--box-human-ink);
+}
+.vp-doc .box-takeaway {
+  --box-bg: var(--box-takeaway-bg);
+  --box-border: var(--box-takeaway-border);
+  --box-ink: var(--box-takeaway-ink);
+}
+.vp-doc .box-pitfall {
+  --box-bg: var(--box-pitfall-bg);
+  --box-border: var(--box-pitfall-border);
+  --box-ink: var(--box-pitfall-ink);
+}
+.vp-doc .box-insight {
+  --box-bg: var(--box-insight-bg);
+  --box-border: var(--box-insight-border);
+  --box-ink: var(--box-insight-ink);
+}
+.vp-doc .box-evidence {
+  --box-bg: var(--box-evidence-bg);
+  --box-border: var(--box-evidence-border);
+  --box-ink: var(--box-evidence-ink);
+}
+
+/* 推导：默认折叠 */
+.vp-doc details.box-derive {
+  --box-bg: var(--box-derive-bg);
+  --box-border: var(--box-derive-border);
+  --box-ink: var(--box-derive-ink);
+  padding: 0 18px;
+}
+.vp-doc details.box-derive > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 13px 0;
+  font-size: 13.5px;
+  user-select: none;
+}
+.vp-doc details.box-derive > summary::-webkit-details-marker {
+  display: none;
+}
+.vp-doc details.box-derive > summary::after {
+  content: '';
+  margin-left: auto;
+  align-self: center;
+  width: 7px;
+  height: 7px;
+  border-right: 1.6px solid var(--vp-c-text-3);
+  border-bottom: 1.6px solid var(--vp-c-text-3);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.2s var(--ease);
+}
+.vp-doc details.box-derive[open] > summary::after {
+  transform: rotate(-135deg) translateY(-1px);
+}
+.vp-doc details.box-derive[open] > summary {
+  border-bottom: 1px dashed var(--box-border);
+  margin-bottom: 6px;
+}
+.vp-doc details.box-derive > *:last-child {
+  margin-bottom: 16px;
+}
+
+/* VitePress 自带 tip/warning 与站内风格统一 */
+.vp-doc .custom-block {
+  border-radius: var(--radius-md);
+}
+
+/* 侧边栏与导航微调 */
+.VPSidebarItem.level-0 > .item > .text {
+  font-size: 12.5px;
+  letter-spacing: 0.08em;
+  color: var(--vp-c-text-3);
+  font-weight: 650;
+}
+.VPNavBarTitle .title {
+  font-weight: 750;
+  letter-spacing: 0.02em;
+}
+.VPDocAsideOutline .outline-title {
+  letter-spacing: 0.06em;
+}
+
+/* 通用小组件 */
+.atlas-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-2);
+  background: var(--vp-c-bg);
+}
+.atlas-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c, var(--vp-c-brand-2));
+  flex: none;
+}

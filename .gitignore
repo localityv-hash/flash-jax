@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Site (VitePress)
+node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+.qa/

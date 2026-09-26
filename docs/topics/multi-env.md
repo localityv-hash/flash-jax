@@ -27,9 +27,9 @@ SFT 时代给模型的是“题库加标准答案”；RL 时代给它的是“�
 
 这一判断最有影响力的表述来自 Shunyu Yao 2025 年 4 月的长文 *The Second Half*[^yao]。作者是 ReAct 与 τ-bench 的作者，文章基于他在斯坦福 CS224N 与哥伦比亚大学的演讲整理。核心论证分三步：
 
-1. RL 有三个要素：算法、环境、先验。过去几十年研究者主要在改算法，而事后看来最重要的是先验（语言预训练），其次是环境设计（把“推理”加进动作空间）；一旦两者到位，“算法反而可能是最不关键的部分”。
+1. RL 有三个要素：算法、环境、先验。过去几十年研究者主要在改算法，事后看来最重要的却是先验（语言预训练）；有了好的先验，再把“推理”作为一种动作加进环境，“RL 算法反而可能是最不关键的部分”。
 2. 这套通用配方能把几乎任何基准刷上去，所以“再造一个更难的考试”越来越快被解决；AI 的下半场要从“解决问题”转向“定义问题”，**评测比训练更重要**。
-3. 真正的瓶颈是“效用问题”：现有评测设定和真实世界不同，例如默认全自动运行（真实任务需要与人交互）、默认 i.i.d.（真实工作是顺序进行、会积累经验）。
+3. 作者认为最重要的问题是“效用问题”：AI 在考试上超过了大多数人，世界却没有因此改变多少；根源之一是评测设定与真实世界不同，例如默认全自动运行（真实任务需要与人交互）、默认 i.i.d.（真实工作是顺序进行、会积累经验）。
 
 这是一篇观点文章，没有对照实验；它的价值在于判断方向，而这个方向很快被工业实践印证：
 
@@ -68,7 +68,7 @@ flowchart LR
 逐个部件看，每一个都有可以踩的坑：
 
 1. **任务分布。** 来自固定数据集、程序化生成器或合成流水线；必须能按难度调节，并预留与训练分布隔离的留出集。
-2. **观测与动作接口。** 通常是对话消息加工具的 JSON schema（函数调用或 MCP）。关键约束是**上下文只追加、不改写**：verifiers 明确要求 rollout 中的 token 序列单调递增，否则训练时重算的 token 和采样时对不上；像 Qwen3 这类会从历史中删掉思考内容的聊天模板因此需要专门处理[^verifiers]。NeMo Gym 2026 年的版本在支持外部 harness 做 RL 时，也特别强调“在多步运行中保留精确的 token id”[^nemo]（相关问题见 [训推不一致](/lenses/infra#mismatch)）。
+2. **观测与动作接口。** 通常是对话消息加工具的 JSON schema（函数调用或 MCP）。关键约束是**上下文只追加、不改写**：verifiers 明确要求 rollout 中的 token 序列只增不改——一个 token 一旦进入上下文，之后就必须原样保留——否则训练时重算的 token 和采样时对不上；像 Qwen3 这类会从历史中删掉思考内容的聊天模板因此需要专门处理[^verifiers]。NeMo Gym 2026 年的版本在支持外部 harness 做 RL 时，也特别强调“在多步运行中保留精确的 token id”[^nemo]（相关问题见 [训推不一致](/lenses/infra#mismatch)）。
 3. **工具。** 无状态工具（计算器、检索）只是函数；有状态工具（shell、数据库、浏览器、虚拟机）才需要沙箱。verifiers 的 `ToolEnv` 要求工具幂等、无状态，需要注入沙箱句柄或凭证时升级为 `StatefulToolEnv`[^verifiers]。
 4. **状态与重置。** 每个回合必须有隔离且可一键恢复的初始状态：τ-bench 与 AgentScaler 用数据库初始态，OSWorld 用虚拟机快照，SWE 环境用容器镜像。Kimi K3 的 microVM 沙箱还支持 **fork**：从完全相同的状态复制一个沙箱专门用来判分，避免判分操作污染现场[^k3]。
 5. **终止条件。** 模型给出最终回答、不再调用工具（verifiers 的 `ToolEnv` 即以此结束）、超过最大轮数、超过 token 或时间预算。被截断的轨迹怎么计奖励要单独约定，否则会悄悄变成长度惩罚。
@@ -100,7 +100,7 @@ flowchart LR
 | [NeMo Gym](/library/?id=nemo-gym)（NVIDIA） | 数据集 + harness + 验证器 + 逐任务状态 | 独立资源服务；多种沙箱后端 | Nemotron 生产训练与评测 |
 | [GEM](/library/?id=gem-env)（Axon RL） | Gym 式接口 + 包装器，异步向量化 | 进程内或工具服务 | 多轮 RL 算法研究 |
 | [TextArena](/library/?id=textarena) | 多玩家文本游戏 | 进程内 | 自博弈与对战评测 |
-| [Reasoning Gym](/library/?id=reasoning-gym) 等 | 生成器 + 验证器（无状态） | 纯函数 | RLVR 题目供给 |
+| [Reasoning Gym](/library/?id=reasoning-gym) / [InternBootcamp](/library/?id=internbootcamp) | 生成器 + 验证器（无状态） | 纯函数 | RLVR 题目供给 |
 | Harbor（[Terminal-Bench](/library/?id=terminal-bench) 团队） | 任务目录：指令、容器、测试、参考解 | Docker、Daytona、Modal 等云沙箱 | 终端 / SWE 评测与 rollout 生成 |
 
 三个趋势值得注意：
@@ -290,9 +290,9 @@ sequenceDiagram
 
 几条来自一线报告的经验：
 
-1. **重环境做成独立服务，用并发摊薄延迟。** Kimi K2 把虚拟机、代码解释器这类重环境部署为可独立扩容的服务，并同时运行大量 rollout，避免 GPU 空等；对超长的尾部轨迹用 <Term t="partial-rollout">partial rollout</Term>，暂停后在下一轮继续；并设计了受 Gym 启发的统一接口来接入新环境[^k2]。Tongyi DeepResearch 则把推理服务与工具服务拆成两个异步服务器，由中央处理器汇总成消息列表，实现步级别的异步 rollout[^tongyi]（见 [异步 RL](/lenses/infra#async)）。
+1. **重环境做成独立服务，用并发摊薄延迟。** Kimi K2 把虚拟机、代码解释器这类重环境部署为可独立扩容的服务，并同时运行大量 rollout，避免 GPU 空等；对超长的尾部轨迹用 <Term t="partial-rollout">partial rollout</Term>，暂停后在下一轮继续；并设计了受 Gym 启发的统一接口来接入新环境[^k2]。Tongyi DeepResearch 则把推理服务与工具服务拆成两个异步服务器，由一个集中的交互处理模块把两边的输出整理成统一的消息列表，实现步级别的异步 rollout[^tongyi]（见 [异步 RL](/lenses/infra#async)）。
 2. **按工作流编排、判分与采样分离。** Qwen3-Coder-Next 在 Kubernetes 上把每个编程任务表示为“rollout、评测、后处理”三段式工作流：rollout 时智能体容器与环境容器同处一个 pod，评测在独立容器里执行[^qcn]。
-3. **隔离强度要跟上模型的“破坏力”。** Kimi K3 在早期用容器运行时观察到智能体的意外操作引发内核崩溃和死锁，于是改用 Firecracker microVM：检查点和恢复分别只需约 133 ms 和 49 ms；等待模型推理时把沙箱暂停（这段时间可占沙箱生命周期的 98%）；用 fork 出的副本做无副作用的判分[^k3]。
+3. **隔离强度要跟上模型的“破坏力”。** Kimi K3 在早期用容器运行时观察到智能体的意外操作引发内核崩溃和死锁，于是改用 Firecracker microVM：检查点和恢复延迟最低分别约 133 ms 和 49 ms；等待模型推理时把沙箱暂停（这段时间可占沙箱生命周期的 98%）；用 fork 出的副本做无副作用的判分[^k3]。
 4. **可复现靠版本化。** 镜像、数据库初始态、工具版本、验证器版本都要进 rollout 日志；评测侧同理（见 [评测：智能体评测](/lenses/eval#agent-eval)）。
 
 ## 演化脉络 {#lineage}

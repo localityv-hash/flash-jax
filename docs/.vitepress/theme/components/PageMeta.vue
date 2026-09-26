@@ -14,11 +14,18 @@ const prereq = computed<{ text: string; link: string }[]>(() => frontmatter.valu
 function measure(): void {
   const doc = document.querySelector('.vp-doc')
   if (!doc) return
-  const text = doc.textContent ?? ''
+  // 只数正文：折叠的推导、脚注、条目卡片、图表和公式渲染出的重复文本都不算
+  const clone = doc.cloneNode(true) as HTMLElement
+  clone
+    .querySelectorAll('.katex, details, .footnotes, .entry, .entry-grid-more, .lineage, .mermaid-figure')
+    .forEach((el) => el.remove())
+  const text = clone.textContent ?? ''
   const cjk = (text.match(/[㐀-鿿]/g) ?? []).length
   const words = (text.replace(/[㐀-鿿]/g, ' ').match(/[A-Za-z0-9]+/g) ?? []).length
-  // 中文约 400 字/分钟，英文约 200 词/分钟，公式与图另计一点余量
-  const m = cjk / 400 + words / 200 + doc.querySelectorAll('.katex-display, .mermaid-figure, .lineage').length * 0.4
+  // 中文约 400 字/分钟，英文约 200 词/分钟；独立公式与图各留一点时间
+  const figures = doc.querySelectorAll('.mermaid-figure, .lineage').length
+  const display = doc.querySelectorAll(':not(details) > .katex-display').length
+  const m = cjk / 400 + words / 200 + figures * 0.4 + display * 0.2
   minutes.value = Math.max(1, Math.round(m))
 }
 
@@ -31,7 +38,7 @@ watch(() => route.path, () => setTimeout(measure, 120))
     <div class="page-meta-row">
       <span v-if="kicker" class="page-kicker">{{ kicker }}</span>
       <span v-if="level" class="page-pill">{{ level }}</span>
-      <span v-if="minutes" class="page-pill">约 {{ minutes }} 分钟</span>
+      <span v-if="minutes && frontmatter.readingTime !== false" class="page-pill">约 {{ minutes }} 分钟</span>
     </div>
     <div v-if="prereq.length" class="page-prereq">
       <span class="page-prereq-label">建议先读</span>

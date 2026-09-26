@@ -1,6 +1,7 @@
 ---
 title: 术语表
 kicker: 工具
+readingTime: false
 ---
 
 # 术语表

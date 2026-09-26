@@ -17,6 +17,8 @@ const tiers = ref<Tier[]>([])
 const evidence = ref<Evidence[]>([])
 const sort = ref<SortKey>('tier')
 const focusId = ref<string | null>(null)
+const PAGE = 24
+const shown = ref(PAGE)
 
 const all = data.entries
 const kindOrder = computed(() => (Object.keys(KINDS) as Kind[]).filter((k) => all.some((e) => e.kind === k)))
@@ -106,13 +108,21 @@ function writeUrl(): void {
   history.replaceState(history.state, '', `${location.pathname}${s ? `?${s}` : ''}${location.hash}`)
 }
 
+const visible = computed(() => results.value.slice(0, shown.value))
+
 onMounted(async () => {
   readUrl()
   if (focusId.value) {
+    // 确保被定位的条目在已渲染的范围内
+    const i = results.value.findIndex((e) => e.id === focusId.value)
+    if (i >= shown.value) shown.value = i + PAGE / 2
     await nextTick()
     document.getElementById(`entry-${focusId.value}`)?.scrollIntoView({ block: 'center' })
   }
-  watch([q, areas, facets, kinds, tiers, evidence, sort], writeUrl)
+  watch([q, areas, facets, kinds, tiers, evidence, sort], () => {
+    shown.value = PAGE
+    writeUrl()
+  })
 })
 </script>
 
@@ -170,8 +180,12 @@ onMounted(async () => {
     </div>
 
     <div class="lib-list">
-      <EntryCard v-for="e in results" :key="e.id" :id="e.id" :highlight="e.id === focusId" :open="e.id === focusId" />
+      <EntryCard v-for="e in visible" :key="e.id" :id="e.id" :highlight="e.id === focusId" :open="e.id === focusId" />
       <p v-if="!results.length" class="lib-empty">没有符合条件的条目，试试放宽筛选。</p>
+    </div>
+    <div v-if="results.length > shown" class="lib-more">
+      <button type="button" @click="shown += PAGE">再显示 {{ Math.min(PAGE, results.length - shown) }} 条</button>
+      <button type="button" class="ghost" @click="shown = results.length">全部显示（{{ results.length }}）</button>
     </div>
   </section>
 </template>
@@ -304,6 +318,32 @@ onMounted(async () => {
 .lib-list {
   display: grid;
   gap: 12px;
+}
+.lib-more {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 22px 0 8px;
+}
+.lib-more button {
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 11px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+  background: var(--card-bg);
+  border: 1px solid var(--vp-c-divider);
+  box-shadow: var(--card-shadow);
+  transition: box-shadow 0.2s, color 0.2s;
+}
+.lib-more button:hover {
+  color: var(--vp-c-brand-1);
+  box-shadow: var(--card-shadow-hover);
+}
+.lib-more button.ghost {
+  background: transparent;
+  box-shadow: none;
 }
 .lib-empty {
   padding: 40px 0;

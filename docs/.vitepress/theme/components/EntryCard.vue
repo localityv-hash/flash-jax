@@ -40,7 +40,7 @@ const metrics = computed(() => {
     <header class="entry-head">
       <span class="entry-tier" :title="TIERS[entry.tier].hint">{{ TIERS[entry.tier].label }}</span>
       <span class="entry-kind">{{ KINDS[entry.kind] }}</span>
-      <span class="entry-meta">{{ entry.org }} · {{ month(entry.date) }}</span>
+      <span class="entry-meta" :title="entry.org"><span class="entry-org">{{ entry.org }}</span> · {{ month(entry.date) }}</span>
       <span class="entry-areas">
         <span v-for="a in entry.areas" :key="a" class="entry-area" :style="{ '--c': AREAS[a].color }" :title="AREAS[a].label">
           <span class="atlas-dot" />{{ AREAS[a].short }}
@@ -144,6 +144,19 @@ const metrics = computed(() => {
 .entry-kind {
   font-weight: 600;
   color: var(--vp-c-text-2);
+}
+.entry-meta {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.entry-org {
+  display: inline-block;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 .entry-areas {
   display: inline-flex;
@@ -269,7 +282,8 @@ const metrics = computed(() => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 4px;
+  margin-top: auto;
+  padding-top: 4px;
 }
 .entry-links {
   display: flex;

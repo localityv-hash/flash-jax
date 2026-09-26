@@ -1,0 +1,70 @@
+# 数据横切视角（/lenses/data）的术语。字段均按纯文本渲染，公式用 Unicode 书写。
+
+- id: pass-rate
+  term: 通过率
+  full: Pass Rate
+  zh: 通过率
+  area: rl-llm
+  plain: "同一道题让模型做 N 遍，做对的比例。它是“这道题对当前这个模型有多难”最直接的读数。"
+  definition: "对提示 x 采样 N 个回答并用验证器判对错，p̂ = K/N 是成功概率 p 的无偏估计，方差为 p(1−p)/N（N=8、p=0.5 时标准误约 0.18）。难度过滤、课程与在线重估都建立在它之上。注意区分 pass@k：后者是“k 次里至少对一次”的概率。"
+  see: [/lenses/data#difficulty, /lenses/eval#pass-at-k]
+
+- id: difficulty-filtering
+  term: 难度过滤
+  full: Difficulty Filtering
+  zh: 难度过滤
+  area: rl-llm
+  plain: "先让模型把每道题做几遍：全对的太简单、全错的太难，都先拿掉，把算力花在“有时对、有时错”的题上。"
+  definition: "用当前（或相近）模型对每个提示采样估计通过率 p̂，只保留落在某个区间内的提示，例如 1–15/16（Skywork-OR1）或严格介于 0 与 0.9 之间（MiniMax-M1）。依据是二值奖励下，一组 G 个回答全对或全错的概率为 pᴳ + (1−p)ᴳ，这些组的组内优势全为零、不贡献奖励梯度。可离线做一次，也可在训练中按最新 rollout 在线更新。"
+  see: [/lenses/data#difficulty]
+
+- id: curriculum-learning
+  term: 课程学习
+  full: Curriculum Learning
+  zh: 课程学习
+  area: rl-llm
+  plain: "按学生当前水平排题：先练够得着的，再逐步加难；已经稳会的题少出，快要会的题多出。"
+  definition: "按难度或学习进度安排训练数据的顺序与采样权重。LLM RL 中常见的做法有：按离线难度标签分阶段、按在线通过率 s 做优先采样（如 Kimi k1.5 按 1−s 抽题）、每阶段结束剔除已掌握的题（如 POLARIS 删准确率 >0.9 的题），以及定期把新“变得可学”的题补回题池。"
+  see: [/lenses/data#difficulty]
+
+- id: answer-normalization
+  term: 答案归一化
+  full: Answer Normalization
+  zh: 答案归一化
+  area: rl-llm
+  plain: "“1/2”“0.5”“50%”其实可能是同一个答案；判分前先把两边都整理成统一形式，再比较是否相等。"
+  definition: "规则验证的核心步骤：从模型输出与参考答案中抽取最终答案，清洗 LaTeX、单位、百分号、集合与区间写法，转成统一表示（如 SymPy 表达式），再做字符串、符号与数值容差比较。它直接决定奖励的假阴性率（对的判错）与假阳性率（可被钻空子）。数据侧的配套做法是把答案改写成易验证的形式，例如 DAPO 把答案统一改写为整数。"
+  see: [/lenses/data#answer-normalization]
+
+- id: decontamination
+  term: 去污染
+  full: Decontamination
+  zh: 去污染
+  plain: "训练前把和考试题“撞题”的数据删掉，免得模型靠背答案拿分，而不是真的会做。"
+  definition: "检测并移除训练数据中与评测集重合或高度相似的样本。常见三级筛查：归一化后的词级 n-gram 重叠（如 8-gram）→ 嵌入相似度检索 → 对候选做 LLM 判定，专门捕捉改写与翻译过的题。教师模型合成的数据、RL 提示集和 SFT 回答都要检查；它只能保证训练数据干净，基座预训练阶段的泄漏要靠干净的新基准来识别。"
+  see: [/lenses/data#contamination-case, /lenses/eval#contamination]
+
+- id: deduplication
+  term: 去重
+  full: Deduplication
+  zh: 去重
+  plain: "同一道题换个说法出现了好几次，模型就会在它上面花太多力气；去重就是把这些重复删掉。"
+  definition: "在数据集内部和跨数据源移除完全重复与近重复样本：精确哈希、MinHash/LSH（近重复）、嵌入相似度（语义重复，如 SemDeDup）。后训练里还有两个特有要求：多个开源题库合并前要跨源去重；RL 提示集要与 SFT 数据隔离，避免模型在 RL 阶段遇到已经背过答案的题。"
+  see: [/lenses/data#sft-pipeline, /lenses/data#rlvr-pipeline]
+
+- id: synthetic-data
+  term: 合成数据
+  full: Synthetic Data
+  zh: 合成数据
+  area: sft
+  plain: "让模型自己（或更强的老师模型）出题、写答案，再用规则、测试或评判把错的筛掉，拿来训练。"
+  definition: "由模型生成的训练数据，分三类：问题合成（Self-Instruct、Magpie、从文档或代码反向出题）、回答合成（教师蒸馏、拒绝采样）、任务与环境合成（工具规格、代码仓库里注入的 bug、带判据的智能体任务）。质量主要由生成之后的验证、过滤与去重决定，而不是生成本身。"
+  see: [/lenses/data#sft-pipeline, /lenses/data#agentic-data]
+
+- id: data-flywheel
+  term: 数据飞轮
+  full: Data Flywheel
+  zh: 数据飞轮
+  plain: "模型变强了，就用它生成更好的训练数据，再训出更强的模型，一圈一圈转起来。"
+  definition: "把训练后的模型当作下一轮的数据生成器：对提示采样、用验证器或评判器筛选（拒绝采样），再做 SFT 或 RL，如此迭代。STaR、ReST-EM 是学术原型；DeepSeek-R1 用 RL 收敛后的检查点拒绝采样出约 80 万条 SFT 数据，Qwen3 用第二阶段 RL 模型为第三阶段生成思考数据，都是工业实例。主要风险是多样性塌缩、偏向简单题，以及验证器误差被逐轮放大。"
+  see: [/lenses/data#flywheel]

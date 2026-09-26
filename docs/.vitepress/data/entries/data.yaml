@@ -1,0 +1,246 @@
+# 数据横切视角（/lenses/data）的条目：RL/SFT 数据集、验证与去污染工具、数据选择方法。
+# 各阶段的数据细节分别归属 /topics/sft、/topics/mid-training、/topics/multi-env；这里只收“数据工作流”本身的关键资源。
+# 字段按纯文本渲染，公式用 Unicode 书写。
+
+# ---------- 验证与工具 ----------
+
+- id: math-verify
+  title: "Math-Verify"
+  short: Math-Verify
+  kind: project
+  org: Hugging Face
+  date: 2025-01
+  repo: huggingface/Math-Verify
+  links:
+    - { label: "博客：用 Math-Verify 修正 Open LLM Leaderboard", url: "https://huggingface.co/blog/math_verify_leaderboard" }
+  areas: [rl-llm]
+  facets: [eval, data]
+  tier: must
+  evidence: [industrial, adopted, open-source]
+  evidence_note: "Hugging Face 用它替换 Open LLM Leaderboard 的数学判分器，重评了全部 3,751 个模型，平均每个模型多判对约 61 题；小米 MiMo-7B 直接用它做数学 RL 的规则奖励，NVIDIA NeMo Gym 的数学环境、阶跃星辰 Open-Reasoner-Zero 的评测、verl 的内置 reward 与 Open-R1 的 accuracy_reward 都调用它。"
+  summary: "规则式数学判分库：格式无关地抽取答案，归一化 LaTeX、单位与百分号后转成 SymPy，再做字符串、符号与数值容差比较，覆盖集合、区间与矩阵；部分比较刻意不对称，防止模型钻空子。"
+  plain: "像一位不挑写法的判卷老师：“0.5”和“1/2”写法不同也算同一个答案；但把题目里的不等式原样抄回来冒充答案，不给分。"
+  takeaways:
+    - "做数学 RLVR 时要求模型把最终答案写进 \\boxed{}，并把抽取优先级设成 boxed 优先，可以明显减少“答对却判错”。"
+    - "参考答案本身解析失败时跳过该样本（Open-R1 记为 None），不要给 0 分，否则是在惩罚数据错误而不是模型。"
+    - "验证放进带超时的子进程（SymPy 化简可能卡死），奖励与评测用同一套配置，训练曲线和榜单分数才可比。"
+  tags: [答案归一化, 规则奖励, 数学评测]
+
+- id: sandbox-fusion
+  title: "SandboxFusion"
+  short: SandboxFusion
+  kind: project
+  org: ByteDance Seed
+  date: 2024-10
+  repo: bytedance/SandboxFusion
+  url: https://bytedance.github.io/SandboxFusion/
+  links:
+    - { label: "论文：FullStack Bench（arXiv 2412.00535）", url: "https://arxiv.org/abs/2412.00535" }
+  areas: [rl-llm, agentic-rl]
+  facets: [env, data]
+  tier: ref
+  evidence: [open-source]
+  evidence_note: "ByteDance Seed 代码团队开源、随 FullStack Bench 论文发布的判题沙箱；verl 内置了调用它的代码奖励后端和多轮工具示例。暂未见其他团队在技术报告里点名采用，因此列为参考。"
+  summary: "LLM 代码的隔离执行与判题服务：支持二十多种语言和 Jupyter 模式，内置 HumanEval、MBPP、CodeContests 等数据集的判题逻辑，可直接充当代码 RLVR 的奖励后端。"
+  plain: "给模型写的代码准备一个隔离的考场：代码在里面跑、按测试给分，就算写出死循环或危险操作也不影响外面。"
+  takeaways:
+    - "代码 RL 的吞吐常卡在判题而不是生成：把沙箱做成独立服务并发跑测试，每次执行都设超时与资源上限。"
+    - "stdin/stdout 判题要统一行尾与空白的比较规则，否则会出现成批的“答案对、判错”。"
+  tags: [代码沙箱, 判题, 代码 RL]
+
+- id: llm-decontaminator
+  title: "Rethinking Benchmark and Contamination for Language Models with Rephrased Samples"
+  short: LLM Decontaminator
+  kind: paper
+  org: LMSYS · UC Berkeley
+  authors: "Shuo Yang et al."
+  date: 2023-11
+  arxiv: "2311.04850"
+  repo: lm-sys/llm-decontaminator
+  links:
+    - { label: 博客, url: "https://lmsys.org/blog/2023-11-14-llm-decontaminator/" }
+  areas: [sft, mid-training]
+  facets: [data, eval]
+  tier: rec
+  evidence: [open-source, ablation, community]
+  evidence_note: "LMSYS 出品、工具开源；用“在改写后的测试题上训练”的对照实验直接量化了 n-gram 去污染的漏检，并在 RedPajama、StarCoder、多个指令数据集以及 GPT 合成数据上报告了重合率，是数据污染方向被广泛引用的工作。"
+  summary: "证明 n-gram 匹配挡不住改写或翻译过的测试题（13B 模型借此可在多个基准上逼近 GPT-4），提出“嵌入检索 + LLM 判定”的去污染器，并在 RedPajama、StarCoder 中查出 8–18% 的 HumanEval 重合。"
+  plain: "考题换个说法、换种语言，逐字比对就查不出来了；它先找出“长得像”的训练样本，再请大模型判断是不是同一道题。"
+  takeaways:
+    - "n-gram 去污染只是第一道筛：对要对外报告的基准，再加一层嵌入检索 + LLM 复核，专抓改写题。"
+    - "教师模型合成的数据同样可能带出基准题，蒸馏数据入库前也要走一遍去污染。"
+  tags: [去污染, 改写检测, 评测可信度]
+
+# ---------- 数据集与数据工程项目 ----------
+
+- id: open-r1
+  title: "Open R1: A fully open reproduction of DeepSeek-R1"
+  short: Open-R1
+  kind: project
+  org: Hugging Face
+  date: 2025-01
+  repo: huggingface/open-r1
+  url: https://huggingface.co/blog/open-r1
+  links:
+    - { label: OpenR1-Math-220k, url: "https://huggingface.co/datasets/open-r1/OpenR1-Math-220k" }
+    - { label: Mixture-of-Thoughts, url: "https://huggingface.co/datasets/open-r1/Mixture-of-Thoughts" }
+    - { label: CodeForces-CoTs, url: "https://huggingface.co/datasets/open-r1/codeforces-cots" }
+  areas: [sft, rl-llm]
+  facets: [data, infra]
+  tier: must
+  evidence: [adopted, open-source, community]
+  evidence_note: "阶跃星辰 Open-Reasoner-Zero 的扩展数学集主要由 OpenR1-Math-220k 清洗而来，360 的 Light-R1 从中收集训练题，OpenThoughts2-1M 也混入了 OpenR1-Math；仓库是 GitHub 上关注度最高的 R1 复现项目之一，数据、脚本与评测复现全部公开。"
+  summary: "Hugging Face 主导的 DeepSeek-R1 全开源复现：公开 R1 蒸馏数据集（Mixture-of-Thoughts 含 35 万条已验证轨迹），以及去污染、通过率过滤、沙箱代码奖励和 SFT/GRPO 脚本。"
+  plain: "把 DeepSeek-R1“怎么造数据、怎么训”的每个环节都用开源工具重做一遍并公开，是一份可以照着跑的配方。"
+  takeaways:
+    - "自建蒸馏数据可以直接套它的流水线：多次采样 → Math-Verify 验证 → 8-gram 去污染与去重 → 按通过率筛 RL 提示。"
+    - "Qwen 基座做 SFT 时 EOS 要与 chat template 一致（<|im_end|>）；拿 R1-Distill 做 GRPO 要改写其默认模板，它会丢弃思考内容并预填 <think>，干扰格式奖励。"
+  builds_on: [deepseek-r1, numinamath, s1, math-verify]
+  tags: [R1 复现, 蒸馏数据, 去污染, GRPO]
+
+- id: kodcode
+  title: "KodCode: A Diverse, Challenging, and Verifiable Synthetic Dataset for Coding"
+  short: KodCode
+  kind: dataset
+  org: Microsoft GenAI · 华盛顿大学 · UT Austin
+  authors: "Zhangchen Xu et al."
+  date: 2025-03
+  venue: ACL 2025
+  arxiv: "2503.02951"
+  repo: KodCode-AI/kodcode
+  url: https://kodcode-ai.github.io/
+  links:
+    - { label: "KodCode-V1（RL）", url: "https://huggingface.co/datasets/KodCode/KodCode-V1" }
+    - { label: "KodCode-V1-SFT-R1", url: "https://huggingface.co/datasets/KodCode/KodCode-V1-SFT-R1" }
+  areas: [rl-llm, sft]
+  facets: [data]
+  tier: must
+  evidence: [adopted, open-source, ablation, community]
+  evidence_note: "Kimi K2 技术报告把 KodCode 列为竞赛编程 RL 的开源题源之一，MiniCPM4 的代码数据也包含 KodCode；论文验证了自验证机制的有效性、做了污染分析与 SFT 对比实验，ACL 2025 录用，并获 ICML 2025 DataWorld 研讨会最佳论文。"
+  summary: "全合成可验证代码数据：12 类来源合成题目并语义去重，GPT-4o 同写解答与单元测试、执行互验（难题最多重试 10 次），共 44.7 万组“题-解-测试”，另用 R1 按测试拒绝采样出 SFT 数据。"
+  plain: "让模型自己出编程题、写答案、再写测试来检查答案；只有过了测试的题才留下，所以每道题都自带判卷器。"
+  takeaways:
+    - "合成可验证数据时别把一次没通过自检的题直接扔掉：给难题多次重试，用重试成功率当难度标签，否则数据会整体偏简单。"
+    - "RL 用“题-解-测试”三元组，SFT 用多次采样后只保留过测试的回答；两份数据共用题目时，注意别让 RL 题提前出现在 SFT 里。"
+  tags: [代码 RL, 单元测试, 合成数据, 拒绝采样]
+
+- id: deepmath-103k
+  title: "DeepMath-103K: A Large-Scale, Challenging, Decontaminated, and Verifiable Mathematical Dataset for Advancing Reasoning"
+  short: DeepMath-103K
+  kind: dataset
+  org: 腾讯 AI Lab · 上海交通大学
+  authors: "Zhiwei He et al."
+  date: 2025-04
+  arxiv: "2504.11456"
+  repo: zwhe99/DeepMath
+  links:
+    - { label: 数据集, url: "https://huggingface.co/datasets/zwhe99/DeepMath-103K" }
+  areas: [rl-llm, sft]
+  facets: [data]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "数据、训练代码与 DeepMath-Zero 等模型权重全部开源，被多个开源 RL 项目直接用作数学训练集（如 RLVE 仓库提供了用它训练 OpenThinker3-1.5B 的脚本）；尚未见工业级模型公开采用。"
+  summary: "约 10.3 万道偏难（主要 5–9 级）的数学题，主要取自 StackExchange 问答，经语义匹配对常见基准去污染；每题附可验证答案、难度分、主题标签与三条 R1 解答。"
+  plain: "专挑“难、而且答案能自动判对错”的数学题，并提前删掉和考试题撞车的，适合拿来做强化学习。"
+  takeaways:
+    - "训练奖励很快饱和时，换一批更难、且当前模型通过率不为零的题，通常比继续加量更有效。"
+    - "精心去污染的数据集也会漏掉“题面里泄露答案”的样本（该数据集发布后修正了 48 条），入库前抽检题面是否自带答案。"
+  builds_on: [numinamath]
+  tags: [数学 RL, 去污染, 难题]
+
+- id: big-math
+  title: "Big-Math: A Large-Scale, High-Quality Math Dataset for Reinforcement Learning in Language Models"
+  short: Big-Math
+  kind: dataset
+  org: SynthLabs · Stanford
+  authors: "Alon Albalak et al."
+  date: 2025-02
+  arxiv: "2502.17387"
+  repo: SynthLabsAI/big-math
+  links:
+    - { label: 数据集, url: "https://huggingface.co/datasets/SynthLabsAI/Big-Math-RL-Verified" }
+  areas: [rl-llm]
+  facets: [data]
+  tier: rec
+  evidence: [open-source, community]
+  evidence_note: "过滤信号、语义去重与选择题改写的代码全部开源，每一步过滤都可以在仓库里复现；是较早专门为 RL 构建的大规模开源数学题集之一，常被后续 RLVR 数据工作用作数据源和对照。"
+  summary: "专为 RL 构建的数学题集：用规则与模型信号剔除选择、判断、证明、多小问等不易验证的题，做语义去重，把部分选择题改写成开放式问题，并附 Llama-3.1-8B 采样 64 次的解题率。"
+  plain: "只留下“答案唯一、能自动核对、没法靠蒙”的数学题，并标出每道题对一个 8B 模型有多难，方便按难度挑题。"
+  takeaways:
+    - "清洗 RL 数学题时逐条检查三件事：答案是否唯一可验证、题目是否开放式、答案是否为闭式表达；缺一项就会产生噪声奖励或可猜奖励。"
+    - "把选择题改写成开放式问答能回收大量题目，但改写后要重新确认答案唯一。"
+  tags: [数学 RL, 数据清洗, 选择题改写]
+
+- id: guru
+  title: "Revisiting Reinforcement Learning for LLM Reasoning from A Cross-Domain Perspective"
+  short: Guru
+  kind: paper
+  org: LLM360 · MBZUAI
+  authors: "Zhoujun Cheng et al."
+  date: 2025-06
+  arxiv: "2506.14965"
+  repo: LLM360/Reasoning360
+  links:
+    - { label: "Guru RL 92K 数据", url: "https://huggingface.co/datasets/LLM360/guru-RL-92k" }
+  areas: [rl-llm]
+  facets: [data, env]
+  tier: rec
+  evidence: [open-source, ablation]
+  evidence_note: "数据、训练代码、完整 wandb 日志与 Guru-7B/32B 权重全部公开，论文系统对照了单领域与跨领域 RL 训练；出自 LLM360（MBZUAI），暂未见工业模型公开采用。"
+  summary: "六领域 92K 可验证 RL 数据 Guru：跨源去重、分领域设计奖励、按通过率过滤难度；发现数学、代码、科学能从跨领域 RL 受益，逻辑、模拟、表格则需要本领域数据。"
+  plain: "把不同学科的练习题都整理成“能自动判分”的格式放在一起练，结果发现有的科目能触类旁通，有的必须专门练。"
+  takeaways:
+    - "做多领域 RLVR 时先按领域单独做难度过滤和奖励校验再混合；预训练里少见的领域，别指望从数学迁移过去。"
+    - "合并多个开源数学集要先跨源去重、再清掉超长答案：OR1 与 DAPO 合并后约 12.3 万题，去重清洗后剩约 11.7 万。"
+  builds_on: [skywork-or1, dapo]
+  tags: [多领域 RLVR, 跨领域迁移, 数据去重]
+
+# ---------- 数据选择与难度 ----------
+
+- id: polaris
+  title: "POLARIS: A Post-Training Recipe for Scaling Reinforcement Learning on Advanced Reasoning Models"
+  short: POLARIS
+  kind: blog
+  org: 香港大学 · ByteDance Seed · 复旦大学
+  authors: "Chenxin An et al."
+  date: "2025-06-20"
+  repo: ChenxinAn-fdu/POLARIS
+  url: https://hkunlp.github.io/blog/2025/Polaris
+  links:
+    - { label: "Polaris-Dataset-53K", url: "https://huggingface.co/datasets/POLARIS-Project/Polaris-Dataset-53K" }
+  areas: [rl-llm]
+  facets: [data, algorithm]
+  tier: rec
+  evidence: [open-source, ablation]
+  evidence_note: "代码、53K 数据、训练日志与 1.7B/4B/7B 权重公开；在 DeepScaleR-40K 上做了“全量 / 删全对题 / 只留难题”三种难度分布的对照，并有采样温度与多阶段训练的消融。作者来自港大与字节 Seed，属研究型配方，暂未见工业模型公开采用。"
+  summary: "给强推理模型继续做 RL 的配方：用待训模型采样 8 次估难度、删全对题，每阶段结束再剔除准确率 >0.9 的题，并逐阶段升高采样温度；Qwen3-4B 的 AIME25 从 65.6 升到 79.4。"
+  plain: "题目难度跟着学生水平走：学生变强后就把已经稳会的题拿掉，让题库始终“偏难一点”。"
+  takeaways:
+    - "拿到新基座先画难度直方图（每题采样 8 次的正确数）；若大量题 8/8 全对，先删掉再训。"
+    - "不要只留最难的题：在 POLARIS 的对照里，只保留通过率不超过一半的题，效果反而不如只删全对题。"
+    - "多阶段训练时，每阶段结束用训练日志里的通过率剔除 >0.9 的题，防止分布向简单端漂移。"
+  builds_on: [deepscaler, dapo]
+  tags: [难度分布, 课程, 采样温度]
+
+- id: limr
+  title: "LIMR: Less is More for RL Scaling"
+  short: LIMR
+  kind: paper
+  org: 上海交通大学 · SII · GAIR
+  authors: "Xuefeng Li et al."
+  date: 2025-02
+  arxiv: "2502.11886"
+  repo: GAIR-NLP/LIMR
+  areas: [rl-llm]
+  facets: [data]
+  tier: rec
+  evidence: [open-source, ablation]
+  evidence_note: "LIM 工具、训练与评测代码、数据和模型开源；与全量、随机、线性进步三种选法做了对照。实验只在 Qwen2.5-Math-7B 与 MATH 系列基准上完成，而这一组合后来被指出有污染风险，其他模型族上的外部复现仍少。"
+  summary: "用学习影响度（LIM）挑 RL 数据：按每题奖励曲线与平均曲线的吻合度打分，在 Qwen2.5-Math-7B 上用 8,523 题中的 1,389 题追平全量，同规模随机子集明显更差。"
+  plain: "先让模型把所有题练一轮，看哪些题的进步节奏和整体最同步，只留这些“带得动学习”的题；数据只用约六分之一，效果不降。"
+  takeaways:
+    - "RL 提示集先去冗余再谈扩量：同样约 1.4K 题，挑过的和随机抽的差距，远大于挑过的和全量之间的差距。"
+    - "LIM 要先完整训练一次才能打分，更适合给下一轮训练或同系列模型筛数据；换模型族要重新验证。"
+    - "结论来自 Qwen2.5-Math-7B 与 MATH 系列评测，复用前先在干净基准或其他模型族上复核。"
+  builds_on: [limo]
+  tags: [数据选择, RL 数据效率, Qwen2.5-Math]

@@ -457,11 +457,11 @@
   facets: [data, eval]
   tier: must
   evidence: [industrial, ablation, open-source]
-  evidence_note: "AI2 的 7B / 32B 全开源模型：OLMo-core 给出每个阶段的官方训练脚本与数据清单（7B：5.93T 预训练 → 100B 中训练 → 50B 长上下文），dolma3 仓库公开了多轮中训练配比与去污染工具 decon，每个数字都可以对着配置核对。"
+  evidence_note: "AI2 的 7B / 32B 全开源模型：OLMo-core 给出每个阶段的官方训练脚本与数据清单（7B：5.93T 预训练 → 100B 中训练 → 50B 长上下文），OLMo-core 与 dolma3 仓库公开了中训练来源配比、各轮迭代配置与去污染工具 decon，每个数字都可以对着配置核对。"
   summary: "三段式 base 训练：Dolma 3 预训练、Dolmino 中训练（100B token，含数学、代码、QA、指令与思维链，全部去污染）、Longmino 长上下文（YaRN 扩到 64K）；32B 对两次中训练结果做模型汤。"
   plain: "像公开了完整菜谱和每一步用料清单的厨房：什么时候放什么、放多少、为什么，都能对着账本复现。"
   takeaways:
-    - "搭中训练配比可以 Dolmino 的类别比例为起点（网页、代码、数学各约两成，再加 QA、指令与思维链），再用微退火逐项调。"
+    - "搭中训练配比可以 Dolmino 的类别比例为起点（网页约三成，代码、数学各约两成，再加 QA、指令与思维链），再用微退火逐项调。"
     - "中训练数据要做 n-gram 级去污染：数学与 QA 合成数据最容易混入评测题。"
   builds_on: [olmo2, octothinker, nemotron-cc, swallowcode-math, yarn]
   tags: [Dolmino, Longmino, 去污染, 全开源, 模型汤]
@@ -500,7 +500,7 @@
   facets: [algorithm]
   tier: ref
   evidence: [ablation, open-source]
-  evidence_note: "2026-09 的新工作，代码开源；以 OLMo-2 1B 为学生、7B 为教师，在 Dolmino 语料上做约 60B token 的中训练对照，并对每个检查点跑 Tulu-3 式后训练，检验收益能否保留。规模较小，尚待更大模型验证。"
+  evidence_note: "2026-09 的新工作，代码开源；以 OLMo-2 1B 为学生、7B 为教师，在 Dolmino 语料上做约 60B token 的中训练对照，并在中训练检查点上跑 Tulu-3 式后训练，检验收益能否保留。规模较小，尚待更大模型验证。"
   summary: "中训练阶段做蒸馏会以事实召回（TriviaQA、NQ）换推理（GSM8K、MATH），从零预训练则无此代价；Switch Distillation 只把教师熵最低的 20% token 交给反向 KL、其余用交叉熵，两头兼顾。"
   plain: "中训练时让大模型手把手教小模型，推理变强了、记事实却变差；只在大模型“很有把握”的那些词上跟着学，就能两头兼顾。"
   takeaways:

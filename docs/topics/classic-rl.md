@@ -64,18 +64,16 @@ $$V^\pi(s)=\E_{a\sim\pi(\cdot\mid s)}\Big[r(s,a)+\gamma\,\E_{s'\sim P(\cdot\mid 
 
 $$Q^*(s,a)=r(s,a)+\gamma\,\E_{s'\sim P(\cdot\mid s,a)}\Big[\max_{a'}Q^*(s',a')\Big]$$
 
-第一个是期望方程，用来评估给定策略；第二个是最优方程，<Term t="q-learning">Q-learning</Term> 与 DQN 都在逼近它的不动点。TD 误差 $\delta_t=r_t+\gamma V(s_{t+1})-V(s_t)$ 是 <Term t="gae">GAE</Term> 的基本单元（见 [GAE 推导](/lenses/algorithms#gae)）。
+前者评估给定策略；后者是最优方程，<Term t="q-learning">Q-learning</Term> 与 DQN 都在逼近它的不动点。TD 误差 $\delta_t=r_t+\gamma V(s_{t+1})-V(s_t)$ 是 <Term t="gae">GAE</Term> 的基本单元（见 [GAE 推导](/lenses/algorithms#gae)）。
 
-放到上面的 token MDP 里，有一个对 LLM 很有用的推论：中间奖励为 0、$\gamma=1$ 且转移确定时，$Q^\pi(s_t,a_t)=V^\pi(s_{t+1})$，于是
+在 token MDP 里有一个很有用的推论：中间奖励为 0、$\gamma=1$ 且转移确定时，$Q^\pi(s_t,a_t)=V^\pi(s_{t+1})$，于是
 
 $$A^\pi(s_t,a_t)=V^\pi(s_{t+1})-V^\pi(s_t)$$
 
 对 0/1 奖励，$V^\pi$ 就是“从这个前缀出发最终答对的概率”，所以**一个 token 的优势，就是它让答对概率变了多少**。过程奖励模型可以理解为在估计这种“进展”；而在每个前缀上都准的价值网络极难训练，所以 GRPO、RLOO 干脆让整条回答共享一个序列级优势（奖励减去同组均值）。
 
 ::: derive 从回报的定义推出贝尔曼期望方程，以及 token MDP 的推论
-**第一步**：由定义 $G_t=r_t+\gamma G_{t+1}$。
-
-**第二步**：对 $s_t=s$ 取条件期望，按 $a_t$、$s_{t+1}$ 用全期望公式展开：
+**第一步**：由定义 $G_t=r_t+\gamma G_{t+1}$，对 $s_t=s$ 取条件期望，按 $a_t$、$s_{t+1}$ 用全期望公式展开：
 
 $$V^\pi(s)=\sum_a\pi(a\mid s)\Big[r(s,a)+\gamma\sum_{s'}P(s'\mid s,a)\,\E_\pi\big[G_{t+1}\mid s_t=s,\,a_t=a,\,s_{t+1}=s'\big]\Big]$$
 

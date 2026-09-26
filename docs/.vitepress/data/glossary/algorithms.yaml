@@ -33,7 +33,7 @@
   zh: 代理目标
   area: classic-rl
   plain: "真正想优化的目标要用新策略重新采样才能算；代理目标用旧策略的样本加权来近似它，在新旧策略相同时梯度完全一致。"
-  definition: "L(θ) = E_{(s,a)∼π_old}[ρ(θ)·Â]，ρ = π_θ(a∣s)/π_old(a∣s)。在 θ = θ_old 处它与真实目标的值和一阶梯度相同，离得越远近似越差，所以需要信任域或裁剪。LLM 中常用的逐 token 代理目标还是序列级目标的一阶近似。"
+  definition: "L(θ) = E_{(s,a)∼π_old}[ρ(θ)·Â]，ρ = π_θ(a∣s)/π_old(a∣s)。在 θ = θ_old 处它与真实目标的梯度相同（TRPO 的定义里再加上 η(π_old)，函数值也相同），离得越远近似越差，所以需要信任域或裁剪。LLM 中常用的逐 token 代理目标还是序列级目标的一阶近似。"
   see: [/lenses/algorithms#ppo, /lenses/algorithms#off-policy]
 
 - id: clip-ratio

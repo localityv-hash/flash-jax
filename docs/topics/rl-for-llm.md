@@ -258,7 +258,7 @@ GRPO 给第 $i$ 个回答的每个 token 施加同一个优势 $\hat A_i$，再�
 
 - **Seed1.5-Thinking** 把 VAPO 与 DAPO 用在总参数 200B、激活 20B 的 MoE 上，并配合思考型验证器与流式 rollout 系统[^seed]。
 - **Qwen3** 的推理 RL 只用 3,995 组题目-验证器，Qwen3-235B-A22B 的 AIME'24 在 170 步内从 70.1 升到 85.1，全程没有手动调超参；小模型改用在线策略蒸馏[^qwen3]。
-- **MiniMax-M1** 用 CISPO 在 512 张 H800 上三周完成全量 RL，并发现训练与推理 kernel 的精度不一致会毁掉训练，把 LM head 提到 FP32 才解决[^m1]。
+- **MiniMax-M1** 用 CISPO 在 512 张 H800 上三周完成全量 RL，并发现训练与推理 kernel 的精度不一致会让奖励停止增长，把 LM head 提到 FP32 才解决[^m1]。
 - **Magistral** 不借用任何其他模型的推理数据，从 Mistral Medium 3 纯 RL 训出推理模型，用语言一致性奖励让思维链跟随用户的语言[^magistral]；**MiMo** 为代码题设计了按测试难度给部分分的奖励[^mimo]。
 - **DeepSeek-V3.2** 把后训练算力推到预训练的 10% 以上，稳定性手段几乎都指向训推一致：无偏 KL 估计、离策略序列掩码、保持 MoE 路由与采样截断掩码[^v32]。
 

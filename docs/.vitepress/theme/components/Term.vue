@@ -57,10 +57,11 @@ onBeforeUnmount(() => window.clearTimeout(closeTimer))
     >
       <p class="term-name">
         <b>{{ term.term }}</b>
-        <span v-if="term.zh">{{ term.zh }}</span>
+        <span v-if="term.zh && !term.zh.startsWith(term.term)">{{ term.zh }}</span>
+        <span v-else-if="term.zh && term.zh !== term.term">{{ term.zh.slice(term.term.length).trim() }}</span>
       </p>
       <p v-if="term.full" class="term-full">{{ term.full }}</p>
-      <p class="term-plain"><span>说人话</span>{{ term.plain }}</p>
+      <p class="term-plain"><span class="term-plain-label">说人话</span><span v-if="term.html?.plain" v-html="term.html.plain" /><template v-else>{{ term.plain }}</template></p>
       <a class="term-more" :href="withBase(`/glossary#${term.id}`)">术语表中查看 →</a>
     </div>
   </Teleport>
@@ -127,7 +128,7 @@ onBeforeUnmount(() => window.clearTimeout(closeTimer))
   margin-top: 8px !important;
   color: var(--vp-c-text-1);
 }
-.term-plain span {
+.term-plain-label {
   margin-right: 8px;
   font-size: 12px;
   font-weight: 750;

@@ -51,7 +51,8 @@ const metrics = computed(() => {
     <h4 class="entry-title">
       <a :href="primaryUrl(entry)" target="_blank" rel="noopener noreferrer">{{ entry.title }}</a>
     </h4>
-    <p class="entry-summary">{{ entry.summary }}</p>
+    <p v-if="entry.html?.summary" class="entry-summary" v-html="entry.html.summary" />
+    <p v-else class="entry-summary">{{ entry.summary }}</p>
 
     <div class="entry-signals">
       <span v-for="ev in entry.evidence" :key="ev" class="entry-evidence" :title="EVIDENCE[ev].hint">
@@ -64,14 +65,14 @@ const metrics = computed(() => {
     </div>
 
     <div v-if="expanded" class="entry-more">
-      <p class="entry-plain"><span class="entry-plain-label">说人话</span>{{ entry.plain }}</p>
+      <p class="entry-plain"><span class="entry-plain-label">说人话</span><span v-if="entry.html?.plain" v-html="entry.html.plain" /><template v-else>{{ entry.plain }}</template></p>
       <div v-if="entry.takeaways?.length" class="entry-takeaways">
         <p class="entry-sub">可执行结论</p>
         <ul>
-          <li v-for="(t, i) in entry.takeaways" :key="i">{{ t }}</li>
+          <li v-for="(t, i) in entry.takeaways" :key="i"><span v-if="entry.html?.takeaways?.[i]" v-html="entry.html.takeaways[i]" /><template v-else>{{ t }}</template></li>
         </ul>
       </div>
-      <p class="entry-note"><span class="entry-sub-inline">可信度</span>{{ entry.evidence_note }}</p>
+      <p class="entry-note"><span class="entry-sub-inline">可信度</span><span v-if="entry.html?.evidence_note" v-html="entry.html.evidence_note" /><template v-else>{{ entry.evidence_note }}</template></p>
       <p v-if="parents.length" class="entry-parents">
         <span class="entry-sub-inline">承接</span>
         <a v-for="p in parents" :key="p.id" :href="withBase(`/library/?id=${p.id}`)" class="entry-parent">{{ p.name }}</a>

@@ -17,6 +17,7 @@ export default defineConfig({
     'Agentic RL、On-Policy 蒸馏、SFT、Mid-training 与 LLM 强化学习的中文知识地图：只收录经得起工业实践与复现检验的工作。',
   base,
   cleanUrls: true,
+  sitemap: { hostname: process.env.SITE_URL || 'https://localityv-hash.github.io/flash-jax/' },
   // 本地预览未完成的页面时可设 ALLOW_DEAD_LINKS=1；CI 中始终检查死链。
   ignoreDeadLinks: process.env.ALLOW_DEAD_LINKS === '1',
   lastUpdated: true,

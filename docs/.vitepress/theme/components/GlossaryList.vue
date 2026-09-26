@@ -3,7 +3,7 @@
 import { computed, ref } from 'vue'
 import { withBase } from 'vitepress'
 import { data } from '../../data/atlas.data'
-import { AREA_ORDER, AREAS } from '../lib/labels'
+import { AREA_ORDER, AREAS, pageTitle } from '../lib/labels'
 import type { Area, GlossaryTerm } from '../../data/types'
 
 const q = ref('')
@@ -41,16 +41,18 @@ function link(href: string): string {
         <div v-for="t in grp.terms" :id="t.id" :key="t.id" class="gl-item">
           <dt>
             <b>{{ t.term }}</b>
-            <span v-if="t.zh" class="gl-zh">{{ t.zh }}</span>
+            <span v-if="t.zh && !t.zh.startsWith(t.term)" class="gl-zh">{{ t.zh }}</span>
+            <span v-else-if="t.zh && t.zh !== t.term" class="gl-zh">{{ t.zh.slice(t.term.length).trim() }}</span>
             <span v-if="t.full" class="gl-full">{{ t.full }}</span>
             <a class="gl-anchor" :href="`#${t.id}`" aria-label="术语链接">#</a>
           </dt>
           <dd>
-            <p class="gl-plain"><span>说人话</span>{{ t.plain }}</p>
-            <p class="gl-def">{{ t.definition }}</p>
+            <p class="gl-plain"><span class="gl-plain-label">说人话</span><span v-if="t.html?.plain" v-html="t.html.plain" /><template v-else>{{ t.plain }}</template></p>
+            <p v-if="t.html?.definition" class="gl-def" v-html="t.html.definition" />
+            <p v-else class="gl-def">{{ t.definition }}</p>
             <p v-if="t.see?.length" class="gl-see">
-              <span>延伸：</span>
-              <a v-for="s in t.see" :key="s" :href="link(s)">{{ s.replace(/^\/(topics|lenses|practice)\//, '').replace(/#.*/, '') || s }}</a>
+              <span class="gl-see-label">延伸：</span>
+              <a v-for="s in t.see" :key="s" :href="link(s)">{{ pageTitle(s) }}</a>
             </p>
           </dd>
         </div>
@@ -140,7 +142,7 @@ function link(href: string): string {
   font-size: 14.5px;
   line-height: 1.8 !important;
 }
-.gl-plain span {
+.gl-plain-label {
   margin-right: 8px;
   font-size: 12px;
   font-weight: 750;
@@ -153,7 +155,7 @@ function link(href: string): string {
 .gl-see {
   font-size: 13px !important;
 }
-.gl-see span {
+.gl-see-label {
   color: var(--vp-c-text-3);
 }
 .gl-see a {

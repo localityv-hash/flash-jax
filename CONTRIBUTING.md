@@ -68,6 +68,7 @@
 
 - 日期、机构、arXiv 编号、仓库名必须有可靠来源；不确定的可选字段宁可省略，**绝不编造**。
 - `summary` 与 `plain` 都写中文；专有名词保留英文（GRPO、rollout、KL）。
+- 条目与术语里的短文本（`summary`、`plain`、`takeaways`、`evidence_note`、`definition`）支持 `$公式$` 与 `` `代码` ``，构建时渲染；不要写 `π_θ(a|s)` 这类伪公式，写成 `$\pi_\theta(a\mid s)$`。
 - `takeaways` 必须是可执行的判断或做法，不是摘要的复述。
 - 同一工作只收一次；有论文又有博客时，以更完整、更可信的那个为主条目，其余放 `links`。
 

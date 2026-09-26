@@ -48,6 +48,8 @@ export interface Entry {
   tags?: string[]
   /** 由加载器合并进来的指标（来自 metrics.json） */
   metrics?: Metrics | null
+  /** 由加载器渲染的富文本（含公式/代码时才有） */
+  html?: { summary?: string; plain?: string; evidence_note?: string; takeaways?: (string | undefined)[] }
 }
 
 export interface GlossaryTerm {
@@ -59,6 +61,7 @@ export interface GlossaryTerm {
   definition: string
   see?: string[]
   area?: Area
+  html?: { plain?: string; definition?: string }
 }
 
 export interface LineageNode {

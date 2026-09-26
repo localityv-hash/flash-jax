@@ -1,4 +1,4 @@
-# 原理与可解释性视角（/lenses/principles）的术语。字段均按纯文本渲染，公式用 Unicode 书写。
+# 原理与可解释性视角（/lenses/principles）的术语。plain / definition 支持 `$公式$` 与 `代码`（构建时渲染）；含公式的字符串用单引号，免得转义反斜杠。
 
 - id: entropy
   term: 策略熵
@@ -6,7 +6,7 @@
   zh: 策略熵
   area: rl-llm
   plain: "模型在某一步有多“拿不准”下一个词：候选越多、概率越平均，熵越高；几乎只会选一个词时，熵接近 0。"
-  definition: "在前缀 s 处 H(s) = −Σ_a π_θ(a∣s)·log π_θ(a∣s)；RL 训练中通常对生成的 token 取平均，用来监控探索程度。对 softmax 策略，一步更新带来的熵变化约为 −Cov_{a∼π}(log π(a∣s), Δz_a)，其中 Δz_a 是 logit 的变化量。"
+  definition: '在前缀 $s$ 处 $\mathcal H(s)=-\sum_a\pi_\theta(a\mid s)\log\pi_\theta(a\mid s)$；RL 训练中通常对生成的 token 取平均，用来监控探索程度。对 softmax 策略，一步更新带来的熵变化约为 $-\operatorname{Cov}_{a\sim\pi}\big(\log\pi(a\mid s),\ \Delta z_a\big)$，其中 $\Delta z_a$ 是 logit 的变化量。'
   see: [/lenses/principles#entropy]
 
 - id: entropy-collapse
@@ -32,8 +32,8 @@
   full: Parameter Update Sparsity
   zh: 参数更新稀疏性
   area: rl-llm
-  plain: "RL 训完后，模型里大部分参数一个比特都没变，只有一小部分被改动，但行为已经明显不同。"
-  definition: "RL 微调后（bf16 精度下）仅约 5%–30% 的参数发生变化，且无需任何稀疏正则；变化位置由模型本身决定、在不同种子与数据间高度一致。后续分析认为更新偏离权重的主方向、落在低曲率子空间，而 SFT 更倾向改动主方向。"
+  plain: "RL 训完后，模型里大部分参数几乎没动（变化小于 bf16 的数值误差），只有一小部分被改动，但行为已经明显不同。"
+  definition: 'RL 微调后仅约 5%–30% 的参数发生变化（bf16 下以 $10^{-5}$ 为容差判定），且无需任何稀疏正则；变化位置由模型本身决定、在不同种子与数据间高度一致，更新虽稀疏却接近满秩。后续分析认为更新偏离权重的主方向、落在低曲率子空间，而 SFT 更倾向改动主方向。'
   see: [/lenses/principles#sparse-updates]
 
 - id: catastrophic-forgetting
@@ -50,7 +50,7 @@
   zh: 推理边界
   area: rl-llm
   plain: "给模型足够多次机会时，它“至少能做对一次”的题目范围；衡量的是能力上限，而不是平均发挥。"
-  definition: "通常用大 k（如 256、1024）的 pass@k 近似，无偏估计为 E_x[1 − C(n−c, k)/C(n, k)]，n 为每题采样数、c 为其中正确数。若 RL 后小 k 上升而大 k 下降，说明主要在锐化分布而非扩展边界；答案可猜的任务还要检查推理过程是否正确。"
+  definition: '通常用大 $k$（如 256、1024）的 pass@k 近似，无偏估计为 $\E_x\big[1-\binom{n-c}{k}/\binom{n}{k}\big]$，$n$ 为每题采样数、$c$ 为其中正确数。若 RL 后小 $k$ 上升而大 $k$ 下降，说明主要在锐化分布而非扩展边界；答案可猜的任务还要检查推理过程是否正确。'
   see: [/lenses/principles#pass-at-k-debate]
 
 - id: cot-faithfulness
@@ -59,7 +59,7 @@
   zh: 思维链忠实性
   area: rl-llm
   plain: "模型写出来的思路，是否真的反映了它得出答案的原因；比如它参考了小抄，会不会在思路里承认。"
-  definition: "衡量 CoT 是否如实反映影响输出的因素。常用干预法：在提示中埋入线索，若模型因线索改变了答案，再看 CoT 是否提及该线索。已有研究显示，推理模型在多数设置下的承认率低于 20%。"
+  definition: "衡量 CoT 是否如实反映影响输出的因素。常用干预法：在提示中埋入线索，若模型因线索改变了答案，再看 CoT 是否提及该线索。已有研究显示，推理模型的承认率往往低于 20%，平均也只有 25%–39%。"
   see: [/lenses/principles#faithfulness]
 
 - id: cot-monitorability
@@ -68,7 +68,7 @@
   zh: 思维链可监控性
   area: rl-llm
   plain: "能不能通过读模型的草稿纸，及时发现它打算做坏事；前提是它把关键想法写出来了，而且写得看得懂。"
-  definition: "用自动监控器阅读 CoT、识别不当意图（如 reward hacking）的可行程度。它依赖“难任务必须把推理写出来”与“模型倾向于写出来”两点，可能被对 CoT 的直接优化、结果导向 RL 的规模化或潜空间推理架构削弱。"
+  definition: "用自动监控器阅读 CoT、识别不当意图（如奖励作弊）的可行程度。它依赖“难任务必须把推理写出来”与“模型倾向于写出来”两点，可能被对 CoT 的直接优化、结果导向 RL 的规模化或潜空间推理架构削弱。"
   see: [/lenses/principles#faithfulness]
 
 - id: spurious-reward

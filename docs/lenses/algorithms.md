@@ -22,7 +22,7 @@ prereq:
 这些算法都在做同一件事：把“好回答”里的词说得更频繁一点，把“差回答”里的词说得少一点。PPO、GRPO、DAPO 们争论的，只是“好坏怎么打分”和“一次改多少才不会改坏”。
 :::
 
-**记号**（全站统一）：提示 $x$，回答 $y=(y_1,\dots,y_T)$，前缀状态 $s_t=(x,y_{<t})$；正在训练的策略 $\pi_\theta$，生成样本时的策略 $\pi_{\theta_\text{old}}$，参考策略 $\pi_\text{ref}$；重要性比率 $\rho_t=\pi_\theta(y_t\mid s_t)/\pi_{\theta_\text{old}}(y_t\mid s_t)$；$\sg(\cdot)$ 表示<Term t="stop-gradient">停止梯度</Term>。需要区分“推理引擎里实际采样的分布”时，另记为 $\mu$。
+**记号**（全站统一）：提示 $x$，回答 $y=(y_1,\dots,y_T)$（$T=\lvert y\rvert$，组内第 $i$ 条回答记为 $y_i$），前缀状态 $s_t=(x,y_{<t})$；正在训练的策略 $\pi_\theta$，生成样本时的策略 $\pi_{\theta_\text{old}}$，参考策略 $\pi_\text{ref}$；重要性比率 $\rho_t=\pi_\theta(y_t\mid s_t)/\pi_{\theta_\text{old}}(y_t\mid s_t)$；$\sg(\cdot)$ 表示<Term t="stop-gradient">停止梯度</Term>。需要区分“推理引擎里实际采样的分布”时，另记为 $\mu$。
 
 <LineageGraph graph="policy-gradient" />
 
@@ -166,7 +166,9 @@ flowchart TD
   D -->|"否"| G2["梯度 = Â_t·ρ_t·∇log π<br/>继续下压"]
 ```
 
-**clip fraction 在量什么。** 它是一个小批量里梯度被裁剪置零的 token 占比，只统计上表第 2、4 行（verl 记为 `actor/pg_clipfrac`，dual-clip 生效的比例另记 `actor/pg_clipfrac_lower`）[^clipfrac]。如果 $\pi_{\theta_\text{old}}$ 由训练引擎重算，第一个小批量上 $\rho\equiv1$，clip fraction 应为 0——严格 on-policy 时 PPO 退化为普通策略梯度。它持续偏高，往往意味着学习率太大、同一批数据复用的轮数（`ppo_epochs`、小批量个数）太多；如果直接拿推理引擎返回的 logprob 充当 $\pi_{\theta_\text{old}}$，训推不一致也会把它推高。长期接近 0，则说明裁剪形同虚设。不同比率定义下的 clip fraction 不能横向比较：GSPO 的序列级裁剪让被裁掉的 token 比例比 GRPO 高两个数量级，训练效率反而更高。
+**clip fraction 在量什么。** 它是一个小批量里梯度被裁剪置零的 token 占比，只统计上表第 2、4 行（verl 记为 `actor/pg_clipfrac`，dual-clip 生效的比例另记 `actor/pg_clipfrac_lower`）[^clipfrac]。如果 $\pi_{\theta_\text{old}}$ 由训练引擎重算，第一个小批量上 $\rho\equiv1$，clip fraction 应为 0——严格 on-policy 时 PPO 退化为普通策略梯度。
+
+它持续偏高，往往意味着学习率太大、同一批数据复用的轮数（`ppo_epochs`、小批量个数）太多；如果直接拿推理引擎返回的 logprob 充当 $\pi_{\theta_\text{old}}$，训推不一致也会把它推高。长期接近 0，则说明裁剪形同虚设。不同比率定义下的 clip fraction 不能横向比较：GSPO 的序列级裁剪让被裁掉的 token 比例比 GRPO 高两个数量级，训练效率反而更高。
 
 ::: human
 PPO 给每个词的调整幅度装了“限位器”：往对的方向调，调过头就停；往错的方向调，永远允许拉回来。clip fraction 就是这一轮有多少个词撞上了限位器。
@@ -237,7 +239,13 @@ $$
 于是 $\E_{\pi_{\theta_\text{old}}}\big[\nabla(\rho\cdot\text{k3})\big]=\E_{\pi_\theta}\big[\text{k1}\,\nabla\log\pi_\theta\big]=\nabla_\theta\KL(\pi_\theta\Vert\pi_\text{ref})$（逐位置），数值上 $\E_{\pi_{\theta_\text{old}}}[\rho\cdot\text{k3}]=\E_{\pi_\theta}[\text{k3}]$ 也无偏。梯度权重从 $1-\pi_\text{ref}/\pi_\theta$（$\pi_\theta\ll\pi_\text{ref}$ 时趋于 $-\infty$）变成 $\rho\log\frac{\pi_\theta}{\pi_\text{ref}}$（此时因 $\rho\to0$ 而趋于 0）。注意即使 on-policy（$\rho$ 的数值恰为 1），$\rho$ 对 $\theta$ 的导数也不为零，所以这个修正在第一个小批量上同样改变梯度。
 :::
 
-主流框架都已提供修正开关[^kl-impl]：verl 的 `kl_loss_type` 取 `k1+`、`k3+` 等带“+”的值时，前向保留原估计值、反向改用 k2 的梯度（直通技巧）；OpenRLHF 的 `--algo.kl.unbiased_gradient` 保留所选估计量的数值、反向用带 IS 权重的反向 KL 梯度；TRL 的 `use_bias_correction_kl` 实现了 DeepSeek-V3.2 的写法。另一方面，许多 RLVR 配方干脆去掉 KL：DAPO 认为长 CoT 训练中模型本就应该远离初始分布，Dr. GRPO 的示例命令也取 $\beta=0$[^no-kl]；保留 KL 的 DeepSeek-V3.2 也报告，数学等领域用很弱的 KL 甚至不用，效果反而更好[^dsv32]。有学习型奖励模型时，KL 仍是防[奖励作弊](/topics/rl-for-llm#reward-hacking)的重要手段。
+主流框架都已提供修正开关[^kl-impl]：
+
+- **verl**：`kl_loss_type` 取 `k1+`、`k3+` 等带“+”的值时，前向保留原估计值，反向改用 k2 的梯度（直通技巧）。
+- **OpenRLHF**：`--algo.kl.unbiased_gradient` 保留所选估计量的数值，反向用带 IS 权重的反向 KL 梯度。
+- **TRL**：`use_bias_correction_kl`（默认开启）实现了 DeepSeek-V3.2 的写法。
+
+另一方面，许多 RLVR 配方干脆去掉 KL：DAPO 认为长 CoT 训练中模型本就应该远离初始分布，Dr. GRPO 的示例命令也取 $\beta=0$[^no-kl]；保留 KL 的 DeepSeek-V3.2 也报告，数学等领域用很弱的 KL 甚至不用，效果反而更好[^dsv32]。有学习型奖励模型时，KL 仍是防[奖励作弊](/topics/rl-for-llm#reward-hacking)的重要手段。
 
 ::: human
 KL 惩罚是一根“拴绳”，防止模型为了刷分跑得离原模型太远。麻烦在于：尺子量得准（估计量无偏），不代表按这把尺子去拉模型的方向也对——直接对 k3 求导，拉的其实是另一根绳子（正向 KL）。
@@ -366,7 +374,7 @@ $$
 
 四项修正各自对应一个问题：
 
-1. **Clip-Higher**（$\varepsilon_\text{low}=0.2$，$\varepsilon_\text{high}=0.28$）。上界裁剪对低概率 token 更苛刻：$\varepsilon=0.2$ 时，旧概率 0.01 的 token 一轮最多涨到 0.012，旧概率 0.9 的 token 却可以涨到 1.08（等于不设限）。探索性的低概率 token 最需要上涨空间，于是单独放宽上界；下界保持 0.2，因为放宽下界会把这些 token 的概率压向 0、使采样空间塌缩。论文观察到，被上界裁剪的 token 概率最高也只在 0.2 左右；放宽之后熵不再快速塌缩（见 [熵与熵塌缩](/lenses/principles#entropy)）。这种不对称也被用来解释“随机奖励也涨分”：期望优势为零时，裁剪仍会系统性地抬高模型原本就高概率的行为（见 [伪奖励与数据污染](/lenses/principles#spurious-rewards)）。
+1. **Clip-Higher**（$\varepsilon_\text{low}=0.2$，$\varepsilon_\text{high}=0.28$）。上界裁剪对低概率 token 更苛刻：$\varepsilon=0.2$ 时，旧概率 0.01 的 token 一轮最多涨到 0.012，旧概率 0.9 的 token 却可以涨到 1.08（等于不设限）。探索性的低概率 token 最需要上涨空间，于是单独放宽上界；下界保持 0.2，因为放宽下界会把这些 token 的概率压向 0、使采样空间塌缩。论文观察到，被上界裁剪的 token 概率最高也只在 0.2 左右；放宽之后熵不再快速塌缩（见 [熵与熵塌缩](/lenses/principles#entropy)）。这种不对称也是“随机奖励也涨分”的一种解释：期望优势为零时，裁剪仍会系统性地抬高模型原本就高概率的行为（见 [伪奖励与数据污染](/lenses/principles#spurious-rewards)）。
 2. **<Term t="dynamic-sampling">动态采样</Term>**。组内全对或全错时优势全为 0，这些提示只占位置、不贡献梯度，而且随训练推进越来越多（全对的比例持续上升）。DAPO 过采样并过滤掉它们，直到批次填满。在同步系统里生成时间主要被长尾样本决定，多采的这部分并不显著拖慢训练。
 3. **<Term t="token-level-loss">token 级损失</Term>**。分母换成组内总 token 数 $\sum_i\lvert y_i\rvert$，长回答里的每个 token 与短回答里的 token 权重相同：好的长推理能被充分学习，冗长重复的坏模式也能被充分惩罚。它消除了上面的长度偏置（但保留了 std 归一化）；归一化常数随批次里的总长度变化，严格说只是把偏置从“每条回答”挪到了“每个批次”。
 4. **<Term t="overlong-shaping">超长奖励塑形</Term>**。被截断的回答直接判错，会误伤“思路对但没写完”的样本，给奖励引入噪声。先是 Overlong Filtering（截断样本不计损失），再是软超长惩罚：
@@ -460,7 +468,7 @@ $$
 
 1. **同一批数据多步更新**：`ppo_epochs`、多个小批量让 $\pi_\theta$ 在批内逐步偏离 $\pi_{\theta_\text{old}}$，由比率与裁剪处理。
 2. **异步与流水线训练**：rollout 由落后若干版本的权重生成，陈旧度越大偏差越大（见 [异步 RL](/lenses/infra#async)）。
-3. **训推数值不一致**：推理引擎（vLLM、SGLang）与训练引擎（FSDP、Megatron）的算子、精度、并行方式不同，即使权重完全相同，算出的 token 概率也不同；MoE 的专家路由还可能不一致。MiniMax-M1 就曾因此奖励不涨，逐层排查定位到 LM head 的高幅激活，把 LM head 提到 FP32 后训推概率重新对齐[^cispo]。
+3. **训推数值不一致**：推理引擎（vLLM、SGLang）与训练引擎（FSDP、Megatron）的算子、精度、并行方式不同，即使权重完全相同，算出的 token 概率也不同，MoE 的专家路由还可能不一致；MiniMax-M1 就曾因此奖励不涨，把 LM head 提到 FP32 才解决[^cispo]。
 4. **数据复用**：回放缓冲、部分 rollout（partial rollout）等。
 
 系统侧的成因与工程修复（批不变算子、FP16、Routing Replay、权重同步）见 [Infra：训推不一致](/lenses/infra#mismatch)，这里只讲算法侧。关键是分清三个策略：
@@ -472,7 +480,7 @@ flowchart LR
   REF["π_ref：参考策略"] -.->|"KL 正则"| CUR
 ```
 
-对应的“解耦”目标把两段偏移分开修正（解耦 PPO 最早用于批大小无关的策略优化，AReaL 等异步系统沿用了它）[^decoupled]：
+对应的“解耦”目标把两段偏移分开修正（解耦 PPO 由 Hilton 等人为批大小无关的策略优化提出，AReaL 等异步系统沿用了它）[^decoupled]：
 
 $$
 w_t=\frac{\pi_{\theta_\text{old}}(y_t\mid s_t)}{\mu(y_t\mid s_t)},\qquad r_t=\frac{\pi_\theta(y_t\mid s_t)}{\pi_{\theta_\text{old}}(y_t\mid s_t)}
@@ -587,7 +595,7 @@ flowchart LR
 - **PPO**：LLM RL 事实上的基线算法。无 Critic 家族改的是优势，比率与裁剪部分仍然是 PPO。
 - **Approximating KL Divergence**：一篇短博客，却是 k1/k2/k3 的出处；配合本页的梯度分析一起读，能避开“数值无偏但梯度错误”的坑。
 
-**LLM 时代的修正。** 以下工作各自解决一个具体问题，且都有开源实现或工业训练背书：
+**LLM 时代的修正。** 以下工作各自解决一个具体问题，大多有开源实现或工业训练背书：
 
 <EntryGrid :ids="['grpo', 'dr-grpo', 'dapo', 'gspo', 'minimax-m1', 'deepseek-v3-2', 'stabilizing-rl-llm']" />
 
@@ -624,7 +632,7 @@ flowchart LR
 [^gae-defaults]: verl `verl/trainer/config/ppo_trainer.yaml`（`gamma: 1.0`、`lam: 1.0`）：<https://github.com/verl-project/verl/blob/main/verl/trainer/config/ppo_trainer.yaml>；OpenRLHF `openrlhf/cli/train_ppo_ray.py`（`--algo.advantage.gamma`、`--algo.advantage.lambd` 默认均为 1）：<https://github.com/OpenRLHF/OpenRLHF/blob/main/openrlhf/cli/train_ppo_ray.py>。PPO 论文的 MuJoCo 超参数见 [PPO 条目](/library/?id=ppo)。
 [^vapo]: Seed1.5-Thinking 技术报告第 3 节对这几项技术的描述（Value-Pretraining、Decoupled-GAE、Length-adaptive GAE），见 [Seed1.5-Thinking 条目](/library/?id=seed-thinking-1-5) 与 [VAPO 条目](/library/?id=vapo)。
 [^dualclip]: Dual-clip PPO 出自 "Mastering Complex Control in MOBA Games with Deep Reinforcement Learning"（arXiv 1912.09729）。verl 默认值见 `verl/trainer/config/actor/actor.yaml`；DAPO 复现脚本：<https://github.com/verl-project/verl-recipe/tree/main/dapo>。
-[^clipfrac]: verl `compute_policy_loss_vanilla`：<https://github.com/verl-project/verl/blob/main/verl/trainer/ppo/core_algos.py>；GSPO 的裁剪比例对比见 Qwen 博客 "GSPO: Towards Scalable Reinforcement Learning for Language Models"：<https://qwenlm.github.io/blog/gspo/>。
+[^clipfrac]: verl `compute_policy_loss_vanilla`：<https://github.com/verl-project/verl/blob/main/verl/trainer/ppo/core_algos.py>；GSPO 与 GRPO 的裁剪比例对比见 GSPO 论文第 5.2 节与 Qwen 博客 "GSPO: Towards Scalable Reinforcement Learning for Language Models"：<https://qwenlm.github.io/blog/gspo/>。
 [^kl-papers]: "Rethinking KL Regularization in RLHF: From Value Estimation to Gradient Optimization"（arXiv 2510.01555，指出“k3 当损失”只是有偏的一阶近似）：<https://arxiv.org/abs/2510.01555>；"On a few pitfalls in KL divergence gradient estimation for RL"（arXiv 2506.09477）：<https://arxiv.org/abs/2506.09477>；"A Comedy of Estimators: On KL Regularization in RL Training of LLMs"（arXiv 2512.21852）：<https://arxiv.org/abs/2512.21852>；Xihuai Wang 的博客 "Choosing KL Estimators in RL: From Value Unbiasedness to Gradient Correctness"：<https://xihuai18.github.io/reinforcement-learning/2025/12/01/kl-estimators-en.html>。
 [^dsv32]: DeepSeek-V3.2 技术报告（arXiv 2512.02556）第 3.1 节 "Scaling GRPO" 中的 Unbiased KL Estimate 与 Off-Policy Sequence Masking（含“数学等领域弱 KL 或不加 KL 更好”“π_old 取推理框架返回的采样概率”两处说明），见 [DeepSeek-V3.2 条目](/library/?id=deepseek-v3-2)；公式对照 TRL 文档的实现说明：<https://github.com/huggingface/trl/blob/main/docs/source/paper_index.md>。
 [^kl-impl]: verl `kl_penalty()`：<https://github.com/verl-project/verl/blob/main/verl/trainer/ppo/core_algos.py>；OpenRLHF `compute_approx_kl(..., unbiased_gradient)`：<https://github.com/OpenRLHF/OpenRLHF/blob/main/openrlhf/models/utils.py>；TRL `use_bias_correction_kl` 见上一条的 TRL 文档。
@@ -633,7 +641,7 @@ flowchart LR
 [^dapo]: DAPO 论文（arXiv 2503.14476）表 1 与第 4.1 节：Qwen2.5-32B 基座，AIME 2024 重复 32 次取平均，评测温度 1.0、top-p 0.7。
 [^dapo-verl]: verl-recipe 中 DAPO 的 README（FAQ "Where is the Overlong Filtering in the paper?"）：<https://github.com/verl-project/verl-recipe/tree/main/dapo>。
 [^rpp]: REINFORCE++ 论文（arXiv 2501.03262）；OpenRLHF README 中关于 REINFORCE++-baseline 的推荐与采用说明：<https://github.com/OpenRLHF/OpenRLHF>。
-[^gspo]: GSPO 论文（arXiv 2507.18071）与 Qwen 博客：<https://qwenlm.github.io/blog/gspo/>。裁剪范围 3e-4/4e-4 与对照 GRPO 的 0.2/0.27 见论文实验设置。
+[^gspo]: GSPO 论文（arXiv 2507.18071）与 Qwen 博客：<https://qwenlm.github.io/blog/gspo/>。裁剪范围 3e-4/4e-4 与对照 GRPO 的 0.2/0.27、用于 Qwen3 的说明见第 5.1 节；Routing Replay 与 MoE 的讨论见第 5.3 节，直接使用推理引擎似然的说明见第 5.4 节。
 [^cispo]: MiniMax-M1 技术报告第 3.1、3.2 节（arXiv 2506.13585），仓库内有 PDF：<https://github.com/MiniMax-AI/MiniMax-M1>。
 [^decoupled]: 解耦 PPO：Hilton et al., "Batch size-invariance for policy optimization"（arXiv 2110.00641）。AReaL 的陈旧度消融（DeepSeek-R1-Distill-Qwen-1.5B，AIME 2024）见其 v0.3 博客表 3：<https://github.com/areal-project/AReaL/blob/main/blog/AReaL_v0_3.md>。
 [^mis]: Jiacai Liu、Yingru Li 等，"When Speed Kills Stability: Demystifying RL Collapse from the Training-Inference Mismatch"（2025 年 9 月）：<https://richardli.xyz/rl-collapse>；verl 的数学说明与配置：<https://github.com/verl-project/verl/blob/main/docs/algo/rollout_corr_math.md>。

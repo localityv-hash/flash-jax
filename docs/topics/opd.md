@@ -388,7 +388,7 @@ TRL 已收录 SDFT、SDPO 训练器，tinker-cookbook 也复现了 SDFT。同期
 [^mimo]: Xiaomi LLM-Core，*MiMo-V2-Flash Technical Report*，§4.1、§4.4 与 Table 7。https://arxiv.org/abs/2601.02780
 [^glm5]: Zeng et al.，*GLM-5: from Vibe Coding to Agentic Engineering*，On-Policy Cross-Stage Distillation 一节。https://arxiv.org/abs/2602.15763
 [^cascade2]: Yang et al.（NVIDIA），*Nemotron-Cascade 2: Post-Training LLMs with Cascade RL and Multi-Domain On-Policy Distillation*。https://arxiv.org/abs/2603.19220
-[^dsv4]: DeepSeek-AI，*DeepSeek-V4: Towards Highly Efficient Million-Token Context Intelligence*，§5.1.2 与 §5.2.2；报告随模型发布：https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro/blob/main/DeepSeek_V4.pdf
+[^dsv4]: DeepSeek-AI，*DeepSeek-V4: Towards Highly Efficient Million-Token Context Intelligence*，§5.1.2 与 §5.2.2。https://arxiv.org/abs/2606.19348 ；2026-04 随模型首发的 PDF：https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro/blob/main/DeepSeek_V4.pdf
 [^minicpm5]: OpenBMB，MiniCPM5 README，“What does RL + OPD bring?” 一节。https://github.com/OpenBMB/MiniCPM/tree/minicpm5
 [^nemo-ultra]: NeMo-RL 文档 *Nemotron 3 Ultra*。https://github.com/NVIDIA-NeMo/RL/blob/main/docs/guides/nemotron-3-ultra.md
 [^dagger]: Ross, Gordon & Bagnell，*A Reduction of Imitation Learning and Structured Prediction to No-Regret Online Learning*，AISTATS 2011；文中同时回顾了行为克隆的 $T^2\epsilon$ 上界。https://arxiv.org/abs/1011.0686

@@ -60,7 +60,7 @@
   tier: rec
   evidence: [adopted, open-source]
   evidence_note: "2025-10-23 由 Meta PyTorch 团队与 Hugging Face 联合发布，配套 Hugging Face 上的环境 Hub，并与 TRL、torchforge 集成；NVIDIA NeMo Gym 把 OpenEnv 列为可直接接入的环境生态，SkyRL、Unsloth 等训练框架也给出接入示例，技术委员会包括 Meta PyTorch、Hugging Face、NVIDIA、Prime Intellect、Microsoft 等。仓库注明仍处实验阶段，API 可能变化，尚无用它训练正式发布模型的公开记录；采用 RFC 流程演进（已包含 MCP 支持、延迟奖励、agent harness 集成等提案）。"
-  summary: "用 Gymnasium 式的 reset()/step()/state() 统一智能体执行环境：每个环境是 Docker 容器里的服务，经 WebSocket 调用，可部署到 Hugging Face Spaces，供任意 RL 框架接入。"
+  summary: "用 Gymnasium 式的 `reset()`、`step()`、`state()` 统一智能体执行环境：每个环境是 Docker 容器里的服务，经 WebSocket 调用，可部署到 Hugging Face Spaces，供任意 RL 框架接入。"
   plain: "把每个练习场装进一个标准集装箱，外面只留三个按钮：重新开始、走一步、看状态。谁的训练框架都能按这三个按钮来用。"
   takeaways:
     - "需要强隔离的环境（执行代码、改文件）优先做成独立容器服务，训练端只经 reset/step 协议访问，便于横向扩容和复现。"

@@ -1,5 +1,5 @@
 # LLM 强化学习：从 RLHF 到 RLVR（owner: rl-llm）
-# 事实来源：arXiv 摘要页、各仓库 README / 技术报告 PDF、RLHF Book（natolambert/rlhf-book）交叉核对。
+# 事实来源：各仓库 README / 技术报告 PDF 与 arXiv 原文；少数 2026 年配方的说法经 RLHF Book 课程材料（natolambert/rlhf-book）转引，正文已注明。
 # 指标（引用、star、点赞）由 CI 自动抓取，这里不手写数字。
 
 # ───────────────────────── RLHF 基础 ─────────────────────────
@@ -445,7 +445,7 @@
   tier: rec
   evidence: [industrial, open-source, ablation]
   evidence_note: "MiniMax 开源 456B（激活 45.9B）混合注意力推理模型；CISPO 与 GRPO、DAPO 做了受控对比。MiniMax 后续 M2 系列继续使用 CISPO，ScaleRL 配方也采用了这种损失。"
-  summary: "提出 CISPO：不裁剪 token 更新，而是裁剪并截断梯度的重要性权重，让低概率的反思类 token 在多轮离策略更新中仍有梯度；Qwen2.5-32B 上只用一半步数追平 DAPO。"
+  summary: "提出 CISPO：不裁剪 token 更新，而是裁剪重要性权重本身并停止其梯度，让低概率的反思类 token 在多轮离策略更新中仍有梯度；Qwen2.5-32B 上只用一半步数追平 DAPO。"
   plain: "PPO 会把“变化太大”的 token 整个踢出训练，偏偏“等等、再检查一下”这类关键词最容易被踢；CISPO 只给它们的权重设上限，不踢人。"
   takeaways:
     - "一批数据要做多轮离策略更新时，裁剪 IS 权重（CISPO）比裁剪 token 更新更能保住稀有 token 的梯度。"
@@ -493,7 +493,7 @@
   plain: "在 RL 上花更多钱，同时把训练与推理两边的“小差异”对齐（同样的专家路由、同样的采样截断），偏离太大的负样本干脆不学。"
   takeaways:
     - "RL 规模上去后，训推不一致会主导稳定性：MoE 要复用推理时的专家路由，top-p / top-k 截断掩码也要在训练时保持一致。"
-    - "大 batch 切成多个 mini-batch 更新时，对偏离采样策略过远的负样本序列直接掩码，比一味调小学习率更有效。"
+    - "大 batch 切成多个 mini-batch 更新、或训推引擎有数值差异时，把与采样策略 KL 过大的负优势序列直接掩掉；报告称这能稳住原本会失稳的训练。"
   builds_on: [deepseek-r1, grpo]
   tags: [RL 算力扩展, 离策略掩码, 训推一致, 智能体任务合成]
 
@@ -535,7 +535,7 @@
   tier: rec
   evidence: [open-source, ablation, community]
   evidence_note: '代码、约 12.9 万条训练数据与多尺寸权重全部开源；对 GAE 的 $\lambda$、KL 损失与 KL 奖励塑形做了对照实验。'
-  summary: '极简配方复现 R1-Zero 式训练：原版 PPO（GAE $\lambda=\gamma=1$）、只看对错的规则奖励、不加 KL；在 Qwen2.5-32B 上以约 1/10 的步数，在 AIME24、MATH500 与 GPQA Diamond 上胜过 DeepSeek-R1-Zero-Qwen-32B。'
+  summary: '极简配方复现 R1-Zero 式训练：原版 PPO（GAE $\lambda=\gamma=1$）、只看对错的规则奖励、不加 KL；在同一 32B 基座上以约 1/10 的步数，三项推理基准都胜过 DeepSeek-R1-Zero-Qwen-32B。'
   plain: "不用花哨技巧：标准 PPO、答对给分、不拴 KL 绳子，只要数据与规模够，基座模型一样能自己学会长推理。"
   takeaways:
     - '推理 RL 中价值模型的 GAE 取 $\lambda=\gamma=1$ 更稳；在该设定下 KL 损失和 KL 惩罚既拖慢训练又占资源，可以先去掉。'
@@ -602,7 +602,7 @@
   tier: rec
   evidence: [industrial, open-source, ablation]
   evidence_note: "开源 7B / 32B 权重、基于 verl 的训练代码与 RL 数据（模型于 2025-04 先行发布）；报告对熵坍缩的成因与缓解做了大量消融，并列出各模型的分阶段配置。"
-  summary: "在 R1 蒸馏模型上做分阶段加长上下文的 RL（Math-7B 为 8K→16K→32K，32B 为 16K→24K），系统研究熵坍缩并用自适应熵控制维持探索；32B 模型在 AIME24/25 与 LiveCodeBench 上平均分从 57.8% 升到 72.8%。"
+  summary: "在 R1 蒸馏模型上分阶段加长上下文做 RL（32B 为 16K→24K），系统研究熵坍缩并用自适应熵控制维持探索；32B 模型在 AIME24/25 与 LiveCodeBench 上平均分从 57.8% 升到 72.8%。"
   plain: "模型越训越“笃定”、不再尝试新解法时就会卡住；Skywork 给熵设一个目标值，低于它就自动加大鼓励探索的力度。"
   takeaways:
     - "监控策略熵：过早坍缩往往先于验证集停滞；用自适应熵系数把熵拉回目标值，比固定的熵奖励更安全。"
@@ -822,7 +822,7 @@
   facets: [algorithm, data, theory]
   tier: rec
   evidence: [open-source, community]
-  evidence_note: "作者长期参与 Tülu、OLMo 等开源后训练；书稿在 GitHub 持续更新（2026-09 仍在修订），另有 Manning 出版版本与配套课程。本页的工业配方对照也以书中整理做交叉核对。"
+  evidence_note: "作者长期参与 Tülu、OLMo 等开源后训练；书稿在 GitHub 持续更新（2026-09 仍在修订），另有 Manning 出版版本与配套课程；本站“LLM 强化学习”页的前沿一节引用了课程材料对 2026 年各家配方的整理。"
   summary: "系统讲解后训练全流程：指令微调、奖励模型、策略梯度（PPO、GRPO 等）、拒绝采样、直接对齐算法、推理训练与 RLVR、过优化与正则化，并持续整理各家推理模型报告的共同做法。"
   plain: "一本持续更新的“后训练教科书”：从最基础的偏好建模讲到最新推理模型的训练套路，适合当作查漏补缺的参考书。"
   takeaways:

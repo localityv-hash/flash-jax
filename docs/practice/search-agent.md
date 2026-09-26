@@ -103,7 +103,7 @@ Answer the given question. You must conduct reasoning inside <think> and </think
 
 ## 第四步：屏蔽检索 token {#masking}
 
-这是最容易出错、也最关键的一步。检索文档是环境写进上下文的，不是模型生成的，必须从策略损失里去掉（原理见 [损失屏蔽](/topics/agentic-rl#loss-mask)）。Search-R1 的做法是在拼接每一轮时维护两份序列：一份是真实 token，一份把观察部分替换成填充符，由后者得到掩码。训练时，策略损失、熵与 KL 惩罚都只在掩码为 1 的位置计算[^6]。核心逻辑可以简化成：
+这是最容易出错、也最关键的一步。检索文档是环境写进上下文的，不是模型生成的，必须从策略损失里去掉（原理见 [损失屏蔽](/topics/agentic-rl#loss-mask)）。Search-R1 的做法是在拼接每一轮时维护两份序列：一份是真实 token，一份把观察部分替换成填充符，由后者得到掩码。训练时（脚本开关为 `actor_rollout_ref.actor.state_masking=true`），策略损失、熵与 KL 惩罚都只在掩码为 1 的位置计算[^6]。核心逻辑可以简化成：
 
 ```python
 ids, mask = [], []
@@ -161,7 +161,7 @@ pg_loss = (per_token_loss * mask).sum() / mask.sum()                 # 只在模
 
 除了常规的奖励、熵、KL、梯度范数、回答长度，搜索智能体还要多看五项。Search-R1 的生成循环会把其中大部分记进元信息[^6]：
 
-- **合法动作比例**：每条轨迹里合法的搜索或作答占比。训练早期应快速升到接近 1；如果掉下来，多半是模板或截停逻辑出了问题。
+- **合法动作比例**：每条轨迹里合法的搜索或作答占比。训练早期应快速升到接近 1；如果掉下来，多半是模板或截断逻辑出了问题。
 - **有效搜索次数**：平均每条轨迹发起几次检索。论文观察到它随训练逐渐增加[^1]。
 - **轮数分布与活跃轨迹数**：每轮之后还有多少轨迹没结束。大量轨迹用满最大轮数，说明模型在原地打转或轮数上限太小。
 - **模型 token 占比**：即上一节的 `state_tokens/coverage`。
@@ -222,7 +222,7 @@ pg_loss = (per_token_loss * mask).sum() / mask.sum()                 # 只在模
 [^3]: Search-R1 检索器文档 `docs/retriever.md` 与 `retrieval_launch.sh`（wiki-18 语料、e5 Flat / HNSW / BM25 索引、在线搜索配额说明）：<https://github.com/PeterGriffinJin/Search-R1/blob/main/docs/retriever.md>
 [^4]: Search-R1 数据处理脚本 `scripts/data_process/nq_search.py` 中的提示模板：<https://github.com/PeterGriffinJin/Search-R1/blob/main/scripts/data_process/nq_search.py>
 [^5]: Search-R1 奖励函数 `verl/utils/reward_score/qa_em.py`（EM 与子串匹配、答案抽取）与 `qa_em_format.py`（格式奖励），v0.3 脚本中 structure_format_score=0.2、final_format_score=0.1、retrieval_score=0：<https://github.com/PeterGriffinJin/Search-R1/tree/main/verl/utils/reward_score>
-[^6]: Search-R1 多轮生成循环 `search_r1/llm_agent/generation.py`（截停、动作解析、观察截断、纠错提示、屏蔽序列、多卡补齐、统计量）：<https://github.com/PeterGriffinJin/Search-R1/blob/main/search_r1/llm_agent/generation.py>
+[^6]: Search-R1 多轮生成循环 `search_r1/llm_agent/generation.py`（事后截断、动作解析、观察截断、纠错提示、屏蔽序列、多卡补齐、统计量）：<https://github.com/PeterGriffinJin/Search-R1/blob/main/search_r1/llm_agent/generation.py>；训练端掩码见 `verl/trainer/ppo/ray_trainer.py`（`_create_loss_mask`、`apply_kl_penalty`）与 `verl/workers/actor/dp_actor.py`
 [^7]: Search-R1 实验日志 `docs/experiment_log.md`：<https://github.com/PeterGriffinJin/Search-R1/blob/main/docs/experiment_log.md>；分组 bug 的修复见提交 `9ec2fa9`（“fix grpo id bug”，`verl/trainer/ppo/ray_trainer.py` 中的 `uid` 分配），单样本组的处理见 `verl/trainer/ppo/core_algos.py` 的 `compute_grpo_outcome_advantage`
 [^8]: Jin et al., *An Empirical Study on Reinforcement Learning for Reasoning-Search Interleaved LLM Agents*, arXiv:2505.15117：<https://arxiv.org/abs/2505.15117>
 [^9]: Sun et al., *ZeroSearch: Incentivize the Search Capability of LLMs without Searching*, arXiv:2505.04588：<https://arxiv.org/abs/2505.04588>

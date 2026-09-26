@@ -15,7 +15,7 @@
   zh: 在线策略蒸馏
   area: opd
   plain: "学生自己写答案，教师逐字打分；学生专门在自己会犯的错上被纠正。"
-  definition: "学生从自身策略采样回答，教师对回答的每个位置给出概率反馈，学生据此最小化两者在学生访问状态上的散度。最常见的实现把逐 token 反向 KL 的负值 log π_T(y_t) − log π_θ(y_t) 当作稠密奖励，用策略梯度更新。"
+  definition: '学生从自身策略采样回答，教师对回答的每个位置给出概率反馈，学生据此最小化两者在学生访问状态上的散度。最常见的实现把采样 token 上的 $\log\pi_T(y_t\mid s_t)-\log\pi_\theta(y_t\mid s_t)$（逐 token 反向 KL 单样本估计的相反数）当作稠密奖励，用策略梯度更新。'
   see: [/topics/opd, /topics/opd#reverse-kl, /practice/opd]
 
 - id: exposure-bias
@@ -31,7 +31,7 @@
   zh: 教师强制
   area: opd
   plain: "训练时每一步都把正确答案的前文喂给模型，让它只预测下一个词。"
-  definition: "序列模型的标准监督训练方式：第 t 步以真实（或教师给出的）前缀 y_<t 为条件，最大化下一个 token 的似然。高效且可并行，但训练状态来自数据而非模型自身，是暴露偏差的来源。"
+  definition: '序列模型的标准监督训练方式：第 $t$ 步以真实（或教师给出的）前缀 $y_{<t}$ 为条件，最大化下一个 token 的似然。高效且可并行，但训练状态来自数据而非模型自身，是暴露偏差的来源。'
   see: [/topics/opd#exposure-bias, /topics/sft#objective]
 
 - id: gkd
@@ -40,7 +40,7 @@
   zh: 广义知识蒸馏
   area: opd
   plain: "一个旋钮调“用多少学生自己写的样本”，另一个旋钮调“用哪种距离去比较师生”。"
-  definition: "Agarwal 等（ICLR 2024）提出的统一框架：目标为 (1−λ)·固定数据上的散度 + λ·学生样本上的散度，λ 为学生数据比例，散度可取前向 KL、反向 KL 或广义 JSD(β)；不对学生采样过程求导。λ=1 即在线蒸馏。"
+  definition: 'Agarwal 等（ICLR 2024）提出的统一框架：把固定数据上的逐 token 散度与学生样本上的逐 token 散度按 $1-\lambda$ 与 $\lambda$ 加权，$\lambda$ 为学生数据比例；散度可取前向 KL、反向 KL 或广义 $\mathrm{JSD}(\beta)$，且不对学生的采样过程求导。$\lambda=1$ 即在线蒸馏。'
   see: [/topics/opd#gkd]
 
 - id: jsd
@@ -49,7 +49,7 @@
   zh: 广义 JS 散度
   area: opd
   plain: "介于前向 KL 和反向 KL 之间的一把“滑尺”，而且永远不会算出无穷大。"
-  definition: "JSD(β)(P‖Q) = β·KL(P‖M) + (1−β)·KL(Q‖M)，其中 M = βP + (1−β)Q。有界；β→0 时（除以 β 后）趋于前向 KL(P‖Q)，β→1 时梯度行为接近反向 KL。GKD 与 TRL 的蒸馏训练器用 β 选择散度。"
+  definition: '$\mathrm{JSD}(\beta)(P\Vert Q)=\beta\,\mathrm{KL}(P\Vert M)+(1-\beta)\,\mathrm{KL}(Q\Vert M)$，其中 $M=\beta P+(1-\beta)Q$。有界；$\beta\to0$ 时除以 $\beta$ 后趋于前向 $\mathrm{KL}(P\Vert Q)$，$\beta\to1$ 时除以 $1-\beta$ 后趋于反向 $\mathrm{KL}(Q\Vert P)$。GKD 与 TRL 的蒸馏训练器用 $\beta$ 选择散度（$P$ 为教师、$Q$ 为学生）。'
   see: [/topics/opd#gkd]
 
 - id: sequence-kd
@@ -58,7 +58,7 @@
   zh: 序列级知识蒸馏
   area: opd
   plain: "让教师先把答案写出来，学生再照着这些答案做 SFT。"
-  definition: "Kim & Rush（2016）提出：用教师生成的序列作为训练目标做最大似然，等价于在教师样本上最小化前向 KL。实现简单、可离线批量生成，但学生只在教师访问过的状态上学习。"
+  definition: "Kim & Rush（2016）提出：用教师生成的序列作为训练目标做最大似然（原文用束搜索结果近似教师分布的众数；改用采样时，就是在教师样本上最小化前向 KL）。实现简单、可离线批量生成，但学生只在教师访问过的状态上学习。"
   see: [/topics/opd#reverse-kl, /topics/opd#lineage]
 
 - id: dense-reward
@@ -66,7 +66,7 @@
   zh: 稠密奖励
   area: opd
   plain: "不是等整道题做完才给一个对错，而是每写一个字都给一个分数。"
-  definition: "在轨迹的每一步（每个 token）都给出的学习信号，与只在结尾给出的序列级奖励相对。OPD 的逐 token 奖励 r_t = log π_T(y_t) − log π_θ(y_t) 是典型的稠密奖励；过程奖励模型是另一类。"
+  definition: '在轨迹的每一步（每个 token）都给出的学习信号，与只在结尾给出的序列级奖励相对。OPD 的逐 token 奖励 $r_t=\log\pi_T(y_t\mid s_t)-\log\pi_\theta(y_t\mid s_t)$ 是典型的稠密奖励；过程奖励模型是另一类。'
   see: [/topics/opd#compute]
 
 - id: self-distillation
@@ -83,7 +83,7 @@
   zh: 多教师在线蒸馏
   area: opd
   plain: "每个科目请一位最强的老师，学生自己做各科题，由对应科目的老师逐字批改。"
-  definition: "先分领域训练若干专家（通常经 RL），再让一个统一学生在各领域提示上自行采样，按领域路由到对应教师计算逐 token 反向 KL 信号并合并训练。MiMo-V2-Flash、DeepSeek-V4、Nemotron 3 Ultra 等用它替代参数合并或混合 RL。"
+  definition: "先分领域训练若干专家（通常经 RL），再让一个统一学生在各领域提示上自行采样，按领域路由到对应教师计算逐 token 反向 KL 信号并合并训练，可叠加结果奖励。MiMo-V2-Flash 以这个名称系统地提出了这套做法；DeepSeek-V4 用它取代混合 RL，Nemotron 3 Ultra 等也采用了多教师 OPD。"
   see: [/topics/opd#industrial]
 
 - id: dagger

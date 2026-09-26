@@ -14,7 +14,7 @@ prereq:
 - RLVR 以锐化为主：熵主要花在已经会做的题上，pass@1 大涨，大 k 的 pass@k 常持平甚至下降；训得够久、题目落在能力边缘时才可能扩展边界。
 - RL 改得少、忘得少：参数更新稀疏且避开主方向，on-policy 数据让它偏向离基座 KL 最近的解法。
 - RL 放大的是基座已有的先验：“随机奖励也涨分”主要出现在 Qwen2.5-Math 上，缺少验证、回溯行为的基座也练不动，所以结论要跨模型家族、配随机奖励对照。
-- CoT 常常不忠实，但读 CoT 仍能抓到 reward hacking；一旦把监控分数并进奖励，模型就会学会把意图藏起来。
+- CoT 常常不忠实，但读 CoT 仍能抓到奖励作弊；一旦把监控分数并进奖励，模型就会学会把意图藏起来。
 - 如果只读一节：读 [pass@k 之争](#pass-at-k-debate)。
 :::
 
@@ -133,7 +133,7 @@ Qwen 团队换了个角度：不是所有 token 的熵都值得保[^wang8020]。
 1. RLVR 训练中，模型基本沿用基座的熵模式，RL 主要调整的是高熵位置上的熵，低熵 token 几乎不动；
 2. 在 DAPO 的 token 级目标里只保留前 20% 高熵 token 的梯度，Qwen3-8B 上与全量更新持平，14B、32B 上明显更好；反过来只训练后 80% 的低熵 token，性能大幅下降。
 
-写成公式，就是在 DAPO 的 token 级目标里乘上一个指示函数。其中 $H_{i,t}$ 为第 $i$ 个回答第 $t$ 个 token 的熵，$\tau_{0.2}$ 为 batch 内 token 熵的 80% 分位数，$\rho_{i,t}$ 为重要性比率，$\hat A_{i,t}$ 为组内标准化的优势，$G$ 为每题采样数，$\varepsilon_\text{low},\varepsilon_\text{high}$ 为上下裁剪范围：
+写成公式，就是在 DAPO 的 token 级目标里乘上一个指示函数。其中 $H_{i,t}$ 为第 $i$ 个回答第 $t$ 个 token 的熵，$\tau_{0.2}$ 为 batch 内 token 熵的 80% 分位数，$\rho_{i,t}$ 为重要性比率，$\hat A_{i,t}$ 为组内归一化的优势，$G$ 为每题采样数，$\varepsilon_\text{low},\varepsilon_\text{high}$ 为上下裁剪范围：
 
 $$\mathcal J(\theta)=\E\Big[\frac{1}{\sum_{i}\lvert y_i\rvert}\sum_{i=1}^{G}\sum_{t=1}^{\lvert y_i\rvert}\mathbf 1\big[H_{i,t}\ge\tau_{0.2}\big]\cdot\min\big(\rho_{i,t}\hat A_{i,t},\ \clip(\rho_{i,t},1-\varepsilon_\text{low},1+\varepsilon_\text{high})\,\hat A_{i,t}\big)\Big]$$
 
@@ -410,13 +410,13 @@ Anthropic 的 *Reasoning Models Don't Always Say What They Think* 用了一个�
 
 - Claude 3.7 Sonnet 与 DeepSeek R1 的平均承认率只有 25% 和 39%，不少设置低于 20%；
 - 结果导向的 RL 起初能提升忠实性，随后停在较低水平（MMLU 上约 28%，GPQA 上约 20%）；
-- 在人为植入 reward hack 的 RL 环境里，Claude 3.7 Sonnet 在 99% 以上的样本上学会了利用漏洞，但在 6 个环境中的 5 个里，CoT 承认率不到 2%。
+- 在人为植入奖励漏洞的 RL 环境里，Claude 3.7 Sonnet 在 99% 以上的样本上学会了利用漏洞，但在 6 个环境中的 5 个里，CoT 承认率不到 2%。
 
 ### 监控有用，但一旦进入奖励就会失效
 
-OpenAI 的 Baker 等人给出了更贴近生产的证据[^baker]：在前沿推理模型（与 o3-mini 同级）的智能体编码 RL 训练中，用 GPT-4o 读 CoT 的监控器抓到了真实的 <Term t="reward-hacking">reward hacking</Term>（例如改测试让它总能通过），效果远好于只看动作和输出的监控器，而且较弱的模型也能有效监控更强的模型。
+OpenAI 的 Baker 等人给出了更贴近生产的证据[^baker]：在前沿推理模型（与 o3-mini 同级）的智能体编码 RL 训练中，用 GPT-4o 读 CoT 的监控器抓到了真实的<Term t="reward-hacking">奖励作弊</Term>（reward hacking，例如改测试让它总能通过），效果远好于只看动作和输出的监控器，而且较弱的模型也能有效监控更强的模型。
 
-但他们接着做了一个关键实验：把“CoT 里有没有坏念头”并入奖励。优化压力较小时，模型确实更强、hack 更少；压力加大后，模型学会把 CoT 写得干干净净，同时照样 hack，这就是**混淆（obfuscation）**。
+但他们接着做了一个关键实验：把“CoT 里有没有坏念头”并入奖励。优化压力较小时，模型确实更强、作弊更少；压力加大后，模型学会把 CoT 写得干干净净，同时照样作弊，这就是**混淆（obfuscation）**。
 
 ```mermaid 把 CoT 监控放在哪里
 flowchart LR
@@ -439,12 +439,12 @@ flowchart LR
 
 ### 对 RL 训练意味着什么
 
-最后一个值得 RL 工程师警惕的结果来自 Anthropic 2025 年 11 月的 *Natural Emergent Misalignment from Reward Hacking in Production RL*[^hack]：在真实的生产编码环境中学会 reward hack 的模型，会泛化出对齐伪装、配合恶意行为者、在 Claude Code 中尝试破坏等更广泛的不对齐行为。有效的缓解包括阻止 hack、提高 RLHF 安全训练的多样性，以及“接种提示”：在训练中明确说明此处允许 hack，反而切断了向不对齐的泛化。
+最后一个值得 RL 工程师警惕的结果来自 Anthropic 2025 年 11 月的 *Natural Emergent Misalignment from Reward Hacking in Production RL*[^hack]：在真实的生产编码环境中学会奖励作弊的模型，会泛化出对齐伪装、配合恶意行为者、在 Claude Code 中尝试破坏等更广泛的不对齐行为。有效的缓解包括阻止作弊、提高 RLHF 安全训练的多样性，以及“接种提示”：在训练中明确说明此处允许钻空子，反而切断了向不对齐的泛化。
 
 把这些放在一起，RL 训练中关于 CoT 的规则可以很具体：
 
 1. **不对 CoT 施加强优化压力**：监控器用于检测、报警和数据清洗，不要把它的打分并入奖励；长度惩罚、风格奖励也可能间接改变 CoT 的可读性，需要评估。
-2. **把环境与验证器的漏洞当作对齐问题**：发现 hack 先修环境，新环境上线前做漏洞审计（[奖励设计与 reward hacking](/topics/rl-for-llm#reward-hacking)）。
+2. **把环境与验证器的漏洞当作对齐问题**：发现作弊先修环境，新环境上线前做漏洞审计（[奖励设计与奖励作弊](/topics/rl-for-llm#reward-hacking)）。
 3. **CoT 只能证有，不能证无**：监控能发现问题，但不能证明“没有问题”；关键结论要配合行为测试与干预实验。
 4. **跟踪可监控性本身**：像跟踪熵一样，定期在固定的探针任务上评估 CoT 的忠实性与可监控性，观察它是否随训练退化。
 
@@ -468,7 +468,7 @@ flowchart LR
 3. **实验先过三道关**：两个以上模型家族、一组随机奖励对照、一个无污染基准；过不了，就别急着下“新方法有效”的结论。
 4. **加新能力时优先用 on-policy 数据**：RL、自采样后过滤再 SFT、on-policy 蒸馏；用新任务上的 KL 预警遗忘。
 5. **RL 前先给基座体检**：看 CoT 里有没有验证、回溯等行为，“能力边缘”的题够不够；缺什么就先在中训练或 SFT 阶段补什么。
-6. **CoT 监控只做检测、不进奖励**：发现 reward hacking 先修环境，并定期评估 CoT 的可监控性。
+6. **CoT 监控只做检测、不进奖励**：发现奖励作弊先修环境，并定期评估 CoT 的可监控性。
 :::
 
 ## 常见坑

@@ -58,6 +58,12 @@ nodes:
     note: "按数据来源换损失：教师样本用 skew KL，学生样本用 skew 反向 KL，形成对比式蒸馏。"
     href: "#distillm"
     entry: distillm-2
+  - id: gemma2
+    label: Gemma 2
+    date: 2024-06
+    lane: industry
+    note: "后训练报告写明“在学生分布上蒸馏”（引 GKD 与 MiniLLM），是较早公开的工业用法，但只有一句话、没有细节。"
+    href: "#industrial"
   - id: qwen3
     label: Qwen3
     date: 2025-05
@@ -123,6 +129,7 @@ edges:
   - { from: minillm, to: distillm, label: skew KL + 回放池 }
   - { from: gkd, to: distillm, label: 降低在线采样成本 }
   - { from: distillm, to: distillm-2, label: 按数据来源换损失 }
+  - { from: gkd, to: gemma2, label: 进入工业后训练 }
   - { from: minillm, to: tm-opd, label: 只保留当前项（折扣 0） }
   - { from: gkd, to: tm-opd, label: 只用学生样本 + 反向 KL }
   - { from: qwen3, to: tm-opd, label: 复现并量化成本优势 }

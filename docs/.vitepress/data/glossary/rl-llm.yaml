@@ -1,4 +1,6 @@
-# LLM 强化学习（/topics/rl-for-llm）的术语。字段按纯文本渲染，公式用 Unicode 书写。
+# LLM 强化学习（/topics/rl-for-llm）的术语。
+# plain 与 definition 支持 $公式$（构建时用 KaTeX 渲染；条件竖线写 \mid，不写裸 |）与 `代码`，
+# 含公式的字段用单引号字符串，反斜杠原样书写；term、full、zh 按纯文本显示，符号用 Unicode。
 # 通用 RL 概念不填 area（归入“通用概念”），LLM RL 专属概念填 area: rl-llm。
 
 # ───────────── 通用概念 ─────────────
@@ -8,7 +10,7 @@
   full: Policy
   zh: 策略 π_θ
   plain: "就是模型本身：给定提示和已经写出的前文，它给出下一个 token 的概率分布；做 RL 就是在调这个分布。"
-  definition: "从状态到动作分布的映射 π_θ(a∣s)。在 LLM 中，状态是提示 x 与已生成前缀 y_<t，动作是下一个 token y_t，整段回答的概率为 π_θ(y∣x) = Π_t π_θ(y_t∣x, y_<t)。"
+  definition: '从状态到动作分布的映射 $\pi_\theta(a\mid s)$。在 LLM 中，状态是提示 $x$ 与已生成前缀 $y_{<t}$，动作是下一个 token $y_t$，整段回答的概率为 $\pi_\theta(y\mid x)=\prod_t\pi_\theta(y_t\mid x,y_{<t})$。'
   see: [/topics/rl-for-llm#why-rl]
 
 - id: reward
@@ -16,7 +18,7 @@
   full: Reward
   zh: 奖励 r(x, y)
   plain: "对一段回答打的分：答对了、测试过了、人更喜欢，就给高分；RL 的目标就是让期望得分变高。"
-  definition: "对轨迹或单步动作的标量反馈。LLM 中多为序列级奖励 r(x, y)，只在回答结束时给出；来源可以是奖励模型（RLHF）、规则验证器（RLVR）或二者组合，也可叠加格式、长度、语言一致性等塑形项。"
+  definition: '对轨迹或单步动作的标量反馈。LLM 中多为序列级奖励 $r(x,y)$，只在回答结束时给出；来源可以是奖励模型（RLHF）、规则验证器（RLVR）或二者组合，也可叠加格式、长度、语言一致性等塑形项。'
   see: [/topics/rl-for-llm#reward-design]
 
 - id: value-function
@@ -24,7 +26,7 @@
   full: Value Function
   zh: 价值函数 V(s)
   plain: "“从现在这个局面往后，平均能拿多少分”的估计；PPO 用它判断某一步走得比平均好还是差。"
-  definition: "状态价值 V^π(s) = E_π[Σ_k γ^k r_{t+k} ∣ s_t = s]，动作价值 Q^π(s, a) 再以首个动作为条件。LLM 中 s = (x, y_<t)、通常取 γ = 1；价值网络一般与策略同规模，成本高，且序列级奖励下逐 token 的价值很难学准。"
+  definition: '状态价值 $V^\pi(s)=\E_\pi\big[\sum_k\gamma^k r_{t+k}\mid s_t=s\big]$，动作价值 $Q^\pi(s,a)$ 再以首个动作为条件。LLM 中 $s=(x,y_{<t})$，通常取 $\gamma=1$；价值网络一般与策略同规模，成本高，且序列级奖励下逐 token 的价值很难学准。'
   see: [/lenses/algorithms#gae]
 
 - id: advantage
@@ -32,7 +34,7 @@
   full: Advantage
   zh: 优势 Â
   plain: "这个回答（或这一步）比“平均水平”好多少：正的就多学，负的就少学。"
-  definition: "A^π(s, a) = Q^π(s, a) − V^π(s)，衡量动作相对当前策略平均表现的好坏。策略梯度用 Â_t 加权 ∇log π_θ(y_t∣x, y_<t)；GAE、组内归一化（GRPO）、留一基线（RLOO）、全局归一化（REINFORCE++）都是 Â 的不同估计方式。"
+  definition: '$A^\pi(s,a)=Q^\pi(s,a)-V^\pi(s)$，衡量动作相对当前策略平均表现的好坏。策略梯度用 $\hat A_t$ 加权 $\nabla_\theta\log\pi_\theta(y_t\mid x,y_{<t})$；GAE、组内归一化（GRPO）、留一基线（RLOO）、全局归一化（REINFORCE++）都是 $\hat A$ 的不同估计方式。'
   see: [/lenses/algorithms#policy-gradient, /topics/rl-for-llm#rlvr]
 
 - id: baseline
@@ -40,7 +42,7 @@
   full: Baseline
   zh: 基线 b
   plain: "打分时先减去一条“及格线”，只看超出或不足的部分；及格线选得好，训练噪声就小。"
-  definition: "在策略梯度中用 (r − b) 代替 r：只要 b 不依赖当前采样的动作，梯度仍然无偏，方差却可大幅下降。常见选择有价值函数 V(s)（PPO）、贪心解码回答的奖励（ReMax）、同组其余样本均值（RLOO）、组内均值（GRPO）。"
+  definition: '在策略梯度中用 $r-b$ 代替 $r$：只要 $b$ 不依赖当前采样的动作，梯度仍然无偏，方差却可大幅下降。常见选择有价值函数 $V(s)$（PPO）、贪心解码回答的奖励（ReMax）、同组其余样本的均值（RLOO）；GRPO 的组均值含样本自身，相当于把留一基线下的优势乘以 $(G-1)/G$。'
   see: [/lenses/algorithms#reinforce]
 
 - id: policy-gradient
@@ -48,7 +50,7 @@
   full: Policy Gradient
   zh: 策略梯度
   plain: "按“结果好坏 × 这么做的概率”的方向调参数：好结果那条路径的概率调高，坏结果的调低。"
-  definition: "∇_θ J(θ) = E_{y∼π_θ}[Σ_t Â_t ∇_θ log π_θ(y_t∣x, y_<t)]，由对数导数技巧导出，只需能采样并计算对数概率，不要求奖励可导。REINFORCE、PPO、GRPO 都属于这一族。"
+  definition: '$\nabla_\theta J(\theta)=\E_{y\sim\pi_\theta}\big[\sum_t\hat A_t\,\nabla_\theta\log\pi_\theta(y_t\mid x,y_{<t})\big]$（$\hat A_t$ 为优势估计），由对数导数技巧导出，只需能采样并计算对数概率，不要求奖励可导。REINFORCE、PPO、GRPO 都属于这一族。'
   see: [/lenses/algorithms#policy-gradient]
 
 - id: importance-sampling
@@ -56,7 +58,7 @@
   full: Importance Sampling
   zh: 重要性采样
   plain: "用旧模型生成的数据更新新模型时，给每个样本乘上“新旧模型概率之比”，纠正两者分布不一致。"
-  definition: "E_{y∼π_θ}[f(y)] = E_{y∼π_old}[ρ(y)·f(y)]，ρ = π_θ(y)/π_old(y)。LLM RL 常在 token 级使用 ρ_t = π_θ(y_t∣x, y_<t)/π_θold(y_t∣x, y_<t)；比率偏离 1 越远方差越大，因此需要裁剪（PPO）、截断（CISPO、TIS）或改为序列级计算（GSPO）。"
+  definition: '$\E_{y\sim\pi_\theta}[f(y)]=\E_{y\sim\pi_\text{old}}[\rho(y)f(y)]$，$\rho=\pi_\theta(y)/\pi_\text{old}(y)$。LLM RL 常在 token 级使用 $\rho_t=\pi_\theta(y_t\mid x,y_{<t})/\pi_{\theta_\text{old}}(y_t\mid x,y_{<t})$；比率偏离 1 越远方差越大，因此需要裁剪（PPO）、截断（CISPO、TIS）或改为序列级计算（GSPO）。'
   see: [/lenses/algorithms#off-policy]
 
 - id: kl-divergence
@@ -64,7 +66,7 @@
   full: Kullback–Leibler Divergence
   zh: KL 散度
   plain: "衡量两个模型的输出分布差多远；RLHF 用它当绳子，防止模型为了高分偏离原模型太远。"
-  definition: "KL(p‖q) = E_{y∼p}[log p(y) − log q(y)] ≥ 0，当且仅当 p = q 时为 0，且不对称。RLHF 的目标是 max E[r] − β·KL(π_θ‖π_ref)；实践中用样本估计（k1、k2、k3），既可作为逐 token 惩罚加进奖励，也可作为损失项。"
+  definition: '$\KL(p\,\|\,q)=\E_{y\sim p}[\log p(y)-\log q(y)]\ge 0$，当且仅当 $p=q$ 时为 0，且不对称。RLHF 的目标是 $\max\ \E[r]-\beta\,\KL(\pi_\theta\,\|\,\pi_\text{ref})$；实践中用样本估计（k1、k2、k3），既可作为逐 token 惩罚加进奖励，也可作为损失项。'
   see: [/lenses/algorithms#kl, /topics/rl-for-llm#rlhf]
 
 - id: forward-kl
@@ -72,7 +74,7 @@
   full: Forward KL, KL(p‖q_θ)
   zh: 正向 KL
   plain: "“目标分布里有的，模型都得覆盖到”：宁可撒得宽一点，也不能漏掉任何一种可能。"
-  definition: "以目标分布 p 为基准的 KL(p‖q_θ) = E_{y∼p}[log p(y)/q_θ(y)]，最小化它等价于在 p 的样本上做最大似然，倾向于覆盖 p 的所有模式（mode-covering）。SFT 与传统知识蒸馏最小化的就是它。"
+  definition: '以目标分布 $p$ 为基准的 $\KL(p\,\|\,q_\theta)=\E_{y\sim p}[\log p(y)-\log q_\theta(y)]$，最小化它等价于在 $p$ 的样本上做最大似然，倾向于覆盖 $p$ 的所有模式（mode-covering）。SFT 与传统知识蒸馏最小化的就是它。'
   see: [/topics/opd#reverse-kl]
 
 - id: reverse-kl
@@ -80,7 +82,7 @@
   full: Reverse KL, KL(q_θ‖p)
   zh: 反向 KL
   plain: "“模型说出口的，目标分布得认可”：宁可只挑最有把握的几种说法，也不乱说。"
-  definition: "以模型分布为基准的 KL(q_θ‖p) = E_{y∼q_θ}[log q_θ(y)/p(y)]，需要在模型自己的样本上评估，倾向于集中到 p 的高概率模式（mode-seeking）。RLHF 中对 π_ref 的 KL 惩罚、在线策略蒸馏的目标都属于此类。"
+  definition: '以模型分布为基准的 $\KL(q_\theta\,\|\,p)=\E_{y\sim q_\theta}[\log q_\theta(y)-\log p(y)]$，需要在模型自己的样本上评估，倾向于集中到 $p$ 的高概率模式（mode-seeking）。RLHF 中对 $\pi_\text{ref}$ 的 KL 惩罚、在线策略蒸馏的目标都属于此类。'
   see: [/topics/opd#reverse-kl, /lenses/algorithms#kl]
 
 - id: on-policy
@@ -88,7 +90,7 @@
   full: On-Policy
   zh: 在线策略（同策略）
   plain: "用当前模型自己刚生成的数据训练当前模型：数据“新鲜”，但每次更新都要重新采样。"
-  definition: "训练样本来自正在优化的策略 π_θ 本身。严格的在线策略方法每批数据只做一次梯度更新；PPO 允许在同一批上做少量几轮更新，依靠裁剪维持近似在线。"
+  definition: '训练样本来自正在优化的策略 $\pi_\theta$ 本身。严格的在线策略方法每批数据只做一次梯度更新；PPO 允许在同一批上做少量几轮更新，依靠裁剪维持近似在线。'
   see: [/lenses/algorithms#off-policy]
 
 - id: off-policy
@@ -96,7 +98,7 @@
   full: Off-Policy
   zh: 离策略（异策略）
   plain: "用别的或旧的模型生成的数据训练当前模型：省采样，但要修正两者的分布差异。"
-  definition: "样本来自行为策略 μ ≠ π_θ：旧版本策略、异步 rollout 中落后若干步的策略，或推理引擎与训练引擎的数值差异造成的偏移。需要重要性采样修正，或对偏离过大的样本做裁剪、截断与掩码。"
+  definition: '样本来自行为策略 $\mu\ne\pi_\theta$：旧版本策略、异步 rollout 中落后若干步的策略，或推理引擎与训练引擎的数值差异造成的偏移。需要重要性采样修正，或对偏离过大的样本做裁剪、截断与掩码。'
   see: [/lenses/algorithms#off-policy, /lenses/infra#mismatch]
 
 - id: critic
@@ -104,7 +106,7 @@
   full: Critic / Value Network
   zh: 评论家（价值网络）
   plain: "专门负责“估分”的网络：告诉策略每一步大概值多少分，好让策略知道自己是超常还是失常。"
-  definition: "Actor-critic 方法中估计 V(s) 或 Q(s, a) 的网络，为优势估计提供基线。LLM 上 critic 通常与策略同规模，显存与计算约翻倍，于是 GRPO、RLOO、REINFORCE++ 等无 critic 方法流行；VAPO 用价值预训练与解耦 GAE 让 critic 在长 CoT 上重新可用。"
+  definition: "Actor-critic 方法中估计 $V(s)$ 或 $Q(s,a)$ 的网络，为优势估计提供基线。LLM 上 critic 通常与策略同规模，显存与计算约翻倍，于是 GRPO、RLOO、REINFORCE++ 等无 critic 方法流行；VAPO 用价值预训练与解耦 GAE 让 critic 在长 CoT 上重新可用。"
   see: [/lenses/algorithms#gae]
 
 # ───────────── LLM 强化学习 ─────────────
@@ -115,7 +117,7 @@
   zh: 近端策略优化
   area: rl-llm
   plain: "每次只允许模型在旧版本附近小步改进，改动超出范围的部分不再给好处，训练因此稳定。"
-  definition: "最大化裁剪代理目标 E_t[min(ρ_t·Â_t, clip(ρ_t, 1−ε, 1+ε)·Â_t)]，ρ_t 为新旧策略的 token 概率比，Â_t 通常由价值网络加 GAE 估计；RLHF 中再对参考策略加 KL 惩罚。InstructGPT 的 RLHF 与 Open-Reasoner-Zero、VAPO 等推理 RL 都以它为骨架。"
+  definition: '最大化裁剪代理目标 $\E_t\big[\min\big(\rho_t\hat A_t,\ \clip(\rho_t,1-\varepsilon,1+\varepsilon)\hat A_t\big)\big]$，$\rho_t$ 为新旧策略的 token 概率比，$\hat A_t$ 通常由价值网络加 GAE 估计；RLHF 中再对参考策略加 KL 惩罚。InstructGPT 的 RLHF 与 Open-Reasoner-Zero、VAPO 等推理 RL 都以它为骨架。'
   see: [/lenses/algorithms#ppo, /topics/rl-for-llm#rlhf]
 
 - id: grpo
@@ -124,7 +126,7 @@
   zh: 组相对策略优化
   area: rl-llm
   plain: "同一道题让模型做一组，拿组内平均分当及格线、组内分差当尺度来打分，省掉估分网络。"
-  definition: "对每个提示采样 G 个回答，优势 Â_i = (r_i − mean(r))/std(r) 赋给该回答的每个 token；沿用 PPO 的裁剪代理目标，并在损失中直接加入对 π_ref 的 k3 KL 估计。DeepSeekMath 提出，DeepSeek-R1 使其成为推理 RL 的默认起点。"
+  definition: '对每个提示采样 $G$ 个回答，优势 $\hat A_i=\big(r_i-\operatorname{mean}(r)\big)/\operatorname{std}(r)$ 赋给该回答的每个 token；沿用 PPO 的裁剪代理目标，损失先在每个回答内按长度平均，并直接加入对 $\pi_\text{ref}$ 的 k3 KL 估计。DeepSeekMath 提出，DeepSeek-R1 使其成为推理 RL 的默认起点。'
   see: [/lenses/algorithms#grpo, /topics/rl-for-llm#rlvr]
 
 - id: rloo
@@ -132,8 +134,8 @@
   full: REINFORCE Leave-One-Out
   zh: 留一基线 REINFORCE
   area: rl-llm
-  plain: "同一道题做 k 遍，每个答案都和“其他几遍的平均分”比较，比平均好就加强。"
-  definition: "对同一提示的 k 个样本，第 i 个样本的基线取其余 k−1 个样本奖励的均值 b_i = (1/(k−1))·Σ_{j≠i} r_j；基线与该样本无关，梯度无偏，不需要价值网络，通常把整段回答视为单个动作。"
+  plain: '同一道题做 $k$ 遍，每个答案都和“其他几遍的平均分”比较，比平均好就加强。'
+  definition: '对同一提示的 $k$ 个样本，第 $i$ 个样本的基线取其余 $k-1$ 个样本奖励的均值 $b_i=\frac{1}{k-1}\sum_{j\ne i}r_j$；基线与该样本无关，梯度无偏，不需要价值网络，通常把整段回答视为单个动作。'
   see: [/lenses/algorithms#rloo]
 
 - id: reinforce-pp
@@ -151,7 +153,7 @@
   zh: 解耦裁剪与动态采样策略优化
   area: rl-llm
   plain: "在 GRPO 上打四个补丁：给好点子更大的上涨空间、跳过全对或全错的题、按 token 公平计分、温和惩罚超长回答。"
-  definition: "对 GRPO 的四项修改，并去掉 KL：非对称裁剪 clip(ρ, 1−ε_low, 1+ε_high)（原文 0.2 与 0.28）；动态采样，过滤组内奖励全相同的提示；token 级损失，对一批中所有 token 取平均；超长回答过滤或软惩罚。"
+  definition: '对 GRPO 的四项修改，并去掉 KL：非对称裁剪 $\clip(\rho,1-\varepsilon_\text{low},1+\varepsilon_\text{high})$（原文取 0.2 与 0.28）；动态采样，过采样并丢弃组内奖励全相同的提示，直到批次填满；token 级损失，对一组所有回答的全部 token 取平均；超长回答过滤或软惩罚。'
   see: [/lenses/algorithms#dapo, /topics/rl-for-llm#recipes]
 
 - id: dr-grpo
@@ -160,7 +162,7 @@
   zh: 修正版 GRPO
   area: rl-llm
   plain: "GRPO 按回答长度平均扣分、再按组内标准差放大难题和易题，这两个除法会把训练带偏，去掉就好。"
-  definition: "去掉 GRPO 目标中的 1/|y_i| 长度归一化与优势中的 std 归一化：前者让错误的长回答每个 token 受罚更轻、诱导回答变长；后者给组内奖励方差小（过易或过难）的问题过大的权重。"
+  definition: '去掉 GRPO 目标中的 $1/\lvert y_i\rvert$ 长度归一化（改用常数）与优势中的 std 归一化：前者让错误的长回答每个 token 受罚更轻、诱导回答变长；后者给组内奖励方差小（过易或过难）的问题过大的权重。'
   see: [/lenses/algorithms#dr-grpo]
 
 - id: gspo
@@ -169,7 +171,7 @@
   zh: 组序列策略优化
   area: rl-llm
   plain: "奖励按整段回答给，新旧策略的差距也按整段算，并对整段做裁剪：噪声更小，MoE 也更稳。"
-  definition: "用长度归一化的序列级比率 s_i(θ) = (π_θ(y_i∣x)/π_θold(y_i∣x))^(1/|y_i|) 替代 token 级比率，在序列级裁剪与优化，优势仍按组内归一化。Qwen 团队提出，用于稳定 Qwen3 系列（尤其是 MoE）的 RL 训练。"
+  definition: '用长度归一化的序列级比率 $s_i(\theta)=\big(\pi_\theta(y_i\mid x)/\pi_{\theta_\text{old}}(y_i\mid x)\big)^{1/\lvert y_i\rvert}$ 替代 token 级比率，在序列级裁剪与优化，优势仍按组内归一化。Qwen 团队提出，用于稳定 Qwen3 系列（尤其是 MoE）的 RL 训练。'
   see: [/lenses/algorithms#gspo]
 
 - id: cispo
@@ -178,7 +180,7 @@
   zh: 裁剪重要性权重的策略优化
   area: rl-llm
   plain: "不把“变化太大”的 token 踢出训练，只给它们的权重设上限，关键的反思类词也能继续学。"
-  definition: "在带重要性修正的 REINFORCE 目标中裁剪 IS 权重并停止其梯度：J = E[Σ_t sg(clip(ρ_t, 1−ε_low, 1+ε_high))·Â_t·log π_θ(y_t∣x, y_<t)]，按 token 聚合。与 PPO 不同，比率超出范围的 token 仍贡献梯度。MiniMax-M1 提出，ScaleRL 采用。"
+  definition: '在带重要性修正的 REINFORCE 目标中裁剪 IS 权重并停止其梯度：$J=\E\big[\sum_t\sg\big(\clip(\rho_t,1-\varepsilon_\text{low},1+\varepsilon_\text{high})\big)\hat A_t\log\pi_\theta(y_t\mid x,y_{<t})\big]$，按 token 聚合。与 PPO 不同，比率超出范围的 token 仍贡献梯度。MiniMax-M1 提出，ScaleRL 采用。'
   see: [/lenses/algorithms#cispo]
 
 - id: rlhf
@@ -187,7 +189,7 @@
   zh: 基于人类反馈的强化学习
   area: rl-llm
   plain: "请人比较模型的回答哪个更好，训练一个学会人类口味的“打分员”，再让模型为了打分员的高分去练。"
-  definition: "用人类偏好数据训练奖励模型（常用 Bradley–Terry 损失），再以 max E[r_φ(x, y)] − β·KL(π_θ‖π_ref) 为目标用 RL（多为 PPO）优化策略；InstructGPT 确立了 SFT → RM → PPO 三段式。广义上也包括用 AI 反馈替代人类的 RLAIF，以及 DPO 等直接对齐方法。"
+  definition: '用人类偏好数据训练奖励模型（常用 Bradley–Terry 损失），再以 $\max\ \E[r_\phi(x,y)]-\beta\,\KL(\pi_\theta\,\|\,\pi_\text{ref})$ 为目标用 RL（多为 PPO）优化策略；InstructGPT 确立了 SFT → RM → PPO 三段式。广义上也包括用 AI 反馈替代人类的 RLAIF，以及 DPO 等直接对齐方法。'
   see: [/topics/rl-for-llm#rlhf]
 
 - id: rlvr
@@ -196,7 +198,7 @@
   zh: 可验证奖励强化学习
   area: rl-llm
   plain: "不需要打分员：答案对不对、代码测试过没过由程序直接判定，拿这个当奖励去训练。"
-  definition: "奖励来自可程序化判定的验证器，如数学答案等价判定、单元测试、格式与约束检查，通常是二值的；术语由 Tülu 3（2024）提出。这类奖励不易被刷，能支撑长程训练，是 DeepSeek-R1 等推理模型的核心。"
+  definition: "奖励来自可程序化判定的验证器，如数学答案等价判定、单元测试、格式与约束检查，通常是二值的；术语由 Tülu 3（2024）提出。这类奖励判得准，比学到的奖励模型更难被刷（但验证器本身也有漏洞），能支撑长程训练，是 DeepSeek-R1 等推理模型的核心。"
   see: [/topics/rl-for-llm#rlvr]
 
 - id: rlaif
@@ -214,7 +216,7 @@
   zh: 奖励模型
   area: rl-llm
   plain: "一个学会了人类口味的“打分员”模型，能给任意回答打分，代替人来评判。"
-  definition: "输入 (x, y)、输出标量奖励 r_φ(x, y) 的模型，通常以 SFT 模型加标量头初始化，在偏好对上用 Bradley–Terry 损失训练；也可以是生成式的（先写评语再给分或比较）。它只是真实偏好的代理，被过度优化时会出现奖励作弊。"
+  definition: "输入 $(x,y)$、输出标量奖励 $r_\\phi(x,y)$ 的模型，通常以 SFT 模型加标量头初始化，在偏好对上用 Bradley–Terry 损失训练；也可以是生成式的（先写评语再给分或比较）。它只是真实偏好的代理，被过度优化时会出现奖励作弊。"
   see: [/topics/rl-for-llm#reward-design]
 
 - id: generative-reward-model
@@ -256,7 +258,7 @@
 - id: reward-hacking
   term: 奖励作弊
   full: Reward Hacking
-  zh: 奖励黑客（钻奖励的空子）
+  zh: 奖励作弊（钻奖励的空子）
   area: rl-llm
   plain: "模型找到了“拿高分但没把事做好”的捷径：写得更长、讨好评委、偷偷改测试。"
   definition: "策略利用奖励函数或验证器的缺陷获得高奖励，却没有完成预期任务，是 Goodhart 定律在 RL 中的体现。常见形态有长度膨胀、讨好、格式投机、答案可猜、篡改测试；优化学到的奖励模型时，真实质量随 KL 距离先升后降（奖励过优化）。"
@@ -268,7 +270,7 @@
   zh: 参考策略
   area: rl-llm
   plain: "训练开始前模型的一份“存档”；RL 时用 KL 绳子拴住它，防止新模型跑偏。"
-  definition: "KL 正则中的锚点分布 π_ref，通常是 SFT 后的模型。RLHF 中必不可少；长程推理 RL 中常被弱化或去掉（DAPO、Open-Reasoner-Zero、Magistral），或定期重置为当前策略（ProRL）。它不同于生成样本的 π_θold，后者是重要性比率的分母。"
+  definition: 'KL 正则中的锚点分布 $\pi_\text{ref}$，通常是 SFT 后的模型。RLHF 中必不可少；长程推理 RL 中常被弱化或去掉（DAPO、Open-Reasoner-Zero、Magistral），或定期重置为当前策略（ProRL）。它不同于生成样本的 $\pi_{\theta_\text{old}}$，后者是重要性比率的分母。'
   see: [/topics/rl-for-llm#rlhf]
 
 - id: zero-rl
@@ -278,7 +280,7 @@
   area: rl-llm
   plain: "跳过示范数据，直接从预训练基座开始做强化学习，看模型能不能自己长出推理能力。"
   definition: "不经 SFT、直接在基座模型上以规则奖励做 RL 的训练范式，因 DeepSeek-R1-Zero 得名。效果高度依赖基座的预训练先验与提示模板；Open-Reasoner-Zero、SimpleRL-Zoo、Dr. GRPO 分别从配方、基座多样性与优化偏置角度研究了它。"
-  see: [/topics/rl-for-llm#evolution]
+  see: [/topics/rl-for-llm#reproductions]
 
 - id: test-time-scaling
   term: 测试时扩展
@@ -287,7 +289,7 @@
   area: rl-llm
   plain: "答题时多花点算力，想得更久、或者多试几次再投票，成绩就更好。"
   definition: "在推理阶段增加计算量以提升性能：串行地延长思维链（长 CoT、思考预算），或并行地多次采样后投票、重排、搜索。OpenAI o1 展示了性能随测试时算力平滑提升；RL 训练让模型学会有效利用这部分算力。"
-  see: [/topics/rl-for-llm#evolution]
+  see: [/topics/rl-for-llm#signals]
 
 - id: thinking-budget
   term: 思考预算
@@ -296,7 +298,7 @@
   area: rl-llm
   plain: "给模型规定“最多想多少字”：简单题少想、难题多想，在效果与成本之间取舍。"
   definition: "对推理模型思维链长度的控制。推理时可以直接截断思考（Qwen3 的 thinking budget）；训练时可以让超出按题预算的回答拿不到奖励（Kimi K2.5 的 Toggle，只在该题正确率已够高时生效）或直接记 −1（Kimi K3 的推理强度 RL），得到不同强度档位的模型。"
-  see: [/topics/rl-for-llm#frontier]
+  see: [/topics/rl-for-llm#frontier-length]
 
 - id: bradley-terry
   term: Bradley–Terry 模型
@@ -304,7 +306,7 @@
   zh: 成对比较模型
   area: rl-llm
   plain: "假设两个回答里“更好的那个”被选中的概率只取决于两者得分之差，就能从“谁更好”的比较里学出每个回答的分数。"
-  definition: "P(y_w ≻ y_l ∣ x) = σ(r(x, y_w) − r(x, y_l))，σ 为 sigmoid。奖励模型的训练损失为 −log σ(r_φ(x, y_w) − r_φ(x, y_l))；DPO 把 r 替换为 β·log(π_θ/π_ref) 得到自己的损失。"
+  definition: '$P(y_w\succ y_l\mid x)=\sigma\big(r(x,y_w)-r(x,y_l)\big)$，$\sigma$ 为 sigmoid。奖励模型的训练损失为 $-\log\sigma\big(r_\phi(x,y_w)-r_\phi(x,y_l)\big)$；DPO 把 $r$ 替换为 $\beta\log(\pi_\theta/\pi_\text{ref})$ 得到自己的损失。'
   see: [/topics/rl-for-llm#rlhf, /lenses/algorithms#dpo]
 
 - id: dpo
@@ -313,5 +315,5 @@
   zh: 直接偏好优化
   area: rl-llm
   plain: "不训练打分员、也不在线生成，直接用“好回答 / 差回答”成对数据调整模型的概率。"
-  definition: "利用 KL 约束 RLHF 的闭式最优解，把奖励写成 β·log(π_θ(y∣x)/π_ref(y∣x)) 代入 Bradley–Terry 模型，得到损失 −log σ(β·log(π_θ(y_w∣x)/π_ref(y_w∣x)) − β·log(π_θ(y_l∣x)/π_ref(y_l∣x)))。离线、稳定、便宜，但不会探索新解法。"
+  definition: '利用 KL 约束 RLHF 的闭式最优解，把奖励写成 $\beta\log\frac{\pi_\theta(y\mid x)}{\pi_\text{ref}(y\mid x)}$（配分函数项在两两做差时抵消），代入 Bradley–Terry 模型得到损失 $-\log\sigma\Big(\beta\log\frac{\pi_\theta(y_w\mid x)}{\pi_\text{ref}(y_w\mid x)}-\beta\log\frac{\pi_\theta(y_l\mid x)}{\pi_\text{ref}(y_l\mid x)}\Big)$。离线、稳定、便宜，但不会探索新解法。'
   see: [/lenses/algorithms#dpo, /topics/rl-for-llm#rlhf]

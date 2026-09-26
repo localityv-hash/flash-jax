@@ -9,6 +9,14 @@ prereq:
 
 # 数据工作流：从语料到奖励信号
 
+::: tldr
+- 越往后的阶段，数据越不是“收集”来的，而是“生成 + 验证”出来的：数据工程的重心从写答案转向造验证器、控难度。
+- 每批数据都要过三道门：能不能验证、是不是重复、有没有泄题；RL 题集再加一道：难度对不对。
+- 二值奖励下全对或全错的组没有奖励梯度，单题的期望梯度还带着 $p(1-p)$ 这个权重：通过率居中的题最值钱；难度要用待训模型本身来估，并在训练中持续重估。
+- 训练集去污染管不到基座预训练阶段的泄漏；“少即是多”一类结论要换一个模型族、换基座发布后的新题复核。
+- 如果只读一节：读[难度与课程](#difficulty)。
+:::
+
 后训练的数据工作流，是把原始语料、人工示范和模型自己的输出，逐步加工成每个阶段真正吃进去的东西——SFT 的示范、偏好对、RL 的“提示 + 验证器”、智能体的“任务 + 环境”。每一步都要过同样三道门：**能不能验证、是不是重复、有没有泄题**；到了 RL 阶段再加一道：**难度对不对**。
 
 ::: human
@@ -72,7 +80,7 @@ flowchart TB
 
 ### 回答：蒸馏、拒绝采样与过滤
 
-- **<Term t="rejection-sampling">拒绝采样</Term>**：教师对每题采样多次，只留验证正确的回答。DeepSeek-R1 从推理 RL 收敛后的检查点采样，收集约 60 万条推理数据，加上约 20 万条非推理数据，合计约 80 万条[^r1]。
+- **<Term t="rejection-sampling">拒绝采样</Term>**：教师对每题采样多次，只留验证正确的回答。DeepSeek-R1 用推理 RL 收敛后的检查点这样做，得到约 60 万条推理 SFT 数据[^r1]（后续用法见[数据飞轮](#flywheel)）。
 - **按领域选验证方式**：数学用规则验证器（如 [Math-Verify](/library/?id=math-verify)），代码用单元测试（KodCode 对每题采样 3 次、按测试拒绝[^kodcode]），规则判不了的交给生成式评判（DeepSeek-R1 这一阶段的部分数据用 DeepSeek-V3 做判定[^r1]）。
 - **回答过滤**：Qwen3 列出六条剔除标准——最终答案错误、大量重复、明显靠猜、思考与总结不一致、语言混杂或风格突变、与验证集过于相似[^qwen3]；DeepSeek-R1 还滤掉了语言混杂、超长段落和夹杂代码块的思维链[^r1]。
 - **教师总失败的题别急着扔**：Qwen3 对 QwQ-32B 一直做错的题交给人工核验[^qwen3]；KodCode 给难题最多 10 次重试，用成功率标难度，10 次都失败才丢弃[^kodcode]。一次失败就扔，数据集会整体滑向简单题。
@@ -80,7 +88,7 @@ flowchart TB
 ### 去重、去污染与格式化
 
 - **<Term t="deduplication">去重</Term>**：KodCode 在每个子集内用 all-mpnet-base-v2 嵌入 + FAISS 近邻检索做语义去重[^kodcode]；[Big-Math](/library/?id=big-math) 用 SemDeDup。多个开源集合并时还要跨源去重。
-- **<Term t="decontamination">去污染</Term>**：Open-R1 沿用 s1 的做法，把题目小写、规整空白后做词级 8-gram 匹配，对照 AIME 2024/2025、MATH-500、GPQA、LiveCodeBench 删除命中样本[^openr1]。完整流程见[污染案例](#contamination-case)。
+- **<Term t="decontamination">去污染</Term>**：Open-R1 沿用 s1 的做法，把题目小写、规整空白后做词级 8-gram 匹配，对照 AIME 2024/2025、MATH-500、GPQA、LiveCodeBench 删除命中样本[^openr1]。完整流程见[去污染](#contamination-case)。
 - **格式化**：<Term t="chat-template">chat template</Term>、EOS 与思考标签是最常见的“静默 bug”。Open-R1 的提醒很具体：Qwen 基座自带模板，SFT 时 EOS 必须设成 `<|im_end|>`；R1-Distill 的默认模板会丢弃 `<think>` 与 `</think>` 之间的内容并预填 `<think>`，拿它做 GRPO 前要改写模板，否则格式奖励失真[^openr1]。
 
 ## RLVR 数据流水线 {#rlvr-pipeline}
@@ -235,7 +243,7 @@ flowchart LR
 
 - **<Term t="dynamic-sampling">动态采样</Term>**：DAPO 过采样后丢掉准确率为 0 或 1 的组，一直采到批次里全是“组内有差异”的题为止[^dapo]。代价是推导 ④ 里的 $1/\bar q$，训练后期会显著上升，MiMo 就观察到了“采样效率急剧下降”[^mimo]。算法细节见[算法谱系](/lenses/algorithms#dapo)。
 - **更省的变体**：WebSailor 的 DUPO 在训练前先删掉 8 次全对的题，训练中用同一批次里标准差非零的组复制补位，比 DAPO 的动态采样快约 2–3 倍[^websailor]；GRESO 利用训练动态预测哪些题这一轮大概率仍是零方差，在 rollout 之前就跳过它们[^greso]。
-- **<Term t="curriculum-learning">课程</Term>与优先采样**：Kimi k1.5 先在全集上热身、再专攻难题，并按 $1-s_i$ 的比例抽题（$s_i$ 是第 $i$ 题的历史成功率）[^k15]；POLARIS 每阶段结束剔除准确率高于 0.9 的题，并逐阶段调高采样温度[^polaris]；Open-Reasoner-Zero 从自己的训练记录里挖出最难的约 1.3 万题做收尾[^orz]。
+- **<Term t="curriculum-learning">课程</Term>与优先采样**：各家做法见上表最后一列。Kimi k1.5 按 $1-s_i$ 的比例抽题（$s_i$ 是第 $i$ 题的历史成功率）[^k15]；POLARIS 除了每阶段剔除高准确率的题，还逐阶段调高采样温度[^polaris]。
 - **后台补池**：[Tongyi DeepResearch](/library/?id=tongyi-deepresearch) 用中间检查点在全量题库上重新采样，把“新变得中等难度”的题攒进备用池；训练到一定步数或奖励进入平台期时，剔除已掌握的题、换入备用池里的新题，整个过程不打断主训练[^tongyi]。
 
 一个可选的设计：按 $1-s_i$ 加权会把最大权重给 $s_i\approx0$ 的题。题池里若有大量暂时做不出的题，可以先用 $0<s_i<1$ 过滤再加权，或直接按 $s_i(1-s_i)$ 这类偏向中间的权重抽题——它与上面的 $p(1-p)$ 分析一致。
@@ -295,24 +303,11 @@ $$
 
 其中 $k$ 是训练轮次，$K$ 是总轮数；取 $s_i>0.6$ 得到 1,389 题[^limr]。
 
-## 污染案例：Qwen2.5-Math 与“虚假奖励”之争 {#contamination-case}
+## 去污染：从一场争论到一套流程 {#contamination-case}
 
-这是 2025 年围绕<Term t="contamination">数据污染</Term>最受关注的一场争论：一连串“RL 几乎不需要好数据”的惊人结果，最后被追溯到基座模型与评测集的组合上。它的走向值得每个做数据的人记住。
+2025 年春夏，几项“RL 几乎不需要好数据”的结果集中出现在 Qwen2.5-Math 与 MATH-500 这类组合上：随机甚至错误的奖励也能让 Qwen2.5-Math-7B 大幅涨分，换成 Llama、OLMo 则基本无效（[伪奖励](/library/?id=spurious-rewards)）[^spurious]；而 Qwen2.5 只看半截题面，就能续写出 MATH-500 等基准的原题，对它发布之后才出现的基准则做不到[^memo]。“激发已有先验”与“预训练见过考题”这两种解释的争论见[原理视角](/lenses/principles#spurious-rewards)，续写探针等检测手段见[评测视角](/lenses/eval#contamination)。
 
-::: timeline
-- **2025-03** 模板与题集的“二重奏”
-  - [Dr. GRPO](/library/?id=dr-grpo) 一文发现 Qwen2.5-Math 基座不加提示模板就有很强的推理能力；不匹配的模板会先破坏这种能力、再由 RL 修复，让提升“看起来很大”[^drgrpo]。
-- **2025-04** 一道题也能 RL
-  - [1-shot RLVR](/library/?id=one-shot-rlvr)：只用 1 个训练样本对 Qwen2.5-Math-1.5B 做 RLVR，MATH500 大幅提升[^oneshot]。
-- **2025-06** 虚假奖励也有效？
-  - [Spurious Rewards](/library/?id=spurious-rewards)：<Term t="spurious-reward">虚假奖励</Term>——随机奖励、错误标签奖励——也能让 Qwen2.5-Math-7B 在 MATH-500 上显著提升，接近真实奖励的效果；换成 Llama、OLMo 则基本无效[^spurious]。
-- **2025-07** 污染浮出水面
-  - [Reasoning or Memorization?](/library/?id=reasoning-or-memorization)：只给出 MATH-500 等基准题目的前一部分，Qwen2.5 就能以很高比例补全出原题的剩余部分并答对，在其发布之后才出现的基准上则做不到。用可任意生成的干净算术题集 RandomCalculation 重做实验，只有正确奖励能稳定提升，随机或错误奖励不能[^memo]。
-:::
-
-两种解释并不互斥：一是 RL 激发了基座已有的解题习惯（Spurious Rewards 观察到 Qwen2.5-Math 在训练中更频繁地用代码辅助推理），二是基座在预训练中见过基准题，RL 只是把“记忆”调了出来[^spurious][^memo]。争论的来龙去脉见[原理视角](/lenses/principles#spurious-rewards)。
-
-对数据工作流的含义很直接：**训练集去污染管不到基座预训练阶段的泄漏**。你能控制的是两件事：训练数据别再加一层泄漏，评测别只用可能被见过的基准——用基座发布之后的新题、可程序生成的题，并至少换一个模型族交叉验证。评测侧的做法见[评测视角](/lenses/eval#contamination)。
+对数据工作流，这场争论留下的结论是：**训练集去污染管不到基座预训练阶段的<Term t="contamination">数据污染</Term>**。你能控制的只有两件事：训练数据别再加一层泄漏；评测别只用可能被见过的基准，要用基座发布之后的新题、可程序生成的题，并至少换一个模型族交叉验证。下面是训练数据一侧的流程。
 
 ### 一套可执行的去污染流程
 
@@ -345,7 +340,7 @@ flowchart LR
 
 - **DeepSeek-R1**：推理 RL 收敛后，从检查点拒绝采样约 60 万条推理数据，加上约 20 万条非推理数据，用这约 80 万条样本重新微调 DeepSeek-V3-Base 两个 epoch，再做全场景 RL；同一份数据还用来蒸馏小模型[^r1]。
 - **Qwen3**：第三阶段“思考模式融合”所需的思考数据，由第二阶段的 RL 模型在第一阶段的题目上拒绝采样生成，目的是让新增的 SFT 不损害 RL 学到的能力[^qwen3]。
-- **Kimi K2**：合成的工具使用轨迹经 rubric 评判过滤后用于 SFT，报告称这一流程本质上是大规模拒绝采样；之后再接 RL[^k2]。
+- **Kimi K2**：把上文的[智能体轨迹合成](#agentic-data)当作大规模拒绝采样，rubric 过滤后的轨迹进 SFT，之后再接 RL[^k2]。
 - **[Llama 3](/library/?id=llama3)**：多轮后训练，每轮用上一轮最好的检查点对提示采样多个回答、由奖励模型挑出最好的进入 SFT，再做 DPO[^llama3]。
 
 飞轮转得快，也容易转偏。五个常见风险与对应的控制：
@@ -360,7 +355,7 @@ flowchart LR
 
 <EntryGrid :ids="['math-verify', 'open-r1', 'kodcode', 'deepmath-103k', 'big-math', 'polaris', 'limr', 'guru', 'llm-decontaminator', 'sandbox-fusion']" />
 
-- **Math-Verify**：数学 RLVR 事实上的默认判卷器。它最值得学的是设计取舍：格式上尽量宽容（减少假阴性），关键比较上刻意不对称（堵住假阳性）。
+- **Math-Verify**：开源数学 RLVR 最常用的判卷器之一（Open-R1、verl、MiMo 都在用）。它最值得学的是设计取舍：格式上尽量宽容（减少假阴性），关键比较上刻意不对称（堵住假阳性）。
 - **Open-R1**：一份可以照着跑的推理数据配方，蒸馏、验证、去污染、通过率过滤、沙箱奖励一应俱全；更可贵的是 README 里那些踩过的坑（模板、EOS、格式奖励）。
 - **KodCode**：代码数据“自带判卷器”的范式——题、解、测试三者互相验证，并用重试成功率给难题留活路。
 - **DeepMath-103K / Big-Math**：两份开源数学 RL 题集，前者偏难、做了语义去污染，后者把“什么题适合 RL”写成了可执行的过滤信号。
@@ -396,7 +391,7 @@ flowchart LR
 
 - 资料库里所有数据相关条目：[按“数据”筛选](/library/?facet=data)；只看数据集：[数据集](/library/?kind=dataset)
 - 各阶段的数据细节：[Mid-training 语料](/topics/mid-training)、[SFT 数据配方](/topics/sft#data-recipes)、[环境合成与混合](/topics/multi-env#synthesis)
-- 相关视角：[DAPO 与动态采样的推导](/lenses/algorithms#dapo)、[评测中的污染](/lenses/eval#contamination)、[虚假奖励之争](/lenses/principles#spurious-rewards)、[奖励设计](/topics/rl-for-llm#reward-design)
+- 相关视角：[DAPO 与动态采样的推导](/lenses/algorithms#dapo)、[评测中的污染](/lenses/eval#contamination)、[伪奖励与污染之争](/lenses/principles#spurious-rewards)、[奖励设计](/topics/rl-for-llm#reward-design)
 - 动手：[数学 RLVR：GRPO → DAPO](/practice/rlvr-math)、[SWE 智能体 RL](/practice/swe-agent)、[搜索智能体 RL](/practice/search-agent)
 
 [^mm1]: MiniMax-M1: Scaling Test-Time Compute Efficiently with Lightning Attention，§4.1 — [arXiv 2506.13585](https://arxiv.org/abs/2506.13585)
@@ -406,7 +401,7 @@ flowchart LR
 [^r1]: DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning，§2.3.3 — [arXiv 2501.12948](https://arxiv.org/abs/2501.12948)
 [^kodcode]: KodCode: A Diverse, Challenging, and Verifiable Synthetic Dataset for Coding，§2 — [arXiv 2503.02951](https://arxiv.org/abs/2503.02951)
 [^openr1]: Open-R1 README（数据生成、去污染、GRPO 与代码奖励各节）及 src/open_r1/rewards.py — [github.com/huggingface/open-r1](https://github.com/huggingface/open-r1)
-[^k15]: Kimi k1.5: Scaling Reinforcement Learning with LLMs，§2.1、§2.3.4–2.3.5 — [arXiv 2501.12599](https://arxiv.org/abs/2501.12599)
+[^k15]: Kimi k1.5: Scaling Reinforcement Learning with LLMs，§2.1、§2.3.4–2.3.5 与 §3.5（课程采样消融）— [arXiv 2501.12599](https://arxiv.org/abs/2501.12599)
 [^mimo]: MiMo: Unlocking the Reasoning Potential of Language Model – From Pretraining to Posttraining，§3.1–3.3 — [arXiv 2505.07608](https://arxiv.org/abs/2505.07608)
 [^orz]: Open-Reasoner-Zero: An Open Source Approach to Scaling Up Reinforcement Learning on the Base Model，§2.1 — [arXiv 2503.24290](https://arxiv.org/abs/2503.24290)
 [^seed]: Seed1.5-Thinking: Advancing Superb Reasoning Models with Reinforcement Learning，§2.1 与 §3.1 — [arXiv 2504.13914](https://arxiv.org/abs/2504.13914)

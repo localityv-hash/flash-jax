@@ -1,4 +1,5 @@
-# 算法横切视角（/lenses/algorithms）的术语。字段均按纯文本渲染，公式用 Unicode 书写。
+# 算法横切视角（/lenses/algorithms）的术语。plain 与 definition 支持 `$公式$` 与 `代码`（构建时渲染）；
+# 含反斜杠的字符串一律用单引号，数学里用 \mid 而不是裸 |。
 
 - id: log-derivative-trick
   term: 对数导数技巧
@@ -6,7 +7,7 @@
   zh: 得分函数估计
   area: classic-rl
   plain: "想让好结果更常出现，就把产生它的那条路径的概率往上推，推多少由结果好坏决定；不需要知道奖励本身怎么随参数变化。"
-  definition: "利用 ∇π_θ = π_θ·∇log π_θ，把对期望求导改写为 ∇_θ E_{y∼π_θ}[r(y)] = E_{y∼π_θ}[r(y)·∇_θ log π_θ(y)]。对自回归模型，log π_θ(y∣x) 拆成逐 token 的 log π_θ(y_t∣x, y_<t) 之和；这是 REINFORCE 与所有策略梯度方法的起点。"
+  definition: '利用 $\nabla_\theta\pi_\theta=\pi_\theta\nabla_\theta\log\pi_\theta$，把对期望求导改写为 $\nabla_\theta\E_{y\sim\pi_\theta}[r(y)]=\E_{y\sim\pi_\theta}[r(y)\,\nabla_\theta\log\pi_\theta(y)]$。对自回归模型，$\log\pi_\theta(y\mid x)$ 拆成逐 token 的 $\log\pi_\theta(y_t\mid x,y_{<t})$ 之和；这是 REINFORCE 与所有策略梯度方法的起点。'
   see: [/lenses/algorithms#policy-gradient]
 
 - id: gae
@@ -14,8 +15,8 @@
   full: Generalized Advantage Estimation
   zh: 广义优势估计
   area: classic-rl
-  plain: "评价一步棋，可以只看下一步的局面估值（快但可能看走眼），也可以等整盘下完再算（准但运气成分大）。GAE 用 λ 在两者之间折中。"
-  definition: "以 TD 误差 δ_t = r_t + γV(s_{t+1}) − V(s_t) 为基本单元，Â_t = Σ_l (γλ)^l δ_{t+l}。λ=0 退化为单步 TD（低方差、依赖价值函数的准确性），λ=1 退化为蒙特卡洛回报减基线（无偏、方差大）。LLM 上通常取 γ=1。"
+  plain: '评价一步棋，可以只看下一步的局面估值（快但可能看走眼），也可以等整盘下完再算（准但运气成分大）。GAE 用 $\lambda$ 在两者之间折中。'
+  definition: '以 TD 误差 $\delta_t=r_t+\gamma V(s_{t+1})-V(s_t)$ 为基本单元，$\hat A_t=\sum_l(\gamma\lambda)^l\delta_{t+l}$。$\lambda=0$ 退化为单步 TD（方差小，但价值函数不准就有偏），$\lambda=1$ 退化为蒙特卡洛回报减基线（无偏、方差大）。LLM 上通常取 $\gamma=1$。'
   see: [/lenses/algorithms#gae]
 
 - id: trust-region
@@ -24,7 +25,7 @@
   zh: 信任域
   area: classic-rl
   plain: "用旧数据估计“改完会不会更好”只在改动不大时才准，所以每一步只在旧策略附近的一个小范围里找更好的策略。"
-  definition: "把每次策略更新约束在旧策略的邻域内（TRPO 用平均 KL ≤ δ），使重要性采样的代理目标仍是真实目标的可靠近似。PPO 的比率裁剪、GRPO/DAPO 的 ε、GSPO 的序列级裁剪都是它的一阶替代。"
+  definition: '把每次策略更新约束在旧策略的邻域内（TRPO 用平均 KL $\le\delta$），使重要性采样的代理目标仍是真实目标的可靠近似。PPO 的比率裁剪、GRPO/DAPO 的 $\varepsilon$、GSPO 的序列级裁剪都是它的一阶替代。'
   see: [/lenses/algorithms#trpo, /lenses/algorithms#ppo]
 
 - id: surrogate-objective
@@ -33,7 +34,7 @@
   zh: 代理目标
   area: classic-rl
   plain: "真正想优化的目标要用新策略重新采样才能算；代理目标用旧策略的样本加权来近似它，在新旧策略相同时梯度完全一致。"
-  definition: "L(θ) = E_{(s,a)∼π_old}[ρ(θ)·Â]，ρ = π_θ(a∣s)/π_old(a∣s)。在 θ = θ_old 处它与真实目标的梯度相同（TRPO 的定义里再加上 η(π_old)，函数值也相同），离得越远近似越差，所以需要信任域或裁剪。LLM 中常用的逐 token 代理目标还是序列级目标的一阶近似。"
+  definition: '$L(\theta)=\E_{(s,a)\sim\pi_{\theta_\text{old}}}\big[\rho(\theta)\hat A\big]$，$\rho=\pi_\theta(a\mid s)/\pi_{\theta_\text{old}}(a\mid s)$。在 $\theta=\theta_\text{old}$ 处它与真实目标的梯度相同（TRPO 的定义里再加上常数 $\eta(\pi_{\theta_\text{old}})$，函数值也相同），离得越远近似越差，所以需要信任域或裁剪。LLM 中常用的逐 token 代理目标还是序列级目标的一阶近似。'
   see: [/lenses/algorithms#ppo, /lenses/algorithms#off-policy]
 
 - id: clip-ratio
@@ -42,7 +43,7 @@
   zh: 裁剪范围
   area: rl-llm
   plain: "规定新策略相对旧策略的概率比最多能偏离 1 多远；越界之后，这个 token 在这一轮就不再往同一方向被推。"
-  definition: "PPO 目标 min(ρÂ, clip(ρ, 1−ε, 1+ε)Â) 中的 ε，常用 0.2；DAPO 拆成 ε_low=0.2、ε_high=0.28（Clip-Higher）。监控时看 clip fraction：裁剪项生效（梯度被置零）的 token 占比，verl 中记为 actor/pg_clipfrac。"
+  definition: 'PPO 目标 $\min\big(\rho\hat A,\ \clip(\rho,1-\varepsilon,1+\varepsilon)\hat A\big)$ 中的 $\varepsilon$，常用 0.2；DAPO 拆成 $\varepsilon_\text{low}=0.2$、$\varepsilon_\text{high}=0.28$（Clip-Higher）。监控时看 clip fraction：裁剪生效、梯度被置零的 token 占比，verl 中记为 `actor/pg_clipfrac`。'
   see: [/lenses/algorithms#ppo, /lenses/algorithms#dapo]
 
 - id: kl-estimator
@@ -50,8 +51,8 @@
   full: Monte Carlo KL Estimators
   zh: KL 估计量
   area: rl-llm
-  plain: "KL 散度没法对整个词表精确求和，只能用采样出的 token 估计；三种估计方法在“估得准不准、稳不稳”和“求导后对不对”上各有取舍。"
-  definition: "记 r = π_ref(y_t)/π_θ(y_t)，y_t∼π_θ：k1 = −log r（无偏、方差大、可为负）；k2 = ½(log r)²（有偏、非负、方差小）；k3 = r − 1 − log r（无偏、非负、方差小）。数值无偏不等于梯度正确：直接对 k3 求导得到的是正向 KL 的梯度，k1 求导的期望为零，k2 求导才对应逐位置反向 KL 的梯度。"
+  plain: "每个位置都对整个词表精确求 KL 太贵，实践中只用采样出的 token 来估计；三种估计方法在“估得准不准、稳不稳”和“求导后对不对”上各有取舍。"
+  definition: '记 $r=\pi_\text{ref}(y_t)/\pi_\theta(y_t)$，$y_t\sim\pi_\theta$：k1 $=-\log r$（无偏、方差大、可为负）；k2 $=\tfrac12(\log r)^2$（有偏、非负、方差小）；k3 $=r-1-\log r$（无偏、非负、方差小）。数值无偏不等于梯度正确：直接对 k3 求导，期望梯度是正向 KL 的梯度；对 k1 求导，期望为零；把 k2 当损失（或给 k3 乘上重要性比率），才得到逐位置反向 KL 的梯度。'
   see: [/lenses/algorithms#kl]
 
 - id: token-level-loss
@@ -60,7 +61,7 @@
   zh: token 级损失
   area: rl-llm
   plain: "先把一组回答里所有 token 放在一起平均，而不是先在每条回答内部平均：长回答里的每个词不会因为回答长就被稀释。"
-  definition: "损失归一化为 1/Σ_i|o_i| · Σ_i Σ_t ℓ_{i,t}（DAPO；verl 的 loss_agg_mode=token-mean），替代原始 GRPO 的 1/G · Σ_i 1/|o_i| · Σ_t ℓ_{i,t}（seq-mean-token-mean）。Dr. GRPO 进一步用固定常数（如最大生成长度）归一化，彻底去掉与样本长度的耦合。"
+  definition: '损失归一化为 $\frac{1}{\sum_i\lvert y_i\rvert}\sum_i\sum_t\ell_{i,t}$（DAPO；verl 的 `loss_agg_mode=token-mean`），替代原始 GRPO 的 $\frac1G\sum_i\frac{1}{\lvert y_i\rvert}\sum_t\ell_{i,t}$（`seq-mean-token-mean`）。Dr. GRPO 进一步用固定常数（如最大生成长度）归一化，彻底去掉与样本长度的耦合。'
   see: [/lenses/algorithms#dapo, /lenses/algorithms#dr-grpo]
 
 - id: length-bias
@@ -69,7 +70,7 @@
   zh: 长度偏置
   area: rl-llm
   plain: "如果每条回答的损失先除以自己的长度，那错误回答写得越长，每个词挨的罚越轻，模型就会学会把错答案写长。"
-  definition: "在按序列平均的 GRPO 损失中，回答 i 的每个 token 权重为 Â_i/|o_i|：Â>0 时偏好更短的正确回答，Â<0 时对长的错误回答惩罚更轻，导致错误回答越来越长（Dr. GRPO 的分析）。token 级聚合或常数归一化可以消除它。"
+  definition: '在按序列平均的 GRPO 损失中，回答 $i$ 的每个 token 权重为 $\hat A_i/\lvert y_i\rvert$：$\hat A_i>0$ 时偏好更短的正确回答，$\hat A_i<0$ 时对长的错误回答惩罚更轻，导致错误回答越来越长（Dr. GRPO 的分析）。token 级聚合或常数归一化可以消除它。'
   see: [/lenses/algorithms#dr-grpo]
 
 - id: sequence-level-ratio
@@ -78,7 +79,7 @@
   zh: 序列级比率
   area: rl-llm
   plain: "不再给每个词单独算“新旧模型概率之比”，而是给整条回答算一个比率，再按长度开方，避免个别词的剧烈波动把训练带偏。"
-  definition: "GSPO 定义 s_i(θ) = (π_θ(y_i∣x)/π_old(y_i∣x))^{1/|y_i|} = exp(1/|y_i| · Σ_t log ρ_{i,t})，并在序列级做裁剪（论文取 ε 约为 3e-4/4e-4 量级）。严格无偏的序列级 IS 权重是不开方的连乘 Π_t ρ_{i,t}，方差随长度指数增长。"
+  definition: 'GSPO 定义 $s_i(\theta)=\big(\pi_\theta(y_i\mid x)/\pi_{\theta_\text{old}}(y_i\mid x)\big)^{1/\lvert y_i\rvert}=\exp\big(\frac{1}{\lvert y_i\rvert}\sum_t\log\rho_{i,t}\big)$，并在序列级裁剪（论文的左右裁剪范围为 3e-4 与 4e-4）。严格无偏的序列级 IS 权重是不开方的连乘 $\prod_t\rho_{i,t}$，方差随长度指数增长。'
   see: [/lenses/algorithms#gspo, /lenses/algorithms#off-policy]
 
 - id: dynamic-sampling
@@ -87,7 +88,7 @@
   zh: 动态采样
   area: rl-llm
   plain: "一道题 16 个回答全对或全错时，组内比较不出好坏，梯度为零；干脆把这种题剔掉，再多采一些题把批次补满。"
-  definition: "DAPO 的约束 0 < ∣{o_i 正确}∣ < G：过采样后过滤组内奖励全相同（优势全为 0）的提示，直到凑满训练批次。verl 中对应 algorithm.filter_groups.enable 与 max_num_gen_batches。"
+  definition: 'DAPO 的约束 $0<\lvert\{i:r_i=1\}\rvert<G$：过采样后过滤组内奖励全相同（优势全为 0）的提示，直到凑满训练批次。verl 的 DAPO recipe 中对应 `algorithm.filter_groups.enable` 与 `max_num_gen_batches`。'
   see: [/lenses/algorithms#dapo, /practice/rlvr-math]
 
 - id: overlong-shaping
@@ -96,7 +97,7 @@
   zh: 超长惩罚
   area: rl-llm
   plain: "回答被截断时，推理可能是对的只是没写完；直接判零分会误伤。改成在接近长度上限时逐渐加罚，超过上限才重罚。"
-  definition: "DAPO 的软超长惩罚：|y| ≤ L_max − L_cache 时为 0；在 (L_max − L_cache, L_max] 内线性从 0 降到 −1；超过 L_max 为 −1，加到正确性奖励上。另一种做法是 Overlong Filtering：截断样本不参与损失。"
+  definition: 'DAPO 的软超长惩罚：$\lvert y\rvert\le L_\text{max}-L_\text{cache}$ 时为 0；在 $(L_\text{max}-L_\text{cache},\,L_\text{max}]$ 内线性地从 0 降到 −1；超过 $L_\text{max}$ 为 −1，加到正确性奖励上。另一种做法是 Overlong Filtering：截断样本不参与损失。'
   see: [/lenses/algorithms#dapo, /practice/rlvr-math]
 
 - id: leave-one-out-baseline
@@ -104,8 +105,8 @@
   full: Leave-One-Out Baseline
   zh: 留一基线
   area: rl-llm
-  plain: "同一道题做了 G 遍，评价其中一遍时，用另外 G−1 遍的平均分当及格线；及格线不包含自己，所以不会带来偏差。"
-  definition: "b_i = 1/(G−1) · Σ_{j≠i} r_j。因为 b_i 与样本 i 独立，E[b_i·∇log π(y_i)] = 0，估计无偏。它与组均值基线只差一个常数倍：r_i − b_i = G/(G−1)·(r_i − r̄)。RLOO 即基于此。"
+  plain: '同一道题做了 $G$ 遍，评价其中一遍时，用另外 $G-1$ 遍的平均分当及格线；及格线不包含自己，所以不会带来偏差。'
+  definition: '$b_i=\frac{1}{G-1}\sum_{j\ne i}r_j$。因为 $b_i$ 与样本 $i$ 独立，$\E\big[b_i\nabla\log\pi_\theta(y_i\mid x)\big]=0$，估计无偏。它与组均值基线只差一个常数倍：$r_i-b_i=\frac{G}{G-1}(r_i-\bar r)$。RLOO 即基于此。'
   see: [/lenses/algorithms#rloo]
 
 - id: stop-gradient
@@ -114,7 +115,7 @@
   zh: 停止梯度
   area: rl-llm
   plain: "前向照常算这个数，反向求导时把它当常数：它只负责给梯度“定权重”，本身不被优化。"
-  definition: "sg(z) 在前向等于 z，梯度为 0（PyTorch 中的 .detach()）。重要性权重、CISPO 的裁剪权重、GSPO-token 中的序列比率都需要 sg，否则会多出一项“优化权重本身”的错误梯度；反过来，想要某个估计量的正确梯度时，也常用 sg 做直通替换（如 verl 的 k3+）。"
+  definition: '$\sg(z)$ 在前向等于 $z$，梯度为 0（PyTorch 中的 `.detach()`）。重要性权重、CISPO 的裁剪权重、GSPO-token 中的序列比率都需要 $\sg$，否则会多出一项“优化权重本身”的错误梯度；反过来，想要某个估计量的正确梯度时，也常用 $\sg$ 做直通替换（如 verl 的 `k3+`）。'
   see: [/lenses/algorithms#cispo, /lenses/algorithms#kl]
 
 - id: truncated-is
@@ -123,5 +124,5 @@
   zh: 截断重要性采样
   area: rl-llm
   plain: "推理引擎和训练引擎算出的概率总有细微差别，等于用的是“别人的”样本；乘一个修正权重补回来，但权重设上限，防止个别样本把梯度放大太多。"
-  definition: "对每个 token 乘以 w_t = min(π_train(y_t)/π_rollout(y_t), C)（常用 C=2）并停止其梯度，修正训推不一致；以少量偏差换取有界方差。变体包括序列级 TIS、越界即丢弃的掩码 IS（MIS）与 IcePop 式区间掩码。"
+  definition: '对每个 token 乘以 $w_t=\min\big(\pi_{\theta_\text{old}}(y_t)/\mu(y_t),\,C\big)$（$\mu$ 为推理引擎实际采样的分布，常用 $C=2$）并停止其梯度，修正训推不一致；以少量偏差换取有界方差。变体包括序列级 TIS、越界即丢弃的掩码 IS（MIS）与 IcePop 式区间掩码。'
   see: [/lenses/algorithms#off-policy]

@@ -15,11 +15,11 @@
   tier: rec
   evidence: [community, ablation]
   evidence_note: "策略优化“信任域”思想的奠基论文、PPO 的直接前身，被引极高；论文在 MuJoCo 运动控制与 Atari 上做了系统对比。LLM 训练几乎不直接用 TRPO（要共轭梯度与线搜索），但 PPO/GRPO 的裁剪与 KL 约束都可以看成它的一阶替代。"
-  summary: "从策略改进下界出发，把每步更新限制在旧策略附近的平均 KL 球内，最大化重要性采样的代理目标；用共轭梯度求自然梯度方向再做线搜索，让大网络策略也能稳定地单调改进。"
+  summary: "从策略改进下界出发，把每步更新限制在旧策略附近的平均 KL 球内，最大化重要性采样的代理目标；用共轭梯度求自然梯度方向再做线搜索，让大型神经网络策略也能稳定改进。"
   plain: "每次只在“信得过的小范围”里改策略：先用旧数据估计改完会不会更好，同时保证新旧策略差得不远，免得一步迈太大把模型改坏。"
   takeaways:
-    - "把 PPO/GRPO 的裁剪当成 TRPO 信任域的廉价替代来理解：ε 越大，每步允许偏离旧策略越远。"
-    - "训练发散时先看新旧策略之间的 KL（如 verl 的 actor/ppo_kl）是否失控，而不只看奖励曲线。"
+    - '把 PPO/GRPO 的裁剪当成 TRPO 信任域的廉价替代来理解：$\varepsilon$ 越大，每步允许偏离旧策略越远。'
+    - "训练发散时先看新旧策略之间的 KL（如 verl 的 `actor/ppo_kl`）是否失控，而不只看奖励曲线。"
   tags: [信任域, 代理目标, 自然梯度]
 
 - id: gae
@@ -35,12 +35,12 @@
   facets: [algorithm, theory]
   tier: rec
   evidence: [adopted, community, ablation]
-  evidence_note: "LLM 上 PPO 的标准优势估计器：verl（algorithm.adv_estimator 默认 gae）与 OpenRLHF 都以它实现 PPO；字节 Seed 的 VAPO 与 Seed1.5-Thinking 在其上采用了解耦 GAE（λ_value=1、λ_policy=0.95）与长度自适应 GAE。原论文在连续控制任务上系统比较了不同 γ、λ，经典 RL 中被引极高。"
-  summary: "提出广义优势估计：把 TD 误差按 (γλ)^l 几何加权求和，Â_t = Σ_l (γλ)^l δ_{t+l}，用 λ 在单步 TD（低方差、有偏）与蒙特卡洛回报（无偏、高方差）之间连续调节，配合信任域更新在高维控制上稳定学习。"
-  plain: "评价一步棋好不好，可以只看下一步的局面估值（快，但估值不准就会看走眼），也可以等整盘下完再算（准，但运气成分大）。GAE 用一个旋钮 λ 在两者之间折中。"
+  evidence_note: 'LLM 上 PPO 的标准优势估计器：verl（`algorithm.adv_estimator` 默认 `gae`）与 OpenRLHF 都以它实现 PPO；字节 Seed 的 VAPO 与 Seed1.5-Thinking 在其上采用了解耦 GAE（$\lambda_\text{value}=1$、$\lambda_\text{policy}=0.95$）与长度自适应 GAE。原论文在连续控制任务上系统比较了不同的 $\gamma$、$\lambda$，经典 RL 中被引极高。'
+  summary: '提出广义优势估计 $\hat A_t=\sum_l(\gamma\lambda)^l\delta_{t+l}$：把 TD 误差几何加权求和，用 $\lambda$ 在单步 TD（低方差、有偏）与蒙特卡洛回报（无偏、高方差）之间连续调节，配合信任域更新在高维控制上稳定学习。'
+  plain: '评价一步棋好不好，可以只看下一步的局面估值（快，但估值不准就会看走眼），也可以等整盘下完再算（准，但运气成分大）。GAE 用一个旋钮 $\lambda$ 在两者之间折中。'
   takeaways:
-    - "LLM 上的 PPO 通常取 γ=1：回答级奖励只在结尾出现，打折会让靠前的 token 几乎收不到信号。"
-    - "λ<1 会让终局奖励向前传播时指数衰减（0.95^100≈0.006）；价值网络不准时，至少让 critic 用 λ=1 的回报做回归目标。"
+    - 'LLM 上的 PPO 通常取 $\gamma=1$：回答级奖励只在结尾出现，打折会让靠前的 token 几乎收不到信号。'
+    - '$\lambda<1$ 会让终局奖励向前传播时指数衰减（$0.95^{100}\approx0.006$）；价值网络不准时，至少让 critic 用 $\lambda=1$ 的回报做回归目标。'
     - "显存或稳定性吃紧时，考虑用 GRPO、RLOO 这类组内基线替代“GAE + 价值网络”。"
   builds_on: [trpo]
   tags: [优势估计, Actor-Critic, 偏差-方差]
@@ -49,7 +49,7 @@
   title: "Stabilizing Reinforcement Learning with LLMs: Formulation and Practices"
   short: RL 稳定性公式化
   kind: paper
-  org: Alibaba Qwen
+  org: 阿里巴巴 Qwen
   authors: "Chujie Zheng et al."
   date: 2025-12
   arxiv: "2512.01374"

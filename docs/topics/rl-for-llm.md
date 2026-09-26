@@ -92,7 +92,7 @@ $$
 
 它不需要奖励模型和在线采样，Llama 3、Tülu 3 都用它做偏好对齐；代价是只能在给定的偏好对上学、不会探索新解法，所以数学、代码这类要“做出来”的能力仍然靠在线 RL。完整推导与变体见[算法谱系](/lenses/algorithms#dpo)。
 
-**去掉 critic。** PPO 需要一个与策略同规模的<Term t="critic">价值网络</Term>。ReMax 用贪心解码回答的奖励作<Term t="baseline">基线</Term>[^remax]，RLOO 用同题其余样本的平均奖励作留一基线[^rloo]，都说明在“奖励只在结尾出现”的 RLHF 中价值网络并非必需，这为 GRPO 铺了路（[ReMax](/lenses/algorithms#remax)、[RLOO](/lenses/algorithms#rloo)）。
+**去掉 critic。** PPO 需要一个与策略同规模的<Term t="critic">价值网络</Term>。ReMax 用贪心解码回答的奖励作<Term t="baseline">基线</Term>[^remax]，RLOO 用同题其余样本的平均奖励作留一基线[^rloo]，都说明在“奖励只在结尾出现”的 RLHF 中价值网络并非必需；同期 DeepSeekMath 提出的 GRPO 走的是同一思路（[ReMax](/lenses/algorithms#remax)、[RLOO](/lenses/algorithms#rloo)）。
 
 ::: human
 RLHF 像请评委打分：先让评委看大量“哪篇更好”的例子学会口味，再让选手为了高分反复练。选手练久了会摸透评委的偏好（比如越长越好），所以要拴一根绳子，不许离原来的自己太远。
@@ -309,7 +309,7 @@ ScaleRL 用超过 40 万 GPU 小时的消融，把 RL 的算力-性能曲线拟�
 
 ### 信任域的锚点：从参考模型移到采样器 {#frontier-trust-region}
 
-对参考模型的 KL 正在退场：GLM-5 在推理 RL 中明确为“加速 RL 提升”去掉了 KL 项[^glm5]；Kimi 从 K2 到 K3 都不设参考策略，只在平方损失里用 $\tau\log(\pi_\theta/\pi_{\theta_\text{old}})$ 约束离上一轮策略的距离[^k2][^k3]。
+对参考模型的 KL 正在退场：GLM-5 在推理 RL 中明确为“加速 RL 提升”去掉了 KL 项[^glm5]；Kimi 从 K2 到 K3 都不设参考策略，只在平方损失里用 $\tau\log(\pi_\theta/\pi_{\theta_\text{old} })$ 约束离上一轮策略的距离[^k2][^k3]。
 
 取而代之的是约束“训练策略离实际采样的策略有多远”：DeepSeek-V3.2 掩码偏离过大的负优势序列，并复用推理时的 MoE 路由[^v32]；Kimi K2.5 只对 log-ratio 落在区间内的 token 计算梯度，区间外直接置零，不论优势正负[^k25]；IcePop 对训推概率比越界的 token 做同样的掩码[^icepop]，DPPO 改用概率差（总变差距离的近似）而不是概率比来判定越界[^dppo]。共同点是：**直接屏蔽离采样策略太远的 token 或序列，而不只是按新旧概率比裁剪**。原因是异步与 partial rollout、训推引擎的数值差异，让“离采样器太远”成了比“离初始模型太远”更常见的失稳源头。Qwen 团队进一步说明，常用的 token 级目标只是序列级目标的一阶近似，只有训推差异与策略陈旧都很小时才成立（[资料库](/library/?id=stabilizing-rl-llm)）。系统侧的成因与修正见[训推不一致](/lenses/infra#mismatch)与[离策略修正](/lenses/algorithms#off-policy)。
 

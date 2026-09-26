@@ -422,7 +422,7 @@
   tier: must
   evidence: [adopted, open-source, community]
   evidence_note: "引发 2025 年下半年“训推不一致”讨论的起点：TRL 的 GRPOTrainer 对 vLLM 生成默认开启 TIS，verl（rollout correction）、OpenRLHF、slime/Miles、NeMo-RL 都实现了同类修正；Qwen 团队的 Stabilizing RL with LLMs 把它纳入统一的理论解释。配套 Flash-RL 仓库提供精确的 rollout logprob 与 FP8/INT8 量化 rollout。"
-  summary: '指出 vLLM 生成、FSDP 训练的系统即使权重相同，token 概率也不同，等于隐性 off-policy；用截断权重 $\min(\pi_\text{train}/\pi_\text{rollout},C)$ 修正，量化 rollout 也能稳定训练。'
+  summary: '指出 vLLM 生成、FSDP 训练的系统即使权重相同，token 概率也可能明显不同，等于隐性 off-policy 训练；用截断权重 $\min(\pi_\text{train}/\pi_\text{rollout},C)$ 修正，量化 rollout 也能稳定训练。'
   plain: "出题用的“快速版模型”和改卷用的“标准版模型”算出的概率不一样，相当于拿别人的卷子来学。给每个词乘一个有上限的修正系数，把偏差补回来。"
   takeaways:
     - "凡是“推理引擎生成、训练引擎重算”的系统，都应保存 rollout logprob 并默认开启 token 级 TIS。"

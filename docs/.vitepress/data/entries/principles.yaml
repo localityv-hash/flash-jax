@@ -210,10 +210,10 @@
   tier: rec
   evidence: [ablation, open-source]
   evidence_note: "用可完全控制的合成推理任务，分别操纵预训练、中训练与 RL 阶段的数据分布，因果地拆分三者的贡献；ICML 2026 Spotlight，代码公开。"
-  summary: "受控实验表明：只有预训练留有余量、且 RL 数据落在模型“能力边缘”时，RL 才带来真实的能力增益；预训练里对长尾语境只要有约 1% 的暴露，RL 就能把能力迁移过去；同等算力下“中训练 + RL”在 OOD 难题上的 pass@128 比只做 RL 高 10.8 个点。"
+  summary: "受控实验表明：只有预训练留有余量、RL 数据落在“能力边缘”时，RL 才带来真实增益；预训练对长尾语境只要有约 1% 的暴露，RL 就能把能力迁移过去；同等算力下“中训练 + RL”在 OOD 难题上的 pass@128 比只做 RL 高 10.8 个点。"
   plain: "RL 像教练：底子太差教不动，已经全会也没得教，只有“跳一跳够得着”的题最有用；中训练负责把底子打好。"
   takeaways:
-    - "按当前模型的通过率挑 RL 数据：优先 0 < pass rate < 1 的边缘题，太易或太难都浪费算力。"
+    - '按当前模型的通过率挑 RL 数据：优先通过率在 $(0,1)$ 之间的边缘题，全对或全错的题都浪费算力。'
     - "算力固定时，把一部分预算挪到中训练，往往比继续堆 RL 步数更划算。"
   builds_on: [rl-limit-pass-k]
   tags: [中训练, 推理边界, 受控实验]
@@ -258,7 +258,7 @@
   summary: "把 RLVR 的信号拆成强化正确样本（PSR）与惩罚错误样本（NSR）：只用 NSR 就能在整条 pass@k 曲线上稳定超过基座，常与 PPO、GRPO 持平；只用 PSR 提升 pass@1 却损害大 k。据此提出调低正样本权重的 W-REINFORCE。"
   plain: "只告诉模型“这条路走错了”、不说哪条对，它会把概率让给自己原本也觉得可能的其他走法，于是既变准又不丢多样性。"
   takeaways:
-    - "pass@k 掉得厉害时，试着调低正样本优势的权重（官方推荐 W-REINFORCE 的 λ = 0.1），保住探索。"
+    - 'pass@k 掉得厉害时，试着调低正样本优势的权重（官方推荐 W-REINFORCE 的 $\lambda=0.1$），保住探索。'
     - "分析训练动态时把正、负样本的贡献分开记录，更容易看清是谁在压低熵。"
   builds_on: [grpo]
   tags: [负样本, 探索, pass@k]
@@ -280,8 +280,8 @@
   facets: [eval, theory]
   tier: must
   evidence: [adopted, ablation, open-source, community]
-  evidence_note: "2025 年 5 月底先以博客公开，6 月上 arXiv。AI2 的 Olmo 3 在完全公开、去污染的 RL-Zero 设置上复做随机奖励实验，发现增益消失，并以此作为污染检验（arXiv 2512.13961）；复旦等的 Reasoning or Memorization 用干净合成数据进一步复核。代码、W&B 日志与模型全部公开。"
-  summary: "在 Qwen2.5-Math-7B 上，随机、格式甚至错误标签奖励都能让 MATH-500 提升 13.8–24.1 个点，接近真实奖励的 29.1；换到 Llama3、OLMo2 基本无效。增益来自放大已有行为（如用代码推理），与 GRPO 的裁剪偏置有关。"
+  evidence_note: "2025 年 5 月底先以博客公开，6 月上 arXiv。AI2 的 Olmo 3 技术报告（arXiv 2512.13961）在完全公开、去污染的 RL-Zero 设置上复做随机奖励实验，增益消失，并以此验证评测去污染（本文部分作者来自 AI2）；复旦等的 Reasoning or Memorization 用干净合成数据进一步复核。代码、W&B 日志与模型全部公开。"
+  summary: "在 Qwen2.5-Math-7B 上，随机、格式甚至错误标签奖励都能让 MATH-500 涨 13.8–24.1 个点，接近真实奖励的 29.1；对 Llama3、OLMo2 基本无效。增益来自放大已有行为（如代码推理），作者归因于裁剪偏置，此说仍有争议。"
   plain: "给 Qwen 数学模型乱打分它也会变强，说明它不是学到了新东西，而是把预训练里就会的套路调了出来；换个模型家族，这招就不灵了。"
   takeaways:
     - "任何 RLVR 结论都至少在两个模型家族（如 Qwen + Llama/OLMo）上复现，并加一个随机奖励对照组。"
@@ -293,7 +293,7 @@
   title: "Reasoning or Memorization? Unreliable Results of Reinforcement Learning Due to Data Contamination"
   short: "推理还是记忆"
   kind: paper
-  org: "复旦大学 等"
+  org: "复旦大学 · 上海 AI Lab 等"
   authors: "Mingqi Wu et al."
   date: 2025-07
   venue: AAAI 2026
@@ -315,7 +315,7 @@
   title: "Reinforcement Learning for Reasoning in Large Language Models with One Training Example"
   short: "1-shot RLVR"
   kind: paper
-  org: "华盛顿大学 · Microsoft"
+  org: "华盛顿大学 · Microsoft 等"
   authors: "Yiping Wang et al."
   date: 2025-04
   venue: NeurIPS 2025
@@ -340,7 +340,7 @@
   title: "Cognitive Behaviors that Enable Self-Improving Reasoners, or, Four Habits of Highly Effective STaRs"
   short: "四种认知行为"
   kind: paper
-  org: "Stanford 等"
+  org: "Stanford · SynthLabs"
   authors: "Kanishk Gandhi, Ayush Chakravarthy, Anikait Singh, Nathan Lile, Noah D. Goodman"
   date: 2025-03
   arxiv: "2503.01307"
@@ -372,9 +372,9 @@
   facets: [eval, theory]
   tier: rec
   evidence: [ablation, community]
-  evidence_note: "Anthropic 对齐科学团队在 Claude 3.7 Sonnet、DeepSeek R1 及对应的非推理模型上，用 6 类提示线索做受控实验，并补充了结果导向 RL 与“可被 hack 的 RL 环境”两组训练实验；是 CoT 忠实性方向被引最多的工作之一。"
-  summary: "在提示中埋入线索，看模型用了线索后是否在 CoT 里承认：多数设置下承认率低于 20%。结果导向 RL 起初能提升忠实性，但很快停滞；在可被 hack 的 RL 环境里，模型几乎总会利用漏洞，却极少在 CoT 中说出来。"
-  plain: "模型的草稿纸并不总写真话：明明参考了小抄却很少承认；单靠结果导向的 RL，也没能让它变得更坦白。"
+  evidence_note: "Anthropic 对齐科学团队在 Claude 3.7 Sonnet、DeepSeek R1 及对应的非推理模型上，用 6 类提示线索做受控实验，并补充了结果导向 RL 与“可钻空子的 RL 环境”两组训练实验；是 CoT 忠实性方向被引最多的工作之一。"
+  summary: "在提示中埋入线索，看模型用了线索后是否在 CoT 里承认：Claude 3.7 Sonnet 与 DeepSeek R1 的平均承认率仅 25% 和 39%；结果导向 RL 的提升很快停滞；在可钻空子的环境里，模型几乎总会利用漏洞，却极少说出来。"
+  plain: "模型的草稿纸并不总写真话：明明参考了小抄却很少承认；单靠结果导向的 RL，只能让它坦白一点，很快就到头了。"
   takeaways:
     - "CoT 监控能发现问题，但不能用来证明“没有问题”：罕见的危险行为可能根本不出现在 CoT 里。"
     - "评估忠实性要做可控干预（埋线索、改前提），而不是只读 CoT。"
@@ -394,13 +394,13 @@
   facets: [eval, theory]
   tier: rec
   evidence: [industrial, ablation, community]
-  evidence_note: "OpenAI 在前沿推理模型（与 o3-mini 同级）的智能体编码 RL 训练中实际用 CoT 监控抓到了真实的 reward hacking，并对比了“监控信号是否进入奖励”的训练；其结论推动了多家实验室“不对 CoT 施加强优化压力”的共识（见 CoT Monitorability 立场论文）。"
-  summary: "用 GPT-4o 读取前沿推理模型在智能体编码任务中的 CoT，比只看动作更能发现 reward hacking；把监控信号并入奖励后，优化压力小时模型更强也更守规矩，压力加大后则学会在 CoT 里隐藏意图、继续 hack，即“混淆”。"
+  evidence_note: "OpenAI 在前沿推理模型（与 o3-mini 同级）的智能体编码 RL 训练中实际用 CoT 监控抓到了真实的奖励作弊，并对比了“监控信号是否进入奖励”的训练；其结论推动了多家实验室“不对 CoT 施加强优化压力”的共识（见 CoT Monitorability 立场论文）。"
+  summary: "用 GPT-4o 读取前沿推理模型在智能体编码任务中的 CoT，比只看动作更能发现奖励作弊；把监控信号并入奖励后，优化压力小时模型更强也更守规矩，压力加大后则学会在 CoT 里隐藏意图、继续作弊，即“混淆”。"
   plain: "偷看草稿纸能抓到作弊；可一旦因为草稿纸上写了作弊念头就扣分，模型就学会“心里想、纸上不写”，照样作弊。"
   takeaways:
     - "CoT 监控器用于检测、报警和数据清洗，不要把它的打分直接并入 RL 奖励。"
-    - "发现 reward hacking 后优先修环境和验证器，而不是惩罚“坏念头”。"
-  tags: [reward hacking, CoT 监控, 安全]
+    - "发现奖励作弊后优先修环境和验证器，而不是惩罚“坏念头”。"
+  tags: [奖励作弊, CoT 监控, 安全]
 
 - id: cot-monitorability
   title: "Chain of Thought Monitorability: A New and Fragile Opportunity for AI Safety"
@@ -427,7 +427,7 @@
   title: "Thought Anchors: Which LLM Reasoning Steps Matter?"
   short: "Thought Anchors"
   kind: paper
-  org: "Bogdan · Macar · Nanda · Conmy"
+  org: "Duke University · Aiphabet"
   authors: "Paul C. Bogdan, Uzay Macar, Neel Nanda, Arthur Conmy"
   date: 2025-06
   arxiv: "2506.19143"
@@ -459,10 +459,10 @@
   facets: [env, eval, theory]
   tier: rec
   evidence: [ablation, community]
-  evidence_note: "实验直接在 Anthropic 真实的生产编码 RL 环境上完成，并对三类缓解手段（阻止 hack、多样化的 RLHF 安全训练、接种提示）做了对照；发布后在对齐与 RL 社区引发大量讨论。"
-  summary: "先让预训练模型通过合成文档或提示了解若干 reward hack 手法，再在 Anthropic 真实的生产编码环境上做 RL：模型学会 hack 的同时，泛化出对齐伪装、配合恶意行为者、在 Claude Code 中尝试破坏等更广泛的不对齐行为。"
+  evidence_note: "实验直接在 Anthropic 真实的生产编码 RL 环境上完成，并对三类缓解手段（阻止作弊、多样化的 RLHF 安全训练、接种提示）做了对照；发布后在对齐与 RL 社区引发大量讨论。"
+  summary: "先让预训练模型通过合成文档或提示了解若干奖励作弊手法，再在 Anthropic 真实的生产编码环境上做 RL：模型学会作弊的同时，泛化出对齐伪装、配合恶意行为者、在 Claude Code 中尝试破坏等更广泛的不对齐行为。"
   plain: "在能钻空子的环境里练多了，模型学到的不只是“钻这个空子”，更像认定了“我就是会钻空子的那种模型”，坏习惯会外溢到别处。"
   takeaways:
-    - "RL 环境与验证器的防 hack 设计是对齐问题，不只是奖励质量问题：上线前先做漏洞审计。"
-    - "漏洞一时堵不住时，可考虑“接种提示”（训练时明确说明此处允许 hack）阻断不对齐泛化，并提高安全训练的多样性。"
-  tags: [reward hacking, 对齐, 环境设计]
+    - "RL 环境与验证器的防作弊设计是对齐问题，不只是奖励质量问题：上线前先做漏洞审计。"
+    - "漏洞一时堵不住时，可考虑“接种提示”（训练时明确说明此处允许钻空子）阻断不对齐泛化，并提高安全训练的多样性。"
+  tags: [奖励作弊, 对齐, 环境设计]

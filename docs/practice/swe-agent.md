@@ -10,6 +10,14 @@ prereq:
 
 # SWE 智能体 RL：从环境到 SWE-bench
 
+::: tldr
+- SWE 智能体 RL 的瓶颈在环境而不在 GPU：镜像构建、磁盘和沙箱并发往往先于算力卡住训练，预算要按“沙箱小时”算。
+- 奖励只认干净容器里隐藏测试的 0/1 结果；构建环境时实测“修复前失败、修复后通过”，打分前还原测试文件，否则模型会学会改测试。
+- 只保留通过率介于 0 和 1 之间的题；超时、超步数、超上下文的轨迹从损失中屏蔽，而不是记 0 分。
+- 公开配方可以照着跑：DeepSWE（留一优势、无 KL、clip-higher，64 卡）与 SkyRL-v0（PPO + critic，单机 8 卡）；算力有限就先学 Kimi-Dev，在 Agentless 流程上练定位与编辑。
+- 如果只读一节：读 [第六步：训练配方](#recipes)。
+:::
+
 这个实践单元训练一个<Term t="swe-agent">软件工程智能体</Term>：在容器化的真实代码仓库里读代码、跑命令、改文件、跑测试，最后提交一个补丁，只有隐藏测试通过才拿到奖励。它和[搜索智能体](/practice/search-agent)用的是同一套 RL 原理，但对环境与基础设施的要求高出一个量级：每个任务都是一个几百 MB 的 Docker 镜像，每条轨迹要跑几十步、十几分钟甚至更久。
 
 ::: human
@@ -64,11 +72,11 @@ flowchart LR
 | 脚手架 | 动作空间 | 特点 | 代表用法 |
 |---|---|---|---|
 | OpenHands | 编辑器、bash、浏览器等工具 | 功能全，自带远程沙箱运行时 | SWE-Gym 基线、SkyRL-v0[^8] |
-| mini-swe-agent | 只有 bash | 约 100 行代码；历史完全线性；每个动作用独立的 `subprocess.run` 执行，换成 `docker exec` 即可放进沙箱[^5] | 做 SFT/RL 时避免过拟合特定脚手架 |
+| mini-swe-agent | 只有 bash | 智能体类约 100 行代码；历史完全线性；每个动作独立执行[^5] | 做 SFT/RL 时避免过拟合特定脚手架 |
 | R2E-Gym 编辑智能体 | 文件查看、搜索、编辑、执行 | 与 R2E-Gym 环境一体，rLLM 直接封装为 SWEEnv | DeepSWE[^6] |
 | Agentless 式流程 | 固定两阶段：定位文件、编辑代码 | 不是多轮智能体，RL 更便宜、更稳定 | SWE-RL[^11]、Kimi-Dev[^9] |
 
-mini-swe-agent 的 README 直接写明，它适合“做微调或 RL、又不想过拟合到某个特定脚手架”的场景[^5]。它的“无状态动作”设计对 RL 尤其友好：每一步都是独立命令，沙箱崩溃后很容易从轨迹重放恢复。代价是没有持久 shell，`cd` 之类的状态要写进每条命令里。
+mini-swe-agent 的 README 直接写明，它适合“做微调或 RL、又不想过拟合到某个特定脚手架”的场景[^5]。对 RL 更关键的是两点：历史完全线性，轨迹就是下一步喂给模型的消息，训练时拼出的序列与推理时天然一致；每个动作独立执行，把 `subprocess.run` 换成 `docker exec` 就能放进沙箱并横向扩展。代价是没有持久 shell，`cd` 之类的状态要写进每条命令里。
 
 Kimi-Dev 给出了另一条思路：先在 Agentless 的两阶段流程上用 RL 练出“定位 + 编辑 + 自我反思”的技能，再用约 5k 条公开轨迹做 SFT，就能把这些技能迁移到多轮 SWE-Agent 上[^10]。算力有限时，这比直接做长程多轮 RL 划算。
 
@@ -126,7 +134,7 @@ SWE RL 的主要成本在沙箱，不在 GPU。几个必须提前定下来的参
 |---|---|---|---|
 | 基座 | Qwen3-32B | Qwen3-14B（思考模式） | Qwen2.5-72B + 约 150B token 中训练 |
 | 环境 / 脚手架 | R2E-Gym 子集，R2E 编辑智能体 | SWE-Gym 293 题，OpenHands | Agentless 两阶段，Docker |
-| 算法 | 留一优势（RLOO 式），无 KL 损失、无熵项 | PPO + GAE（带 critic），KL 损失 0.001 | K1.5 式策略优化 |
+| 算法 | 留一优势（RLOO 式），无 KL 损失、无熵项 | PPO + GAE（带 critic），KL 损失 0.001，熵系数 0.001 | K1.5 式策略优化 |
 | 每步规模 | 8 题 × 8 条 | 32 题 × 8 条 | — |
 | 裁剪 | 上界 0.28（clip-higher） | 下界 0.2、上界 0.28 | — |
 | 轨迹约束 | 最多 50 步，90 分钟超时，截断轨迹屏蔽 | 最多 35 轮，历史中移除思考 token | 只训练代码编辑阶段 |
@@ -137,12 +145,12 @@ SWE RL 的主要成本在沙箱，不在 GPU。几个必须提前定下来的参
 
 1. **为什么去掉 KL。** SWE 任务需要模型大幅改变行为（学会系统地探索仓库、写复现脚本），KL 约束会把它拉回初始分布；DeepSWE 的配置关闭了 KL 损失与熵项，改用 clip-higher 保留探索[^6]。
 2. **为什么用留一优势而不是 critic。** 轨迹极长、奖励只有 0/1 时，价值函数很难学准；留一基线不需要额外模型，方差也够低。SkyRL-v0 选择了 PPO + critic，说明两条路都能走通，但 critic 要额外占用显存和训练时间。
-3. **历史思考保留还是删除。** SkyRL-v0 在拼接历史时移除思考 token 以节省上下文[^8]；MiniMax-M2 这类交错思考模型则要求保留[^14]。选哪种都行，但训练与部署必须一致。
+3. **历史思考保留还是删除。** SkyRL-v0 把轨迹拼成训练序列时，只保留最后一轮的思考、删掉之前各轮的思考内容，与 Qwen3 聊天模板在生成时的做法保持一致；被删掉的思考 token 也就不参与训练[^8]。MiniMax-M2 这类交错思考模型则要求在历史中原样保留[^14]。选哪种都行，但训练与部署必须一致。
 4. **从 Agentless 起步。** 如果只有少量算力，先按 Kimi-Dev 的方式在固定流程上训练定位与编辑，再迁移到多轮智能体，比直接做 50 步的长程 RL 更容易看到收益[^10]。
 
 <EntryGrid :ids="['deepswe', 'kimi-dev', 'swe-rl', 'skywork-swe']" />
 
-- **DeepSWE** 是目前最完整的公开纯 RL 配方：脚本、数据、W&B 日志与集群要求全部公开，适合照着复现。
+- **DeepSWE** 是公开得最完整的纯 RL 配方之一：脚本、数据、W&B 日志与集群要求全部公开，适合照着复现。
 - **Kimi-Dev** 说明中训练与结构化任务上的 RL 可以作为智能体能力的“技能先验”。
 - **SWE-RL** 是无执行环境时的起点，也是理解“代理奖励会奖励什么”的好例子。
 - **Skywork-SWE** 用数据说明：SWE 训练数据的规模效应还远没有饱和，环境构建值得投入。
@@ -153,7 +161,7 @@ SWE RL 的主要成本在沙箱，不在 GPU。几个必须提前定下来的参
 
 - **沙箱错误比例上升**：镜像拉取失败、磁盘写满、容器数超限。先查基础设施，别急着调算法。
 - **超时与超步数比例上升**：模型在原地打转（反复打开同一个文件、重复运行同一条命令），或者轮数上限太小。
-- **正常提交却几乎全是 0 分**：检查测试是否在干净容器里运行、补丁是否被正确应用、测试文件是否被模型改动。
+- **正常提交却几乎全是 0 分**：检查测试是否在干净容器里运行、补丁是否正确应用、模型是否改动了测试文件。
 - **奖励上升但验证集不涨**：可能在少数仓库上过拟合，或者学会了钻测试的空子；抽查高奖励补丁。
 - **回答长度与轮数突然暴涨**：先看是否有大量截断轨迹被当作负样本，再看熵是否在上升。
 
@@ -164,7 +172,7 @@ SWE RL 的主要成本在沙箱，不在 GPU。几个必须提前定下来的参
 1. **用官方 harness。** SWE-bench 官方评测完全容器化，推荐在 x86_64 机器上预留至少 120GB 磁盘、16GB 内存、8 核 CPU，并发数不超过 min(0.75 × CPU 核数, 24)[^16]。R2E-Gym 的评测脚本也只负责生成补丁，最终分数要交给官方 harness 计算[^2]。
 2. **固定脚手架与预算。** 同一个模型换脚手架，分数可能差很多；MiniMax-M2.5 专门报告了模型在不同编码脚手架下的 SWE-bench Verified 表现[^14]。报告时写明脚手架、最大步数、上下文长度与超时。
 3. **区分 Pass@1 与测试时扩展。** DeepSWE 的 Pass@1 是 42.2%，加上验证器选优后是 59%[^7]；Skywork-SWE 是 38.0% 与 47.0%[^4]；CWM 是 53.9% 与 65.8%[^15]。两类数字不能混着比。Pass@1 最好对多次运行取平均。
-4. **当心数据污染。** SWE-bench 的仓库与修复提交都公开在 GitHub 上，预训练和中训练数据很可能已经见过答案。Kimi-Dev 在中训练阶段专门剔除了 SWE-bench Verified 涉及的仓库[^9]；想要更干净的对比，可以参考持续收集新任务的 [SWE-rebench](/library/?id=swe-rebench)，污染问题的一般讨论见 [评测视角](/lenses/eval#contamination)。
+4. **当心数据污染。** SWE-bench 的仓库与修复提交都公开在 GitHub 上，预训练和中训练数据很可能已经见过答案。Kimi-Dev 在中训练阶段专门剔除了 SWE-bench Verified 涉及的仓库[^9]。OpenAI 已在 2026 年初以污染和测试缺陷为由停止报告 SWE-bench Verified（见 [评测视角：基准地图](/lenses/eval#benchmarks)），它仍适合做训练前后的对照，但最好同时报告持续收集新任务的 [SWE-rebench](/library/?id=swe-rebench)；污染问题的一般讨论见 [评测视角](/lenses/eval#contamination)。
 
 ::: pitfall 官方 harness 会按 run_id 缓存结果
 SWE-bench 的评测按 `run_id` 与 `instance_id` 缓存结果：同一个 `run_id` 下重复评测同一实例，即使补丁不同，也会直接复用第一次的结果[^16]。在训练循环里周期性评测时，每次都要换新的 `run_id`，否则曲线会“卡住不动”。
@@ -176,7 +184,7 @@ SWE-bench 的评测按 `run_id` 与 `instance_id` 缓存结果：同一个 `run_
 
 - **环境规模**：Qwen3-Coder 并行运行 2 万个环境[^13]；Kimi K2 基于 Kubernetes 支持 1 万以上并发沙箱，SWE 环境由 GitHub 的 PR、issue 与可执行单元测试构成[^12]；MiniMax-M2.5 在 10 多种编程语言、20 万以上真实环境中训练[^14]。
 - **中训练打底**：Kimi-Dev 用约 150B token 的 issue 与 PR 数据中训练[^9]；Meta 的 CWM 在 RL 之前用执行轨迹与约 300 万条容器环境中的智能体交互轨迹做中训练，再做覆盖多轮 SWE 环境的多任务 RL[^15]。
-- **跨脚手架泛化**：MiniMax 的 Forge 框架支持接入任意智能体脚手架进行训练[^14]；Kimi K3 把脚手架拆成工具接口、系统提示、上下文管理策略等可组合模块，训练时按任务组动态拼出 Kimi Code、Claude Code、Codex 等不同脚手架，其训练环境也覆盖软件工程与 kernel 优化任务[^17]。
+- **跨脚手架泛化**：MiniMax 的 Forge 框架支持接入任意智能体脚手架来训练[^14]；Kimi K3 把脚手架拆成工具接口、系统提示、上下文管理策略等可组合模块，训练时按任务组动态拼出 Kimi Code、Claude Code、Codex 等不同脚手架，其训练环境也覆盖软件工程与 kernel 优化任务[^17]。
 
 更完整的对照见 [Agentic RL 专题的工业实践一节](/topics/agentic-rl#industry)。
 
@@ -208,9 +216,9 @@ SWE-bench 的评测按 `run_id` 与 `instance_id` 缓存结果：同一个 `run_
 [^3]: *SWE-smith: Scaling Data for Software Engineering Agents*, arXiv:2504.21798（NeurIPS 2025 D&B），仓库 README：<https://github.com/SWE-bench/SWE-smith>
 [^4]: *Skywork-SWE: Unveiling Data Scaling Laws for Software Engineering in LLMs*, arXiv:2506.19290：<https://arxiv.org/abs/2506.19290>
 [^5]: mini-swe-agent 仓库 README（仅 bash、线性历史、独立 subprocess 执行、适合 FT/RL）：<https://github.com/SWE-agent/mini-swe-agent>
-[^6]: DeepSWE 训练脚本与说明，rLLM 仓库 `examples/swe/train_deepswe_32b.sh`、`examples/swe/README.md` 与 `docs/examples/swe.md`（2025 年 7 月版本）：<https://github.com/agentica-project/rllm/tree/main/examples/swe>
+[^6]: DeepSWE 训练脚本与说明，rLLM 仓库 `examples/swe/train_deepswe_32b.sh`、`examples/swe/README.md` 与 `docs/examples/swe.md`；截断轨迹的屏蔽逻辑见 `rllm/engine/agent_execution_engine.py`（`overlong_filter`）。本文核对的是 2025-09 的 main 分支（commit 7b47687）：<https://github.com/agentica-project/rllm/tree/main/examples/swe>
 [^7]: Agentica & Together AI, *DeepSWE: Training a Fully Open-sourced, State-of-the-Art Coding Agent by Scaling RL*：<https://www.together.ai/blog/deepswe>
-[^8]: SkyRL-v0 README 与复现脚本（commit a0d50c4，`examples/sky/`）：<https://github.com/NovaSky-AI/SkyRL/tree/a0d50c482436af7fac8caffa4533616a78431d66>
+[^8]: SkyRL-v0 README 与复现脚本（commit a0d50c4，`examples/sky/`；删除历史思考的聊天模板见 `verl/workers/agentic/codeact.py` 中的 `chat_template_qwen3_thinking`）：<https://github.com/NovaSky-AI/SkyRL/tree/a0d50c482436af7fac8caffa4533616a78431d66>
 [^9]: Moonshot AI, *Introducing Kimi-Dev*（2025-06-16）：<https://moonshotai.github.io/Kimi-Dev/>
 [^10]: *Kimi-Dev: Agentless Training as Skill Prior for SWE-Agents*, arXiv:2509.23045：<https://arxiv.org/abs/2509.23045>
 [^11]: Wei et al., *SWE-RL: Advancing LLM Reasoning via Reinforcement Learning on Open Software Evolution*, arXiv:2502.18449；奖励实现见 `src/swerl/core/reward.py`：<https://github.com/facebookresearch/swe-rl>
@@ -219,4 +227,4 @@ SWE-bench 的评测按 `run_id` 与 `instance_id` 缓存结果：同一个 `run_
 [^14]: MiniMax-M2.5 仓库 README（编码环境规模、Forge、跨脚手架评测）与 MiniMax-M2 仓库 README（交错思考）：<https://github.com/MiniMax-AI/MiniMax-M2.5>、<https://github.com/MiniMax-AI/MiniMax-M2>
 [^15]: Meta FAIR, *CWM: An Open-Weights LLM for Research on Code Generation with World Models*，模型卡（训练流程与 SWE-bench Verified 结果）：<https://github.com/facebookresearch/cwm/blob/main/MODEL_CARD.md>
 [^16]: SWE-bench 官方仓库 README（SWE-bench Verified 500 题、Docker 化评测、硬件建议、按 run_id 缓存结果）：<https://github.com/SWE-bench/SWE-bench>
-[^17]: Kimi Team, *Kimi K3: Open Frontier Intelligence* 技术报告（§1 概述、§4.2.1 统一白盒 RL 环境）：<https://github.com/MoonshotAI/Kimi-K3>
+[^17]: Kimi Team, *Kimi K3: Open Frontier Intelligence* 技术报告（§1 概述、§4.1.2 RL 的三个领域、§4.2.1 统一白盒 RL 环境、§4.2.4 kernel 优化任务）：<https://github.com/MoonshotAI/Kimi-K3>

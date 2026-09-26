@@ -91,6 +91,13 @@ nodes:
     note: "中训练决定 RL 能走多远：优质数学语料 + QA / 指令数据，Stable-then-Decay。"
     href: "#rl-readiness"
     entry: octothinker
+  - id: swallowcode-math
+    label: Swallow 改写
+    date: 2025-05
+    lane: data
+    note: "代码与数学“改写后保留”：用 70B 模型把原始语料重写成自包含、步骤清晰的版本，50B 续训 HumanEval +17.0、GSM8K +12.4。"
+    href: "#rephrasing"
+    entry: swallowcode-math
   - id: kimi-k2
     label: Kimi K2 改写
     date: 2025-07
@@ -130,7 +137,7 @@ nodes:
     label: Olmo 3
     date: 2025-11
     lane: schedule
-    note: "完全公开的三段式：100B Dolmino 中训练（含思维链、全部去污染）→ YaRN 长上下文 → 模型汤。"
+    note: "完全公开的三段式：100B Dolmino 中训练（含思维链、全部去污染）→ YaRN 长上下文；32B 在两处做模型汤。"
     href: "#olmo3"
     entry: olmo3
 edges:
@@ -149,7 +156,8 @@ edges:
   - { from: megamath, to: octothinker, label: Web-Pro 语料 }
   - { from: megamath, to: smollm3, label: 二阶段数学 }
   - { from: physics-of-lms, to: kimi-k2, label: 改写的机制解释 }
-  - { from: phi-4, to: kimi-k2, label: 合成扩充 token }
+  - { from: swallowcode-math, to: kimi-k2, label: 学习笔记式数学改写 }
+  - { from: swallowcode-math, to: olmo3, label: 复刻为 CraneCode/Math }
   - { from: octothinker, to: front-loading, label: 推理数据前移 }
   - { from: olmo2, to: midtraining-bridges, label: 解释为何有效 }
   - { from: octothinker, to: agentfounder, label: 延伸到智能体 }

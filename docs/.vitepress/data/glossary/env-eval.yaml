@@ -43,29 +43,29 @@
 - id: pass-at-k
   term: pass@k
   full: pass at k
-  plain: "给模型 k 次机会，至少答对一次的概率，衡量“能力上限”。"
-  definition: "对每道题，k 个独立样本中至少一个正确的概率 1−(1−p)^k 的期望（p 为该题单次正确率）。常用无偏估计：每题采样 n≥k 个、数出 c 个正确，估计量为 1−C(n−c,k)/C(n,k)，再对所有题取平均；直接用 1−(1−c/n)^k 会系统性偏低。"
+  plain: "给模型 $k$ 次机会，至少答对一次的概率，衡量“能力上限”。"
+  definition: '对每道题，$k$ 个独立样本中至少一个正确的概率 $1-(1-p)^k$ 在题目上的平均（$p$ 为该题单次正确率）。常用无偏估计：每题采样 $n\ge k$ 个、数出 $c$ 个正确，估计量为 $1-\binom{n-c}{k}/\binom{n}{k}$，再对所有题取平均；直接代入 $1-(1-c/n)^k$ 会系统性偏低。'
   see: [/lenses/eval#pass-at-k, /lenses/principles#pass-at-k-debate]
 
 - id: pass-hat-k
   term: pass^k
   full: pass hat k
-  plain: "同一道题连做 k 次都要全对，衡量“稳不稳”，对上线的智能体比 pass@k 更重要。"
-  definition: "τ-bench 提出的可靠性指标：每道题 k 次独立尝试全部成功的概率 p^k 的期望。无偏估计为 C(c,k)/C(n,k)（n 次尝试中成功 c 次），对题目取平均；k 增大时下降越快，说明模型越不稳定。"
+  plain: "同一道题连做 $k$ 次都要全对，衡量“稳不稳”，对上线的智能体比 pass@k 更重要。"
+  definition: 'τ-bench 提出的可靠性指标：每道题 $k$ 次独立尝试全部成功的概率 $p^k$ 在题目上的平均。无偏估计为 $\binom{c}{k}/\binom{n}{k}$（$n$ 次尝试中成功 $c$ 次），对题目取平均；直接代入 $(c/n)^k$ 会系统性偏高。随 $k$ 增大下降得越快，说明模型越不稳定。'
   see: [/lenses/eval#pass-at-k]
 
 - id: avg-at-k
   term: avg@k
   full: average at k
-  plain: "每道题做 k 遍取平均正确率，本质还是 pass@1，只是估得更准、波动更小。"
-  definition: "每题采样 k 个回答、计算平均正确率，再对题目取平均，是 pass@1（单次期望正确率）的低方差估计；常用于 AIME 这类题量很少的基准（如 avg@16、avg@32），与 mean@k 同义。"
+  plain: "每道题做 $k$ 遍取平均正确率，本质还是 pass@1，只是估得更准、波动更小。"
+  definition: '每题采样 $k$ 个回答、计算平均正确率，再对题目取平均：$\frac{1}{N}\sum_i c_i/k$（$N$ 为题数，$c_i$ 为第 $i$ 题答对的次数），是 pass@1（单次期望正确率）的低方差估计；常用于 AIME 这类题量很少的基准（如 avg@16、avg@32），与 mean@k 同义。它只压低题内采样的噪声，题目本身的抽样误差要靠加题。'
   see: [/lenses/eval#pass-at-k, /lenses/eval#variance]
 
 - id: standard-error
   term: Standard error
   zh: 标准误
   plain: "分数的“误差棒”：题目少、答题有随机性时，分数本身就会晃，标准误告诉你它大概会晃多少。"
-  definition: "估计量的抽样标准差。对 N 道题的平均分，标准误约为逐题得分标准差除以 √N；比较两个模型时应对同一批题的逐题差值计算标准误（配对）。95% 置信区间约为估计值 ±1.96 倍标准误。"
+  definition: '估计量的抽样标准差。对 $N$ 道题的平均分，标准误约为逐题得分的标准差除以 $\sqrt{N}$；比较两个模型时应对同一批题的逐题差值计算标准误（配对）。95% 置信区间约为估计值 $\pm 1.96$ 倍标准误。'
   see: [/lenses/eval#variance]
 
 - id: contamination
@@ -100,5 +100,5 @@
   term: Time horizon
   zh: 时间视界
   plain: "模型能独立完成“人类专家需要多长时间”的任务：能干完 1 小时的活，还是 1 天的活。"
-  definition: "METR 提出的智能体能力度量：以人类专家完成时间标定任务难度，对模型拟合成功率关于 log(任务时长) 的逻辑回归，取成功率 50%（或 80%）处的任务时长。2019–2025 年前沿模型的 50% 时间视界约每 7 个月翻一番。"
+  definition: 'METR 提出的智能体能力度量：以人类专家完成时间 $t$ 标定任务难度，对每个模型拟合成功率关于 $\log_2 t$ 的逻辑回归，取成功率 50%（或 80%）处的任务时长。2019–2025 年前沿模型的 50% 时间视界约每 7 个月翻一番。'
   see: [/lenses/eval#time-horizon]

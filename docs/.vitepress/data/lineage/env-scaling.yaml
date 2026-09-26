@@ -111,7 +111,7 @@ nodes:
     label: DeepSeek-V3.2
     date: 2025-12
     lane: synth
-    note: "由智能体自动搭数据库、写工具、出“难解易验”的任务，合成 1,800+ 个环境与 8.5 万+ 个提示。"
+    note: "由智能体自动搭数据库、写工具、出“难解易验”的任务，保留至少能解出一次的，得到 1,827 个合成环境（全部智能体 RL 任务约 8.5 万个）。"
     href: "#synthesis"
     entry: deepseek-v3-2
   - id: kimi-k3

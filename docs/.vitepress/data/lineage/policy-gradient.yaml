@@ -45,7 +45,7 @@ nodes:
     label: InstructGPT
     date: 2022-03
     lane: critic
-    note: "把 PPO 搬到 LLM：奖励模型打分加逐 token KL 惩罚，价值网络与策略同等规模。"
+    note: "把 PPO 搬到 LLM：奖励模型打分加逐 token KL 惩罚，价值网络由奖励模型初始化。"
     href: /lenses/algorithms#kl
     entry: instructgpt
   - id: dpo
@@ -94,7 +94,7 @@ nodes:
     label: Dr. GRPO
     date: 2025-03
     lane: critic-free
-    note: "指出 1/|o| 与 std 归一化分别带来长度偏置和难度偏置，二者都去掉。"
+    note: "指出按回答长度平均（1/|y|）与除以组内 std 分别带来长度偏置和难度偏置，二者都去掉。"
     href: /lenses/algorithms#dr-grpo
     entry: dr-grpo
   - id: dapo
@@ -138,6 +138,7 @@ nodes:
     lane: stability
     note: "从偏差-方差角度改用序列级比率，并直接丢弃比率越界的样本而不是截断。"
     href: /lenses/algorithms#off-policy
+    entry: rl-collapse-mismatch
   - id: opd
     label: On-Policy 蒸馏
     date: 2025-10
@@ -155,8 +156,8 @@ nodes:
   - id: dsv32
     label: DeepSeek-V3.2
     date: 2025-12
-    lane: critic-free
-    note: "给 k3 乘上 π_θ/π_old 得到无偏的 KL 梯度，并掩掉负优势且偏离过大的序列。"
+    lane: stability
+    note: "给 k3 乘上 π_θ/π_old，让 KL 损失的梯度变回反向 KL；并掩掉优势为负、且偏离采样策略过大的序列。"
     href: /lenses/algorithms#kl
     entry: deepseek-v3-2
 edges:

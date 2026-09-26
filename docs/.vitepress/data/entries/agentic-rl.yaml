@@ -121,7 +121,7 @@
   tier: rec
   evidence: [adopted, open-source, ablation, community]
   evidence_note: "阿里 ROLL 框架已原生支持 GiGPO，OpenManus-RL 采用了 verl-agent 式训练管线（见 verl-agent 仓库 News）；NeurIPS 2025 接收；verl-agent 提供 ALFWorld、WebShop、Search、Sokoban 等环境与完整训练日志。"
-  summary: "在 GRPO 的轨迹级组内优势之外，按“锚状态”（不同轨迹中的相同环境观察）回溯构造步级小组，计算步级相对优势并加权相加；无需 critic、不增 rollout，ALFWorld、WebShop 上比 GRPO 高 12%、9% 以上。"
+  summary: "在 GRPO 的轨迹级组内优势之外，按“锚状态”（不同轨迹中的相同环境观察）回溯构造步级小组，计算步级相对优势并加权相加；无需 critic、不增 rollout，ALFWorld、WebShop 上成功率比 GRPO 高 12、9 个百分点以上。"
   plain: "同一道题跑多遍，总有几条轨迹走到同一个路口；比较它们在这个路口各自怎么选、后来得了多少分，就知道哪一步走得好。"
   takeaways:
     - "环境状态会重复出现（文本游戏、网页、表单）时，用锚状态分组给步级信用，几乎零额外成本。"
@@ -320,7 +320,7 @@
   plain: "不写流程、不靠示范，直接让模型在真实搜索里反复试错；答对得分，而且越快答对分越高。"
   takeaways:
     - "严格 on-policy：训练时关掉推理引擎的工具调用格式强制器，否则样本就不来自模型自己的分布。"
-    - "对正确轨迹第 i 步的奖励乘以 γ^(T−i)，无需过程奖励就能鼓励更短的探索路径。"
+    - '对正确轨迹第 $i$ 步的奖励乘以 $\gamma^{T-i}$（$T$ 为总步数，$\gamma\in(0,1)$），无需过程奖励就能鼓励更短的探索路径。'
     - "长尾轨迹用轮次级 partial rollout：超时任务存入回放缓冲，下一轮用新权重接着跑。"
   builds_on: [openai-deep-research, kimi-k1-5]
   tags: [深度研究, REINFORCE, 上下文管理]
@@ -409,7 +409,7 @@
   tier: rec
   evidence: [open-source, ablation]
   evidence_note: "代码与模型开源；对工具调用次数上限等关键超参做了消融，是“从基座直接做工具集成 RL”的早期代表。"
-  summary: "不做 SFT，直接从基座出发把代码解释器接进 RL rollout；1.5B、7B 模型比无工具基线与 Qwen2.5-Math-Instruct-TIR 高约 12%、14%，并自发学会策略性调用与根据执行结果自我纠错。"
+  summary: "不做 SFT，直接从基座出发把代码解释器接进 RL rollout；1.5B、7B 模型的 AIME24 准确率比无工具基线与 Qwen2.5-Math-Instruct-TIR 最多高约 12、14 个百分点，并自发学会策略性调用与根据执行结果自我纠错。"
   plain: "不先教怎么用计算器，直接让模型边练题边摸索，它自己就学会了什么时候该敲代码。"
   takeaways:
     - "有可靠沙箱时，工具使用可以从基座直接用 RL 学出来，不一定需要 SFT 数据。"
@@ -469,14 +469,13 @@
   org: 南洋理工大学 等
   authors: "Zhenghai Xue et al."
   date: 2025-09
-  venue: ICLR 2026
   arxiv: "2509.02479"
   repo: ltzheng/SimpleTIR
   areas: [agentic-rl, rl-llm]
   facets: [algorithm, theory]
   tier: rec
   evidence: [open-source, ablation]
-  evidence_note: "代码与模型开源，ICLR 2026 接收；对多轮 TIR 训练崩溃给出了可复现的机制分析与极简修复。"
+  evidence_note: "代码、训练脚本与模型开源；对多轮 TIR 训练崩溃给出了可复现的机制分析与极简修复。"
   summary: "诊断多轮 TIR 训练崩溃：工具反馈造成分布漂移，模型在后续轮次生成低概率 token，累积成梯度范数爆炸；做法是丢弃含“空轮”（既无代码块也无最终答案）的轨迹，Qwen2.5-7B 基座的 AIME24 从 22.1 提到 50.5。"
   plain: "多轮工具推理训着训着就炸，元凶是一些啥也没干的轮次带来的离谱大梯度；把这类轨迹直接扔掉就稳了。"
   takeaways:
@@ -708,7 +707,7 @@
   short: Kimi K2.5
   kind: report
   org: 月之暗面 Moonshot AI
-  date: 2026-01
+  date: 2026-01                  # 以官方仓库首次提交（2026-01-30）为准
   url: https://www.kimi.com/blog/kimi-k2-5.html
   repo: MoonshotAI/Kimi-K2.5
   links:
@@ -732,14 +731,14 @@
   short: GLM-5
   kind: report
   org: "智谱 Z.ai · 清华大学"
-  date: 2026-02
+  date: 2026-02                  # 官方仓库首次提交为 2026-02-10，与 arXiv 编号月份一致
   arxiv: "2602.15763"
   repo: zai-org/GLM-5
   areas: [agentic-rl]
   facets: [infra]
   tier: rec
   evidence: [industrial, open-source]
-  evidence_note: "744B-A40B 开源权重与技术报告；官方说明为此开发了异步 RL 基础设施 slime 以提升后训练吞吐。后续 GLM-5.1、5.2、5.3 沿“长程智能体工程”路线迭代（见仓库 README）。"
+  evidence_note: "744B-A40B 开源权重与技术报告；官方说明后训练依托自研的异步 RL 基础设施 slime 提升吞吐（slime 自 GLM-4.5 起即是 GLM 系列的 RL 框架）。后续 GLM-5.1、5.2、5.3 沿“长程智能体工程”路线迭代（见仓库 README）。"
   summary: "面向长程智能体任务的旗舰：从 GLM-4.5 的 355B-A32B 扩到 744B-A40B，预训练数据由 23T 增至 28.5T token，引入 DeepSeek 稀疏注意力；后训练依托异步 RL 基础设施 slime 提升吞吐。"
   plain: "智谱把重心从“写几段代码”转向“长时间独立完成工程任务”，为此专门改造了异步 RL 训练系统。"
   takeaways:
@@ -752,7 +751,7 @@
   short: MiniMax-M2.5
   kind: project
   org: MiniMax
-  date: 2026-02
+  date: 2026-02                  # 以官方仓库首次提交（2026-02-13）为准
   repo: MiniMax-AI/MiniMax-M2.5
   links:
     - { label: MiniMax-M2, url: "https://github.com/MiniMax-AI/MiniMax-M2" }
@@ -765,6 +764,6 @@
   plain: "MiniMax 把公司里大部分日常工作做成了练习场，再造了一套能接任何智能体外壳的训练系统，让模型在里面大规模练。"
   takeaways:
     - "想让模型跨脚手架泛化，就在训练中接入多种真实 agent scaffold，而不是只用一种自研模板。"
-    - "异步调度要显式权衡吞吐与样本的离策略程度；共享前缀的多轮样本可以树状合并以省算力。"
+    - "异步调度要显式权衡吞吐与样本的离策略程度；多轮轨迹的训练样本常共享长前缀，可以像 Forge 那样把样本按树状结构合并，减少重复计算。"
   builds_on: [minimax-m1]
   tags: [工业实践, 环境规模化, Forge]

@@ -416,7 +416,7 @@ $$\nabla_\theta\Big[\sg\big(\pi_\theta(y^\ast\mid x)\big)\log\pi_\theta(y^\ast\m
 2. **RL → 拒绝采样 → SFT**：RL checkpoint 生成的好轨迹被收回来，作为下一轮 SFT 的数据。R1 的第三阶段、[Llama 3](/library/?id=llama3) 多轮的“SFT + 拒绝采样 + DPO”都是这个飞轮。
 3. **专家 → 合并**：先对数学、代码、智能体等领域分别训练专家，再用 SFT 把它们蒸馏进一个模型，最后统一做 RL（[GLM-4.5](/library/?id=glm-4-5)、[DeepSeek-V3.2](/library/?id=deepseek-v3-2)）。
 4. **大 → 小**：小模型先做离线 SFT 蒸馏，再做 [On-Policy 蒸馏](/topics/opd)。Qwen3 的小模型就是先离策略、后在线策略蒸馏；Thinking Machines 的[在线策略蒸馏](/library/?id=tm-opd)还展示了它能找回个性化微调丢掉的能力。
-5. **单阶段混合**：把离线示范直接混进 RL。LUFFY 把 R1 的轨迹放进 GRPO 的组里一起算优势[^luffy]，HPT 按当前表现在 SFT 与 RL 信号之间自适应切换[^hpt]。2026 年被 TRL 收录的 TailSFT 从另一个方向下手：SFT 时过滤掉相对初始策略“损失下降最多”的序列，为后续 RL 保住回答的覆盖度[^tailsft]。
+5. **单阶段混合**：把离线示范直接混进 RL。LUFFY 把 R1 的轨迹放进 GRPO 的组里一起算优势[^luffy]，HPT 按当前表现在 SFT 与 RL 信号之间自适应切换[^hpt]。2026 年被 TRL 收录的 TailSFT 从另一个方向下手：SFT 时过滤掉（按长度归一化的）损失相对初始策略下降最多的序列，为后续 RL 保住回答的覆盖度[^tailsft]。
 
 ### 该用 SFT，还是上 RL / OPD {#when-sft}
 

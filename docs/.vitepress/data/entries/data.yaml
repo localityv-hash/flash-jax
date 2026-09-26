@@ -1,6 +1,6 @@
 # 数据横切视角（/lenses/data）的条目：RL/SFT 数据集、验证与去污染工具、数据选择方法。
 # 各阶段的数据细节分别归属 /topics/sft、/topics/mid-training、/topics/multi-env；这里只收“数据工作流”本身的关键资源。
-# 字段按纯文本渲染，公式用 Unicode 书写。
+# summary / plain / takeaways / evidence_note 支持 `$公式$`（KaTeX）与 `代码`，构建时渲染；双引号字符串里的反斜杠要写成 \\。
 
 # ---------- 验证与工具 ----------
 
@@ -21,7 +21,7 @@
   summary: "规则式数学判分库：格式无关地抽取答案，归一化 LaTeX、单位与百分号后转成 SymPy，再做字符串、符号与数值容差比较，覆盖集合、区间与矩阵；部分比较刻意不对称，防止模型钻空子。"
   plain: "像一位不挑写法的判卷老师：“0.5”和“1/2”写法不同也算同一个答案；但把题目里的不等式原样抄回来冒充答案，不给分。"
   takeaways:
-    - "做数学 RLVR 时要求模型把最终答案写进 \\boxed{}，并把抽取优先级设成 boxed 优先，可以明显减少“答对却判错”。"
+    - "做数学 RLVR 时要求模型把最终答案写进 `\\boxed{}`，并把抽取优先级设成 boxed 优先，可以明显减少“答对却判错”。"
     - "参考答案本身解析失败时跳过该样本（Open-R1 记为 None），不要给 0 分，否则是在惩罚数据错误而不是模型。"
     - "验证放进带超时的子进程（SymPy 化简可能卡死），奖励与评测用同一套配置，训练曲线和榜单分数才可比。"
   tags: [答案归一化, 规则奖励, 数学评测]
@@ -94,7 +94,7 @@
   plain: "把 DeepSeek-R1“怎么造数据、怎么训”的每个环节都用开源工具重做一遍并公开，是一份可以照着跑的配方。"
   takeaways:
     - "自建蒸馏数据可以直接套它的流水线：多次采样 → Math-Verify 验证 → 8-gram 去污染与去重 → 按通过率筛 RL 提示。"
-    - "Qwen 基座做 SFT 时 EOS 要与 chat template 一致（<|im_end|>）；拿 R1-Distill 做 GRPO 要改写其默认模板，它会丢弃思考内容并预填 <think>，干扰格式奖励。"
+    - "Qwen 基座做 SFT 时 EOS 要与 chat template 一致（`<|im_end|>`）；拿 R1-Distill 做 GRPO 要改写其默认模板，它会丢弃思考内容并预填 `<think>`，干扰格式奖励。"
   builds_on: [deepseek-r1, numinamath, s1, math-verify]
   tags: [R1 复现, 蒸馏数据, 去污染, GRPO]
 
@@ -128,7 +128,7 @@
   title: "DeepMath-103K: A Large-Scale, Challenging, Decontaminated, and Verifiable Mathematical Dataset for Advancing Reasoning"
   short: DeepMath-103K
   kind: dataset
-  org: 腾讯 AI Lab · 上海交通大学
+  org: 腾讯 · 上海交通大学
   authors: "Zhiwei He et al."
   date: 2025-04
   arxiv: "2504.11456"
@@ -140,7 +140,7 @@
   tier: rec
   evidence: [open-source, community]
   evidence_note: "数据、训练代码与 DeepMath-Zero 等模型权重全部开源，被多个开源 RL 项目直接用作数学训练集（如 RLVE 仓库提供了用它训练 OpenThinker3-1.5B 的脚本）；尚未见工业级模型公开采用。"
-  summary: "约 10.3 万道偏难（主要 5–9 级）的数学题，主要取自 StackExchange 问答，经语义匹配对常见基准去污染；每题附可验证答案、难度分、主题标签与三条 R1 解答。"
+  summary: "约 10.3 万道偏难（主要 5–9 级）的数学题，从多个来源筛出、与已有开源题集重合少，经语义匹配对常见基准去污染；每题附可验证答案、难度分、主题标签与三条 R1 解答。"
   plain: "专挑“难、而且答案能自动判对错”的数学题，并提前删掉和考试题撞车的，适合拿来做强化学习。"
   takeaways:
     - "训练奖励很快饱和时，换一批更难、且当前模型通过率不为零的题，通常比继续加量更有效。"
@@ -175,7 +175,7 @@
   title: "Revisiting Reinforcement Learning for LLM Reasoning from A Cross-Domain Perspective"
   short: Guru
   kind: paper
-  org: LLM360 · MBZUAI
+  org: MBZUAI（LLM360）· UC San Diego 等
   authors: "Zhoujun Cheng et al."
   date: 2025-06
   arxiv: "2506.14965"
@@ -186,7 +186,7 @@
   facets: [data, env]
   tier: rec
   evidence: [open-source, ablation]
-  evidence_note: "数据、训练代码、完整 wandb 日志与 Guru-7B/32B 权重全部公开，论文系统对照了单领域与跨领域 RL 训练；出自 LLM360（MBZUAI），暂未见工业模型公开采用。"
+  evidence_note: "数据、训练代码、完整 wandb 日志与 Guru-7B/32B 权重全部公开，论文系统对照了单领域与跨领域 RL 训练；出自 MBZUAI 的 LLM360 团队与 UC San Diego 等，暂未见工业模型公开采用。"
   summary: "六领域 92K 可验证 RL 数据 Guru：跨源去重、分领域设计奖励、按通过率过滤难度；发现数学、代码、科学能从跨领域 RL 受益，逻辑、模拟、表格则需要本领域数据。"
   plain: "把不同学科的练习题都整理成“能自动判分”的格式放在一起练，结果发现有的科目能触类旁通，有的必须专门练。"
   takeaways:
@@ -213,12 +213,12 @@
   tier: rec
   evidence: [open-source, ablation]
   evidence_note: "代码、53K 数据、训练日志与 1.7B/4B/7B 权重公开；在 DeepScaleR-40K 上做了“全量 / 删全对题 / 只留难题”三种难度分布的对照，并有采样温度与多阶段训练的消融。作者来自港大与字节 Seed，属研究型配方，暂未见工业模型公开采用。"
-  summary: "给强推理模型继续做 RL 的配方：用待训模型采样 8 次估难度、删全对题，每阶段结束再剔除准确率 >0.9 的题，并逐阶段升高采样温度；Qwen3-4B 的 AIME25 从 65.6 升到 79.4。"
+  summary: "给强推理模型继续做 RL 的配方：用待训模型采样 8 次估难度、删全对题，每阶段结束再剔除准确率高于 0.9 的题，并逐阶段升高采样温度；Qwen3-4B 的 AIME25 从 65.6 升到 79.4。"
   plain: "题目难度跟着学生水平走：学生变强后就把已经稳会的题拿掉，让题库始终“偏难一点”。"
   takeaways:
     - "拿到新基座先画难度直方图（每题采样 8 次的正确数）；若大量题 8/8 全对，先删掉再训。"
     - "不要只留最难的题：在 POLARIS 的对照里，只保留通过率不超过一半的题，效果反而不如只删全对题。"
-    - "多阶段训练时，每阶段结束用训练日志里的通过率剔除 >0.9 的题，防止分布向简单端漂移。"
+    - "多阶段训练时，每阶段结束用训练日志里的通过率剔除高于 0.9 的题，防止分布向简单端漂移。"
   builds_on: [deepscaler, dapo]
   tags: [难度分布, 课程, 采样温度]
 

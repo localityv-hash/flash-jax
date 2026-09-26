@@ -14,7 +14,7 @@
   zh: 推演 / 采样轨迹
   area: agentic-rl
   plain: "让当前模型把任务从头到尾实际做一遍，记录下它说了什么、环境回了什么、最后得了几分。"
-  definition: "用当前策略 πθ_old 与环境交互生成一条或一组完整轨迹的过程，产出训练所需的 token、对数概率、环境观察与奖励；在智能体 RL 中它往往是最耗时的环节，受工具延迟与长尾轨迹支配。"
+  definition: '用当前策略 $\pi_{\theta_\text{old}}$ 与环境交互生成一条或一组完整轨迹的过程，产出训练所需的 token、对数概率、环境观察与奖励；在智能体 RL 中它往往是最耗时的环节，受工具延迟与长尾轨迹支配。'
   see: [/topics/agentic-rl#rollout, /lenses/infra#async]
 
 - id: trajectory
@@ -22,7 +22,7 @@
   zh: 轨迹
   area: agentic-rl
   plain: "一次完整做题的“录像”：每一步的思考、动作和环境给的反馈按顺序串在一起。"
-  definition: "智能体与环境交互产生的序列 τ = (x, a₁, o₁, a₂, o₂, …, a_T)，其中 a_t 是模型生成的 token 段（思考与动作），o_t 是环境返回的观察；训练时只有 a_t 中的 token 参与策略梯度。"
+  definition: '智能体与环境交互产生的序列 $\tau=(x,a_1,o_1,a_2,o_2,\dots,a_T)$，其中 $a_t$ 是模型生成的 token 段（思考与动作），$o_t$ 是环境返回的观察；训练时只有 $a_t$ 中的 token 参与策略梯度。'
   see: [/topics/agentic-rl#formulation]
 
 - id: multi-turn-rl
@@ -54,7 +54,7 @@
   zh: 损失屏蔽
   area: agentic-rl
   plain: "环境塞进上下文的文字（搜索结果、报错信息）不是模型写的，训练时不让它们产生梯度。"
-  definition: "对轨迹中每个 token 设置 m_t ∈ {0,1}：模型生成的 token 为 1，提示与环境观察为 0；策略损失、熵与 KL 只在 m_t = 1 的位置上计算与归一化。屏蔽错误会让模型去拟合环境文本，常导致训练发散。"
+  definition: '对轨迹中每个 token 设置 $m_t\in\{0,1\}$：模型生成的 token 为 1，提示与环境观察（包括运行时插入的纠错提示）为 0；策略损失、熵与 KL 只在 $m_t=1$ 的位置上计算与归一化。屏蔽错误会让模型去拟合环境文本，常导致训练发散。'
   see: [/topics/agentic-rl#loss-mask]
 
 - id: credit-assignment
@@ -70,7 +70,7 @@
   zh: 轮级优势
   area: agentic-rl
   plain: "不再给整条轨迹同一个分，而是给每一轮单独算“比平均好多少”。"
-  definition: "以一次“生成—环境反馈”回合为单位估计的优势 Â_k，同一轮内的 token 共享该值；可由轮级奖励的组内归一化、轮级价值函数（critic）或同状态分组的回报比较得到，用来替代整条轨迹共享的结果优势。"
+  definition: '以一次“生成—环境反馈”回合为单位估计的优势 $\hat A_k$，同一轮内的 token 共享该值；可由轮级奖励的组内归一化（如 MT-GRPO）、轮级价值函数（如 ArCHer 的 critic）或同状态分组的回报比较（如 GiGPO）得到，用来替代整条轨迹共享的结果优势。'
   see: [/topics/agentic-rl#turn-advantage]
 
 - id: sandbox
@@ -86,7 +86,7 @@
   zh: 观察
   area: agentic-rl
   plain: "环境对模型动作的回应，比如搜索结果、程序输出、网页截图。"
-  definition: "环境在执行动作后返回并写入上下文的内容 o_t；它是策略的条件而非策略的输出，因此不计入策略梯度，但会占用上下文长度，通常需要截断、摘要或压缩。"
+  definition: '环境在执行动作后返回并写入上下文的内容 $o_t$；它是策略的条件而非策略的输出，因此不计入策略梯度，但会占用上下文长度，通常需要截断、摘要或压缩。'
   see: [/topics/agentic-rl#formulation]
 
 - id: deep-research-agent
@@ -150,6 +150,6 @@
   term: Interleaved thinking
   zh: 交错思考
   area: agentic-rl
-  plain: "模型在每次调用工具前后都先想一想，而且这些思考会保留在后续轮次的上下文里。"
-  definition: "在多轮工具调用中，模型于每次动作前生成推理内容，并在后续轮次保留历史推理（而非只保留最终回复）；MiniMax-M2、GLM-4.5 之后的 GLM 系列都强调此特性，训练与推理对历史思考的处理方式必须一致。"
+  plain: "模型每次回复或调用工具之前都先想一想，而不是只在开头想一次；这些思考之后是否留在上下文里，各家做法不同。"
+  definition: "在多轮工具调用中，模型在每次回复与工具调用之前都生成推理内容。历史轮的思考如何处理各家不同：MiniMax-M2 要求把历史思考原样传回上下文，否则性能下降；GLM 系列自 GLM-4.5 起支持交错思考，GLM-4.7 另加“保留思考”（Preserved Thinking），在编码智能体场景中跨轮保留全部思考块。无论哪种，训练与推理对历史思考的处理方式必须一致。"
   see: [/topics/agentic-rl#loss-mask, /topics/agentic-rl#industry]
